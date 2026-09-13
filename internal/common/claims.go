@@ -1,3 +1,7 @@
+package common
+
+import "github.com/aws/aws-lambda-go/events"
+
 // PerfilDaRequisicao lê o atributo customizado custom:perfil que o Cognito
 // injeta no contexto do JWT Authorizer do HTTP API. Retorna string vazia se
 // a rota não tiver Authorizer (pública) ou se o claim não existir.
