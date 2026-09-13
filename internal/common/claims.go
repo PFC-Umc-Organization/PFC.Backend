@@ -15,7 +15,15 @@ import "github.com/aws/aws-lambda-go/events"
 // aceito de cadastro público, pelo mesmo motivo que /auth/registrar
 // ignora o perfil enviado pelo cliente.
 func PerfilDaRequisicao(req events.APIGatewayProxyRequest) string {
-	claims, ok := req.RequestContext.Authorizer["claims"].(map[string]interface{})
+	// Rota autenticada por um JWT Authorizer do API Gateway HTTP API (não
+	// um Cognito User Pools Authorizer de REST API) — por isso os claims
+	// vêm aninhados em Authorizer["jwt"]["claims"], não direto em
+	// Authorizer["claims"] como seria numa REST API.
+	jwt, ok := req.RequestContext.Authorizer["jwt"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	claims, ok := jwt["claims"].(map[string]interface{})
 	if !ok {
 		return ""
 	}
