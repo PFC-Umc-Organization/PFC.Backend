@@ -27,3 +27,9 @@ type AssociarOrientador struct {
 type AssociarAluno struct {
 	RGM string `json:"rgm"`
 }
+
+// AtualizarProjeto é o corpo esperado em PUT /projetos/:projetoId.
+type AtualizarProjeto struct {
+	Nome      string `json:"nome"`
+	Descricao string `json:"descricao"`
+}

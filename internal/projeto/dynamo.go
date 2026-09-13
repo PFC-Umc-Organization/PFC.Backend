@@ -187,3 +187,32 @@ func removerIntegrante(ctx context.Context, projetoID, rgm string) error {
 	})
 	return err
 }
+
+func atualizarProjeto(ctx context.Context, projetoID string, dados AtualizarProjeto) error {
+	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+		UpdateExpression:    aws.String("SET nome = :n, descricao = :d"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":n": &types.AttributeValueMemberS{Value: dados.Nome},
+			":d": &types.AttributeValueMemberS{Value: dados.Descricao},
+		},
+	})
+	return err
+}
+
+func deletarProjeto(ctx context.Context, projetoID string) error {
+	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+	})
+	return err
+}

@@ -73,6 +73,44 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
 }
 
+// HandleAtualizar implementa PUT /projetos/:projetoId.
+func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	projetoID := req.PathParameters["projetoId"]
+
+	var dados AtualizarProjeto
+	if err := json.Unmarshal([]byte(req.Body), &dados); err != nil {
+		return common.Erro(400, "corpo da requisição inválido"), nil
+	}
+	if dados.Nome == "" {
+		return common.Erro(400, "nome é obrigatório"), nil
+	}
+
+	if err := atualizarProjeto(ctx, projetoID, dados); err != nil {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+
+	return common.JSON(200, map[string]string{"mensagem": "projeto atualizado"}), nil
+}
+
+// HandleDeletar implementa DELETE /projetos/:projetoId.
+func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	projetoID := req.PathParameters["projetoId"]
+
+	if err := deletarProjeto(ctx, projetoID); err != nil {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+
+	return common.JSON(200, map[string]string{"mensagem": "projeto removido"}), nil
+}
+
 // HandleAdicionarIntegrante implementa PUT /projetos/:projetoId/integrantes.
 func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
