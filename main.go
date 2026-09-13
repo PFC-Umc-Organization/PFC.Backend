@@ -21,6 +21,7 @@ func init() {
 	r.Handle("POST", "/auth/login", auth.HandleLogin)
 	r.Handle("POST", "/auth/registrar", auth.HandleRegistrar)
 
+	r.Handle("GET", "/admin/students", matricula.HandleListar)
 	r.Handle("POST", "/admin/students", matricula.HandleProvisionar)
 	r.Handle("DELETE", "/admin/students", matricula.HandleRemover)
 

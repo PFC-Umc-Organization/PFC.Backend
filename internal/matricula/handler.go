@@ -16,6 +16,19 @@ func ehCoordenador(req events.APIGatewayProxyRequest) bool {
 	return common.PerfilDaRequisicao(req) == "COORDENADOR"
 }
 
+// HandleListar implementa GET /admin/students.
+func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if !ehCoordenador(req) {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	matriculas, err := listarRGMs(ctx)
+	if err != nil {
+		return common.Erro(500, "falha ao listar matrículas"), nil
+	}
+	return common.JSON(200, matriculas), nil
+}
+
 // HandleProvisionar implementa POST /admin/students.
 func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !ehCoordenador(req) {

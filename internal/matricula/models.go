@@ -18,3 +18,10 @@ type RGMResponse struct {
 	Processados int        `json:"processados"`
 	Falhas      []RGMFalha `json:"falhas,omitempty"`
 }
+
+// Matricula é um item da allowlist, devolvido por GET /admin/students.
+// Espelha `Matricula` do frontend (`rgm` + `status`).
+type Matricula struct {
+	RGM    string `json:"rgm"`
+	Status string `json:"status"`
+}

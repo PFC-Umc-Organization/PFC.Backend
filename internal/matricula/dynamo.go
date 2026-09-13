@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -59,6 +60,47 @@ func gravarRGMs(ctx context.Context, rgms []string) []RGMFalha {
 	}
 
 	return falhas
+}
+
+// listarRGMs faz Scan na allowlist. Aceitável aqui pelo mesmo motivo que em
+// `programa`: volume baixo (uma turma inteira tem no máximo algumas centenas
+// de RGMs pré-autorizados, não milhões).
+//
+// O valor gravado em `status` é "ACTIVE" (ver gravarRGMs), mas o frontend
+// espera "ATIVO"/"INATIVO" (mesmo union de StatusUsuario) — a tradução é
+// feita aqui, não no armazenamento, pra não precisar migrar os itens já
+// gravados.
+func listarRGMs(ctx context.Context) ([]Matricula, error) {
+	out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
+		TableName:        aws.String(tableName),
+		FilterExpression: aws.String("begins_with(PK, :prefixo) AND SK = :perfil"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":prefixo": &types.AttributeValueMemberS{Value: "STUDENT#"},
+			":perfil":  &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	matriculas := make([]Matricula, 0, len(out.Items))
+	for _, i := range out.Items {
+		pk, ok := i["PK"].(*types.AttributeValueMemberS)
+		if !ok {
+			continue
+		}
+
+		status := "INATIVO"
+		if s, ok := i["status"].(*types.AttributeValueMemberS); ok && s.Value == "ACTIVE" {
+			status = "ATIVO"
+		}
+
+		matriculas = append(matriculas, Matricula{
+			RGM:    pk.Value[len("STUDENT#"):],
+			Status: status,
+		})
+	}
+	return matriculas, nil
 }
 
 // removerRGMs remove os itens da allowlist — não afeta nenhuma conta que
