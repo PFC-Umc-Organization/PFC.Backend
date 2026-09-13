@@ -119,6 +119,23 @@ func associarOrientador(ctx context.Context, projetoID, orientadorID string) err
 	return err
 }
 
+// removerOrientador tira o atributo orientadorId do item — diferente de
+// associarOrientador com valor vazio, que gravaria a string "" em vez de
+// simplesmente não ter o campo (o front já trata a ausência com o
+// `omitempty` do JSON, então isso é o que mantém o contrato consistente).
+func removerOrientador(ctx context.Context, projetoID string) error {
+	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+		UpdateExpression:    aws.String("REMOVE orientadorId"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+	})
+	return err
+}
+
 // adicionarIntegrante insere um RGM na lista de integrantes usando
 // list_append, sem reescrever o item inteiro.
 func adicionarIntegrante(ctx context.Context, projetoID, rgm string) error {

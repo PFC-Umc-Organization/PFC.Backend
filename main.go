@@ -35,6 +35,7 @@ func init() {
 	r.Handle("PUT", "/projetos/:projetoId", projeto.HandleAtualizar)
 	r.Handle("DELETE", "/projetos/:projetoId", projeto.HandleDeletar)
 	r.Handle("PUT", "/projetos/:projetoId/orientador", projeto.HandleAssociarOrientador)
+	r.Handle("DELETE", "/projetos/:projetoId/orientador", projeto.HandleRemoverOrientador)
 	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
 	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
 

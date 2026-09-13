@@ -74,6 +74,21 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
 }
 
+// HandleRemoverOrientador implementa DELETE /projetos/:projetoId/orientador.
+func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	projetoID := req.PathParameters["projetoId"]
+
+	if err := removerOrientador(ctx, projetoID); err != nil {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+
+	return common.JSON(200, map[string]string{"mensagem": "orientador removido"}), nil
+}
+
 // HandleAtualizar implementa PUT /projetos/:projetoId.
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
