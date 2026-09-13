@@ -10,7 +10,6 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 )
 
-// HandleCriar implementa POST /programas/:programaId/projetos.
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -42,8 +41,6 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	return common.JSON(201, p), nil
 }
 
-// HandleListarPorPrograma implementa GET /programas/:programaId/projetos.
-// Aberto a qualquer usuário autenticado.
 func HandleListarPorPrograma(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	programaID := req.PathParameters["programaId"]
 
@@ -54,15 +51,6 @@ func HandleListarPorPrograma(ctx context.Context, req events.APIGatewayProxyRequ
 	return common.JSON(200, projetos), nil
 }
 
-// HandleAssociarOrientador implementa PUT /projetos/:projetoId/orientador.
-//
-// TODO: hoje não validamos que orientadorId corresponde de fato a um
-// Usuario com perfil PROFESSOR no Cognito — o handler confia no valor
-// enviado pelo coordenador. Isso é diferente do caso de /auth/registrar
-// (onde o RISCO era o próprio usuário se autopromover); aqui quem chama
-// já é coordenador autenticado, então o risco é mais "erro de digitação"
-// que "escalação de privilégio". Se fizer sentido, dá pra validar contra
-// o Cognito (AdminGetUser) antes de gravar.
 func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -83,4 +71,50 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	}
 
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
+}
+
+// HandleAdicionarIntegrante implementa PUT /projetos/:projetoId/integrantes.
+func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	projetoID := req.PathParameters["projetoId"]
+
+	var body AssociarAluno
+	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
+		return common.Erro(400, "corpo da requisição inválido"), nil
+	}
+	if body.RGM == "" {
+		return common.Erro(400, "rgm é obrigatório"), nil
+	}
+
+	if err := adicionarIntegrante(ctx, projetoID, body.RGM); err != nil {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+
+	return common.JSON(200, map[string]string{"mensagem": "aluno associado ao projeto"}), nil
+}
+
+// HandleRemoverIntegrante implementa DELETE /projetos/:projetoId/integrantes.
+func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	}
+
+	projetoID := req.PathParameters["projetoId"]
+
+	var body AssociarAluno
+	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
+		return common.Erro(400, "corpo da requisição inválido"), nil
+	}
+	if body.RGM == "" {
+		return common.Erro(400, "rgm é obrigatório"), nil
+	}
+
+	if err := removerIntegrante(ctx, projetoID, body.RGM); err != nil {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+
+	return common.JSON(200, map[string]string{"mensagem": "aluno removido do projeto"}), nil
 }

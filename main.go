@@ -26,9 +26,14 @@ func init() {
 
 	r.Handle("POST", "/programas", programa.HandleCriar)
 	r.Handle("GET", "/programas", programa.HandleListar)
+	r.Handle("PUT", "/programas/:programaId", programa.HandleAtualizar)
+	r.Handle("DELETE", "/programas/:programaId", programa.HandleDeletar)
+
 	r.Handle("POST", "/programas/:programaId/projetos", projeto.HandleCriar)
 	r.Handle("GET", "/programas/:programaId/projetos", projeto.HandleListarPorPrograma)
 	r.Handle("PUT", "/projetos/:projetoId/orientador", projeto.HandleAssociarOrientador)
+	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
+	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
 
 	// Próximas rotas do README do frontend entram aqui conforme forem
 	// implementadas: /usuarios, /atividades, /materiais, etc. Cada

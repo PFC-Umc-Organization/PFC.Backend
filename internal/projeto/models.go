@@ -12,9 +12,6 @@ type Projeto struct {
 }
 
 // NovoProjeto é o corpo esperado em POST /programas/:programaId/projetos.
-// ProgramaID vem do path, não do body — evita o mesmo tipo de inconsistência
-// que já resolvemos em /auth/registrar (nunca confiar em algo que o
-// cliente poderia inventar quando já dá pra derivar de um jeito confiável).
 type NovoProjeto struct {
 	Nome        string   `json:"nome"`
 	Descricao   string   `json:"descricao"`
@@ -24,4 +21,9 @@ type NovoProjeto struct {
 // AssociarOrientador é o corpo esperado em PUT /projetos/:projetoId/orientador.
 type AssociarOrientador struct {
 	OrientadorID string `json:"orientadorId"`
+}
+
+// AssociarAluno é o corpo esperado em PUT/DELETE /projetos/:projetoId/integrantes.
+type AssociarAluno struct {
+	RGM string `json:"rgm"`
 }

@@ -15,7 +15,7 @@ import (
 
 var (
 	tableName = os.Getenv("TABLE_NAME")
-	gsiName   = os.Getenv("GSI_NAME") // ex: "GSI1" — ver módulo Terraform de DynamoDB
+	gsiName   = os.Getenv("GSI_NAME")
 	ddb       *dynamodb.Client
 )
 
@@ -27,9 +27,6 @@ func init() {
 	ddb = dynamodb.NewFromConfig(cfg)
 }
 
-// item modela o registro no DynamoDB. GSI1PK/GSI1SK existem só pra
-// habilitar a Query "todos os projetos de um programa" sem Scan — mesmo
-// princípio de acesso-primeiro que já usamos na allowlist de RGMs.
 type item struct {
 	PK           string   `dynamodbav:"PK"`
 	SK           string   `dynamodbav:"SK"`
@@ -106,9 +103,6 @@ func listarPorPrograma(ctx context.Context, programaID string) ([]Projeto, error
 	return projetos, nil
 }
 
-// associarOrientador faz UpdateItem só no campo orientadorId — não
-// reescreve o item inteiro, evitando condição de corrida com outra
-// escrita concorrente em nome/descricao/integrantes.
 func associarOrientador(ctx context.Context, projetoID, orientadorID string) error {
 	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(tableName),
@@ -116,14 +110,79 @@ func associarOrientador(ctx context.Context, projetoID, orientadorID string) err
 			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
 			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
 		},
-		UpdateExpression: aws.String("SET orientadorId = :o"),
-		// ConditionExpression garante que só atualiza se o projeto de fato
-		// existir — sem isso, UpdateItem cria um item novo "vazio" com só
-		// o orientadorId se o PK/SK não existirem, mascarando um
-		// projetoId inválido como sucesso.
+		UpdateExpression:    aws.String("SET orientadorId = :o"),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":o": &types.AttributeValueMemberS{Value: orientadorID},
+		},
+	})
+	return err
+}
+
+// adicionarIntegrante insere um RGM na lista de integrantes usando
+// list_append, sem reescrever o item inteiro.
+func adicionarIntegrante(ctx context.Context, projetoID, rgm string) error {
+	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+		UpdateExpression:    aws.String("SET integrantes = list_append(if_not_exists(integrantes, :vazio), :novo)"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":vazio": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+			":novo": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+				&types.AttributeValueMemberS{Value: rgm},
+			}},
+		},
+	})
+	return err
+}
+
+// removerIntegrante lê o projeto, filtra o RGM da lista em memória e
+// regrava tudo — DynamoDB não remove valor de lista direto, só por índice.
+func removerIntegrante(ctx context.Context, projetoID, rgm string) error {
+	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if out.Item == nil {
+		return fmt.Errorf("projeto não encontrado")
+	}
+
+	var it item
+	if err := attributevalue.UnmarshalMap(out.Item, &it); err != nil {
+		return err
+	}
+
+	restantes := make([]string, 0, len(it.Integrantes))
+	for _, r := range it.Integrantes {
+		if r != rgm {
+			restantes = append(restantes, r)
+		}
+	}
+
+	novosValores := make([]types.AttributeValue, 0, len(restantes))
+	for _, r := range restantes {
+		novosValores = append(novosValores, &types.AttributeValueMemberS{Value: r})
+	}
+
+	_, err = ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+		UpdateExpression: aws.String("SET integrantes = :lista"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":lista": &types.AttributeValueMemberL{Value: novosValores},
 		},
 	})
 	return err
