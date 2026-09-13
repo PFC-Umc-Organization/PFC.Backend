@@ -103,6 +103,28 @@ func listarRGMs(ctx context.Context) ([]Matricula, error) {
 	return matriculas, nil
 }
 
+// existeRGM confirma que um RGM está pré-autorizado — usado pelo pacote
+// projeto antes de aceitar um integrante novo, pra não deixar adicionar um
+// RGM que não está na allowlist.
+func existeRGM(ctx context.Context, rgm string) (bool, error) {
+	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	return out.Item != nil, nil
+}
+
+// Existe expõe a checagem pro pacote projeto (mesmo módulo, pacotes irmãos).
+func Existe(ctx context.Context, rgm string) (bool, error) {
+	return existeRGM(ctx, rgm)
+}
+
 // removerRGMs remove os itens da allowlist — não afeta nenhuma conta que
 // já exista no Cognito, só o registro de matrícula.
 func removerRGMs(ctx context.Context, rgms []string) []RGMFalha {

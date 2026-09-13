@@ -9,16 +9,25 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 )
 
-// corsHeaders libera qualquer origem por enquanto (harness/dev). Em
-// produção, trocar "*" pelo domínio real do CloudFront do frontend —
-// deixar "*" com credenciais/cookies seria problema, mas como a auth aqui
-// é via Bearer token (não cookie), o risco prático é baixo; ainda assim,
-// vale restringir antes de ir pra produção de verdade.
-var corsHeaders = map[string]string{
+// headersPadrao vai em toda resposta.
+//
+// As de CORS (Access-Control-*) libram qualquer origem por enquanto — em
+// produção, trocar "*" pelo domínio real do CloudFront. Na prática a API
+// Gateway HTTP API ignora esses headers vindos da integração e aplica só o
+// que está configurado no cors_configuration do Terraform, então isto aqui
+// não tem efeito real hoje — mantido só pra chamada direta fora do API
+// Gateway (harness/dev).
+//
+// Cache-Control é o que importa de verdade: sem ele, o navegador pode
+// servir uma resposta antiga de GET em cache em vez de bater na rede de
+// novo — o efeito prático é a tela parecer "não atualizar" depois de um
+// PUT/POST, mesmo com o dado já persistido certo no DynamoDB.
+var headersPadrao = map[string]string{
 	"Access-Control-Allow-Origin":  "*",
 	"Access-Control-Allow-Headers": "Content-Type,Authorization",
 	"Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
 	"Content-Type":                 "application/json",
+	"Cache-Control":                "no-store",
 }
 
 // JSON serializa qualquer valor como corpo da resposta, com os headers
@@ -30,7 +39,7 @@ func JSON(status int, body any) events.APIGatewayProxyResponse {
 	}
 	return events.APIGatewayProxyResponse{
 		StatusCode: status,
-		Headers:    corsHeaders,
+		Headers:    headersPadrao,
 		Body:       string(b),
 	}
 }

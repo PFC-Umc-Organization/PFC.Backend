@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 )
 
@@ -125,6 +126,14 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 	}
 	if body.RGM == "" {
 		return common.Erro(400, "rgm é obrigatório"), nil
+	}
+
+	matriculado, err := matricula.Existe(ctx, body.RGM)
+	if err != nil {
+		return common.Erro(500, "falha ao validar matrícula"), nil
+	}
+	if !matriculado {
+		return common.Erro(404, "RGM não encontrado na lista de matrícula"), nil
 	}
 
 	if err := adicionarIntegrante(ctx, projetoID, body.RGM); err != nil {
