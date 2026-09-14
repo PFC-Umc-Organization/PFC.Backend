@@ -9,7 +9,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
-// HandleCriar implementa POST /programas. Só coordenador cria programa.
+
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -31,7 +31,7 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	return common.JSON(201, p), nil
 }
 
-// HandleListar implementa GET /programas. Aberto a qualquer usuário autenticado.
+
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	programas, err := listar(ctx)
 	if err != nil {
@@ -40,7 +40,7 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 	return common.JSON(200, programas), nil
 }
 
-// HandleAtualizar implementa PUT /programas/:programaId.
+
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -63,7 +63,7 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	return common.JSON(200, map[string]string{"mensagem": "programa atualizado"}), nil
 }
 
-// HandleDeletar implementa DELETE /programas/:programaId.
+
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil

@@ -1,13 +1,3 @@
-// Package router implementa roteamento método+path, com suporte a
-// segmentos dinâmicos (ex: "/programas/:programaId/projetos"), sem
-// dependência externa.
-//
-// Casa com req.Path (o caminho real da requisição) em vez de req.Resource,
-// porque o API Gateway está configurado como dois proxies genéricos
-// ({proxy+}) — um público, um atrás do Cognito Authorizer — não um
-// recurso por rota. Isso é o que cumpre a promessa original deste
-// pacote: adicionar uma rota nova é só chamar r.Handle() aqui, nunca
-// mexer em Terraform.
 package router
 
 import (
@@ -33,10 +23,7 @@ func New() *Router {
 	return &Router{}
 }
 
-// Handle registra uma rota. Segmentos prefixados com ":" são capturados
-// como parâmetro e ficam disponíveis em req.PathParameters dentro do
-// handler — ex: Handle("GET", "/projetos/:projetoId", h) popula
-// req.PathParameters["projetoId"].
+
 func (r *Router) Handle(method, path string, h Handler) {
 	r.routes = append(r.routes, registeredRoute{
 		method:   method,
@@ -90,8 +77,7 @@ func (r *Router) Dispatch(ctx context.Context, req events.APIGatewayProxyRequest
 	}, nil
 }
 
-// match compara segmento a segmento; ":x" na rota registrada casa com
-// qualquer valor na posição correspondente e é capturado por nome.
+
 func match(pattern, actual []string) (map[string]string, bool) {
 	if len(pattern) != len(actual) {
 		return nil, false

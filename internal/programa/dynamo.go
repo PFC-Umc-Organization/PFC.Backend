@@ -102,8 +102,7 @@ func Existe(ctx context.Context, id string) (bool, error) {
 	return existe(ctx, id)
 }
 
-// atualizar troca o cursoId de um programa já existente, com
-// ConditionExpression pra não criar um item "vazio" caso o id não exista.
+
 func atualizar(ctx context.Context, id string, dados AtualizarPrograma) error {
 	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(tableName),
@@ -120,8 +119,7 @@ func atualizar(ctx context.Context, id string, dados AtualizarPrograma) error {
 	return err
 }
 
-// possuiProjetos consulta o GSI1 pra ver se algum projeto ainda referencia
-// esse programa — evita importar o pacote projeto aqui (import cíclico).
+
 func possuiProjetos(ctx context.Context, id string) (bool, error) {
 	out, err := ddb.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(tableName),
@@ -138,7 +136,7 @@ func possuiProjetos(ctx context.Context, id string) (bool, error) {
 	return len(out.Items) > 0, nil
 }
 
-// deletar recusa remover o programa se ainda existir projeto vinculado.
+
 func deletar(ctx context.Context, id string) error {
 	temProjetos, err := possuiProjetos(ctx, id)
 	if err != nil {

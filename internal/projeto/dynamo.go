@@ -119,10 +119,7 @@ func associarOrientador(ctx context.Context, projetoID, orientadorID string) err
 	return err
 }
 
-// removerOrientador tira o atributo orientadorId do item — diferente de
-// associarOrientador com valor vazio, que gravaria a string "" em vez de
-// simplesmente não ter o campo (o front já trata a ausência com o
-// `omitempty` do JSON, então isso é o que mantém o contrato consistente).
+
 func removerOrientador(ctx context.Context, projetoID string) error {
 	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(tableName),
@@ -136,8 +133,7 @@ func removerOrientador(ctx context.Context, projetoID string) error {
 	return err
 }
 
-// adicionarIntegrante insere um RGM na lista de integrantes usando
-// list_append, sem reescrever o item inteiro.
+
 func adicionarIntegrante(ctx context.Context, projetoID, rgm string) error {
 	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(tableName),
@@ -157,8 +153,7 @@ func adicionarIntegrante(ctx context.Context, projetoID, rgm string) error {
 	return err
 }
 
-// removerIntegrante lê o projeto, filtra o RGM da lista em memória e
-// regrava tudo — DynamoDB não remove valor de lista direto, só por índice.
+
 func removerIntegrante(ctx context.Context, projetoID, rgm string) error {
 	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(tableName),

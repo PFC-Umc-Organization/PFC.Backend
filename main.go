@@ -39,9 +39,7 @@ func init() {
 	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
 	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
 
-	// Próximas rotas do README do frontend entram aqui conforme forem
-	// implementadas: /usuarios, /atividades, /materiais, etc. Cada
-	// domínio novo ganha seu próprio pacote em internal/.
+	
 }
 
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {

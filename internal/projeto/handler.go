@@ -74,7 +74,7 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
 }
 
-// HandleRemoverOrientador implementa DELETE /projetos/:projetoId/orientador.
+
 func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -89,7 +89,7 @@ func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequ
 	return common.JSON(200, map[string]string{"mensagem": "orientador removido"}), nil
 }
 
-// HandleAtualizar implementa PUT /projetos/:projetoId.
+
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -112,7 +112,6 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	return common.JSON(200, map[string]string{"mensagem": "projeto atualizado"}), nil
 }
 
-// HandleDeletar implementa DELETE /projetos/:projetoId.
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
@@ -158,7 +157,6 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 	return common.JSON(200, map[string]string{"mensagem": "aluno associado ao projeto"}), nil
 }
 
-// HandleRemoverIntegrante implementa DELETE /projetos/:projetoId/integrantes.
 func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
 		return common.Erro(403, "acesso restrito a coordenadores"), nil

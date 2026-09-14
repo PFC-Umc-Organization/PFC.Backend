@@ -24,13 +24,10 @@ func init() {
 	ddb = dynamodb.NewFromConfig(cfg)
 }
 
-// batchSize é o limite da API BatchWriteItem — não é escolha arbitrária,
-// é teto rígido da AWS.
+
 const batchSize = 25
 
-// gravarRGMs grava cada RGM como STUDENT#<rgm>/PROFILE com status ACTIVE.
-// Falhas de um chunk não interrompem os demais — cada chunk é reportado
-// separadamente em caso de erro, o resto do lote segue.
+
 func gravarRGMs(ctx context.Context, rgms []string) []RGMFalha {
 	var falhas []RGMFalha
 
@@ -62,14 +59,7 @@ func gravarRGMs(ctx context.Context, rgms []string) []RGMFalha {
 	return falhas
 }
 
-// listarRGMs faz Scan na allowlist. Aceitável aqui pelo mesmo motivo que em
-// `programa`: volume baixo (uma turma inteira tem no máximo algumas centenas
-// de RGMs pré-autorizados, não milhões).
-//
-// O valor gravado em `status` é "ACTIVE" (ver gravarRGMs), mas o frontend
-// espera "ATIVO"/"INATIVO" (mesmo union de StatusUsuario) — a tradução é
-// feita aqui, não no armazenamento, pra não precisar migrar os itens já
-// gravados.
+
 func listarRGMs(ctx context.Context) ([]Matricula, error) {
 	out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
 		TableName:        aws.String(tableName),
@@ -103,9 +93,7 @@ func listarRGMs(ctx context.Context) ([]Matricula, error) {
 	return matriculas, nil
 }
 
-// existeRGM confirma que um RGM está pré-autorizado — usado pelo pacote
-// projeto antes de aceitar um integrante novo, pra não deixar adicionar um
-// RGM que não está na allowlist.
+
 func existeRGM(ctx context.Context, rgm string) (bool, error) {
 	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(tableName),
@@ -120,13 +108,12 @@ func existeRGM(ctx context.Context, rgm string) (bool, error) {
 	return out.Item != nil, nil
 }
 
-// Existe expõe a checagem pro pacote projeto (mesmo módulo, pacotes irmãos).
+
 func Existe(ctx context.Context, rgm string) (bool, error) {
 	return existeRGM(ctx, rgm)
 }
 
-// removerRGMs remove os itens da allowlist — não afeta nenhuma conta que
-// já exista no Cognito, só o registro de matrícula.
+
 func removerRGMs(ctx context.Context, rgms []string) []RGMFalha {
 	var falhas []RGMFalha
 
