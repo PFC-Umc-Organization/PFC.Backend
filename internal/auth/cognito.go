@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 var (
@@ -106,7 +108,7 @@ func usuarioDosClaims(claims map[string]any, perfil Perfil) Usuario {
 	nome, _ := claims["name"].(string)
 	sub, _ := claims["sub"].(string)
 
-	return Usuario{
+	u := Usuario{
 		ID:       sub,
 		Nome:     nome,
 		Email:    email,
@@ -114,4 +116,8 @@ func usuarioDosClaims(claims map[string]any, perfil Perfil) Usuario {
 		Status:   StatusAtivo,
 		CursoIds: []string{},
 	}
+	if perfil == PerfilAluno {
+		u.RGM = common.RGMDoEmail(email)
+	}
+	return u
 }

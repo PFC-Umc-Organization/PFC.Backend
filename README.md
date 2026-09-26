@@ -43,6 +43,7 @@ precisa mudar.
 | Variável            | Descrição                                    |
 | ------------------- | --------------------------------------------- |
 | `COGNITO_CLIENT_ID` | App Client ID do Cognito (SPA, sem secret)    |
+| `COGNITO_USER_POOL_ID` | Id do User Pool — usado pelo `ListUsers` de `GET /usuarios` (o Terraform deriva do ARN) |
 | `TABLE_NAME`        | Nome da tabela DynamoDB                       |
 | `GSI_NAME`          | Nome do índice secundário usado por `projeto` (ex: `GSI1`) |
 | `REFERENCIAS_CONTATO_EMAIL` | Opcional. E-mail de contato enviado ao Crossref/OpenAlex (dá prioridade no "polite pool") |
@@ -54,6 +55,7 @@ precisa mudar.
 | ------ | ---------------------------------------- | ------------------------------------------------------------------ | ----------- |
 | POST   | `/auth/login`                            | Autentica via Cognito, devolve `{ usuario, token }`                | pública |
 | POST   | `/auth/registrar`                        | Cadastro self-service de aluno. `perfil` do corpo é ignorado — sempre ALUNO | pública |
+| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra PROFESSOR/COORDENADOR |
 | POST   | `/admin/students`                        | Grava RGMs na allowlist (`STUDENT#<rgm>` ACTIVE)                   | COORDENADOR |
 | DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | COORDENADOR |
 | POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | COORDENADOR |

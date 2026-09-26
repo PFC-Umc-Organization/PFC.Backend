@@ -12,6 +12,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/router"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
 var r *router.Router
@@ -22,6 +23,9 @@ func init() {
 	// Autenticação
 	r.Handle("POST", "/auth/login", auth.HandleLogin)
 	r.Handle("POST", "/auth/registrar", auth.HandleRegistrar)
+
+	// Usuários (contas do Cognito)
+	r.Handle("GET", "/usuarios", usuario.HandleListar)
 
 	// Matrículas
 	r.Handle("GET", "/admin/students", matricula.HandleListar)

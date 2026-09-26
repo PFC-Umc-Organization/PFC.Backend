@@ -27,6 +27,8 @@ type Usuario struct {
 	Perfil   Perfil        `json:"perfil"`
 	Status   StatusUsuario `json:"status"`
 	CursoIds []string      `json:"cursoIds"`
+	// RGM só existe pra aluno — vem do e-mail (<rgm>@alunos.umc.br).
+	RGM string `json:"rgm,omitempty"`
 }
 
 // Credenciais espelha `Credenciais` — corpo esperado em POST /auth/login.

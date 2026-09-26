@@ -26,7 +26,13 @@ func NomeDaRequisicao(req events.APIGatewayProxyRequest) string {
 // formato —, então a parte local é o RGM. Pra professor/coordenador o valor
 // não corresponde a RGM nenhum, e é assim que deve ser.
 func RGMDaRequisicao(req events.APIGatewayProxyRequest) string {
-	local, _, ok := strings.Cut(claimString(req, "email"), "@")
+	return RGMDoEmail(claimString(req, "email"))
+}
+
+// RGMDoEmail devolve a parte local do e-mail (<rgm>@alunos.umc.br). Só faz
+// sentido pra conta de ALUNO — quem chama decide pelo perfil.
+func RGMDoEmail(email string) string {
+	local, _, ok := strings.Cut(email, "@")
 	if !ok {
 		return ""
 	}
