@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -39,6 +40,39 @@ func init() {
 
 // O ListUsers devolve no máximo 60 contas por página.
 const porPagina = 60
+
+var soDigitos = regexp.MustCompile(`^\d+$`)
+
+// AlunoExiste diz se há conta de ALUNO no Cognito com esse RGM (e-mail
+// <rgm>@…). Usado pra aceitar como integrante quem já tem conta mesmo sem
+// estar na allowlist de matrícula — conta criada antes da lista, ou RGM
+// removido dela depois do cadastro.
+func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
+	// O RGM entra no filtro do ListUsers — só dígitos, pra não dar margem
+	// a montar outro filtro.
+	if !soDigitos.MatchString(rgm) {
+		return false, nil
+	}
+	if userPoolID == "" {
+		return false, fmt.Errorf("COGNITO_USER_POOL_ID não configurado")
+	}
+
+	out, err := cip.ListUsers(ctx, &cognitoidentityprovider.ListUsersInput{
+		UserPoolId: aws.String(userPoolID),
+		// ^= é "começa com": pega <rgm>@qualquer-domínio sem fixar o domínio.
+		Filter: aws.String(fmt.Sprintf(`email ^= "%s@"`, rgm)),
+		Limit:  aws.Int32(porPagina),
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, u := range out.Users {
+		if c := usuarioDoCognito(u); c.Perfil == PerfilAluno && c.RGM == rgm {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 func listarDoCognito(ctx context.Context) ([]Usuario, error) {
 	if userPoolID == "" {

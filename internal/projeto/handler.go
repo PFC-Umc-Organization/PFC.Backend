@@ -3,12 +3,14 @@ package projeto
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -147,7 +149,17 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 		return common.Erro(500, "falha ao validar matrícula"), nil
 	}
 	if !matriculado {
-		return common.Erro(404, "RGM não encontrado na lista de matrícula"), nil
+		// Fora da allowlist, mas pode já ter conta de aluno (criada antes
+		// da lista, ou RGM removido dela depois do cadastro) — conta
+		// existente é aluno legítimo.
+		temConta, err := usuario.AlunoExiste(ctx, body.RGM)
+		if err != nil {
+			log.Printf("PUT /projetos/%s/integrantes: %v", projetoID, err)
+			return common.Erro(500, "falha ao validar matrícula"), nil
+		}
+		if !temConta {
+			return common.Erro(404, "RGM não está pré-autorizado e não tem conta de aluno"), nil
+		}
 	}
 
 	if err := adicionarIntegrante(ctx, projetoID, body.RGM); err != nil {
