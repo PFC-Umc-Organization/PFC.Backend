@@ -26,6 +26,12 @@ internal/
     ├── models.go
     ├── dynamo.go            # PK PROJECT#id, GSI1 pra listar por programa
     └── handler.go            # handlers HTTP: /programas/:id/projetos, /projetos/:id/orientador
+└── referencia/             # referências bibliográficas (APIs externas OpenAlex + Crossref)
+    ├── openalex.go          # busca de artigos por tema
+    ├── crossref.go          # metadados completos de uma obra pelo DOI
+    ├── abnt.go              # formatação ABNT NBR 6023 (texto e HTML)
+    ├── dynamo.go            # PK PROJECT#id, SK REF#<hash do DOI>
+    └── handler.go           # handlers HTTP: /referencias/*, /projetos/:id/referencias
 ```
 
 Cada novo domínio (atividade, material, usuário, etc.) ganha seu próprio
@@ -39,6 +45,8 @@ precisa mudar.
 | `COGNITO_CLIENT_ID` | App Client ID do Cognito (SPA, sem secret)    |
 | `TABLE_NAME`        | Nome da tabela DynamoDB                       |
 | `GSI_NAME`          | Nome do índice secundário usado por `projeto` (ex: `GSI1`) |
+| `REFERENCIAS_CONTATO_EMAIL` | Opcional. E-mail de contato enviado ao Crossref/OpenAlex (dá prioridade no "polite pool") |
+| `OPENALEX_API_KEY`  | Opcional. Chave da OpenAlex pra limites maiores — funciona sem |
 
 ## Rotas implementadas
 
@@ -53,6 +61,11 @@ precisa mudar.
 | POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa                                  | COORDENADOR |
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa                                          | qualquer autenticado |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | COORDENADOR |
+| GET    | `/referencias/busca?q=&pagina=`          | Busca artigos por tema na **OpenAlex** (10 por página, até 50 páginas) | qualquer autenticado |
+| GET    | `/referencias/doi?doi=`                  | Consulta o DOI no **Crossref** e devolve a referência em ABNT (`abnt`, `abntHtml`) | qualquer autenticado |
+| GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, PROFESSOR, COORDENADOR |
+| POST   | `/projetos/:projetoId/referencias`       | Adiciona pelo DOI (`{ doi }`); 409 se já estiver na lista           | integrantes do projeto |
+| DELETE | `/projetos/:projetoId/referencias/:referenciaId` | Remove da lista                                             | integrantes do projeto |
 
 ## Decisões importantes
 
@@ -76,6 +89,14 @@ precisa mudar.
   authorizer, `/{proxy+}` com Cognito Authorizer) — nenhuma rota nova
   exige mudança de Terraform, só registrar em `main.go`. O router interno
   (`internal/router`) é quem resolve path parameters (`:programaId` etc.).
+- **Referências: o front nunca chama OpenAlex/Crossref direto.** A
+  integração fica no backend, que também formata em ABNT. O `POST` recebe
+  só o DOI e busca os metadados de novo no Crossref — o aluno não consegue
+  gravar referência com dados inventados. A lista é do grupo (igual à
+  entrega): só integrante altera; professor/coordenador acompanham.
+- **Integrante é identificado pelo RGM do e-mail.** O e-mail de aluno é
+  `<rgm>@alunos.umc.br` (garantido pelo Pre Sign-up), então
+  `common.RGMDaRequisicao` usa a parte local do claim `email`.
 - **`cursoIds` do Usuario sempre vem vazio por enquanto** — matrícula em
   curso ainda não tem modelagem definida. Ver TODO em `auth/cognito.go`.
 
@@ -87,3 +108,13 @@ zip function.zip bootstrap
 ```
 
 Runtime esperado no Lambda: `provided.al2023`, arquitetura `arm64`.
+
+## Testes
+
+```bash
+go mod tidy        # o repo não versiona go.sum
+go test ./...
+
+# contra as APIs reais do Crossref/OpenAlex (precisa de internet)
+REFERENCIAS_INTEGRACAO=1 go test ./internal/referencia -run Integracao -v
+```

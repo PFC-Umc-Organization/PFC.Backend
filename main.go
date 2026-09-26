@@ -10,6 +10,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/router"
 )
 
@@ -42,6 +43,13 @@ func init() {
 	r.Handle("DELETE", "/projetos/:projetoId/orientador", projeto.HandleRemoverOrientador)
 	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
 	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
+
+	// Referências bibliográficas (OpenAlex + Crossref)
+	r.Handle("GET", "/referencias/busca", referencia.HandleBuscar)
+	r.Handle("GET", "/referencias/doi", referencia.HandleConsultarDOI)
+	r.Handle("GET", "/projetos/:projetoId/referencias", referencia.HandleListar)
+	r.Handle("POST", "/projetos/:projetoId/referencias", referencia.HandleAdicionar)
+	r.Handle("DELETE", "/projetos/:projetoId/referencias/:referenciaId", referencia.HandleRemover)
 }
 
 // Handler para API Gateway

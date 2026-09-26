@@ -1,10 +1,36 @@
 package common
 
-import "github.com/aws/aws-lambda-go/events"
+import (
+	"strings"
+
+	"github.com/aws/aws-lambda-go/events"
+)
 
 
 func PerfilDaRequisicao(req events.APIGatewayProxyRequest) string {
 return claimString(req, "custom:perfil")
+}
+
+// SubDaRequisicao devolve o id (sub) do usuário no Cognito.
+func SubDaRequisicao(req events.APIGatewayProxyRequest) string {
+	return claimString(req, "sub")
+}
+
+// NomeDaRequisicao devolve o nome cadastrado no Cognito (atributo name).
+func NomeDaRequisicao(req events.APIGatewayProxyRequest) string {
+	return claimString(req, "name")
+}
+
+// RGMDaRequisicao extrai o RGM do e-mail do aluno. O e-mail de aluno é
+// sempre <rgm>@alunos.umc.br — o Pre Sign-up Lambda barra qualquer outro
+// formato —, então a parte local é o RGM. Pra professor/coordenador o valor
+// não corresponde a RGM nenhum, e é assim que deve ser.
+func RGMDaRequisicao(req events.APIGatewayProxyRequest) string {
+	local, _, ok := strings.Cut(claimString(req, "email"), "@")
+	if !ok {
+		return ""
+	}
+	return local
 }
 
 

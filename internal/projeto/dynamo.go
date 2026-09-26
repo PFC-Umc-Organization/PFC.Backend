@@ -79,6 +79,29 @@ func salvar(ctx context.Context, programaID string, novo NovoProjeto) (Projeto, 
 	return toProjeto(it), nil
 }
 
+// Buscar devolve o projeto pelo id. ok=false quando ele não existe.
+func Buscar(ctx context.Context, projetoID string) (p Projeto, ok bool, err error) {
+	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return Projeto{}, false, err
+	}
+	if out.Item == nil {
+		return Projeto{}, false, nil
+	}
+
+	var it item
+	if err := attributevalue.UnmarshalMap(out.Item, &it); err != nil {
+		return Projeto{}, false, err
+	}
+	return toProjeto(it), true, nil
+}
+
 func listarPorPrograma(ctx context.Context, programaID string) ([]Projeto, error) {
 	out, err := ddb.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(tableName),
