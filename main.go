@@ -23,6 +23,8 @@ func init() {
 	// Autenticação
 	r.Handle("POST", "/auth/login", auth.HandleLogin)
 	r.Handle("POST", "/auth/registrar", auth.HandleRegistrar)
+	r.Handle("POST", "/auth/confirmar", auth.HandleConfirmar)
+	r.Handle("POST", "/auth/reenviar-codigo", auth.HandleReenviarCodigo)
 
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", usuario.HandleListar)

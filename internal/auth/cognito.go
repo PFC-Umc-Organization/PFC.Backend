@@ -68,12 +68,42 @@ func cognitoSignUp(ctx context.Context, novo NovoUsuario) error {
 		ClientId: aws.String(cognitoClientID),
 		Username: aws.String(novo.Email),
 		Password: aws.String(novo.Senha),
-		UserAttributes: []types.AttributeType{
-			{Name: aws.String("email"), Value: aws.String(novo.Email)},
-			{Name: aws.String("name"), Value: aws.String(novo.Nome)},
-		},
+		UserAttributes: atributosDoCadastro(novo),
 	})
 	return err
+}
+
+// cognitoConfirmar confirma a conta com o código enviado por e-mail
+// (ConfirmSignUp). Depois disso o login passa a funcionar.
+func cognitoConfirmar(ctx context.Context, c ConfirmacaoCadastro) error {
+	_, err := cip.ConfirmSignUp(ctx, &cognitoidentityprovider.ConfirmSignUpInput{
+		ClientId:         aws.String(cognitoClientID),
+		Username:         aws.String(c.Email),
+		ConfirmationCode: aws.String(c.Codigo),
+	})
+	return err
+}
+
+// cognitoReenviarCodigo manda um código novo pro e-mail do cadastro.
+func cognitoReenviarCodigo(ctx context.Context, email string) error {
+	_, err := cip.ResendConfirmationCode(ctx, &cognitoidentityprovider.ResendConfirmationCodeInput{
+		ClientId: aws.String(cognitoClientID),
+		Username: aws.String(email),
+	})
+	return err
+}
+
+// atributosDoCadastro monta os atributos do SignUp. custom:perfil é sempre
+// ALUNO — cadastro público só cria aluno (ver HandleRegistrar) e o Pre
+// Sign-up já barrou quem não tem RGM pré-autorizado, então toda conta que
+// passa por aqui é de aluno. Antes o atributo ficava vazio e o perfil só
+// existia por dedução (perfilDosClaims).
+func atributosDoCadastro(novo NovoUsuario) []types.AttributeType {
+	return []types.AttributeType{
+		{Name: aws.String("email"), Value: aws.String(novo.Email)},
+		{Name: aws.String("name"), Value: aws.String(novo.Nome)},
+		{Name: aws.String("custom:perfil"), Value: aws.String(string(PerfilAluno))},
+	}
 }
 
 // claimsDoIdToken decodifica o payload do JWT (sem validar assinatura —

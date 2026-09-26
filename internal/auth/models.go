@@ -56,3 +56,15 @@ type RespostaAuth struct {
 	Usuario Usuario `json:"usuario"`
 	Token   string  `json:"token"`
 }
+
+// ConfirmacaoCadastro é o corpo de POST /auth/confirmar — o código de 6
+// dígitos que o Cognito manda por e-mail depois do SignUp.
+type ConfirmacaoCadastro struct {
+	Email  string `json:"email"`
+	Codigo string `json:"codigo"`
+}
+
+// ReenvioCodigo é o corpo de POST /auth/reenviar-codigo.
+type ReenvioCodigo struct {
+	Email string `json:"email"`
+}
