@@ -48,11 +48,14 @@ func listarDoCognito(ctx context.Context) ([]Usuario, error) {
 	usuarios := []Usuario{}
 	var token *string
 	for {
+		// Sem AttributesToGet de propósito: o Cognito recusa "name" nesse
+		// filtro (InvalidParameterException), mesmo com o atributo no
+		// schema. Sem o filtro vêm todos os atributos — os que não usamos
+		// são ignorados em usuarioDoCognito.
 		out, err := cip.ListUsers(ctx, &cognitoidentityprovider.ListUsersInput{
 			UserPoolId:      aws.String(userPoolID),
 			Limit:           aws.Int32(porPagina),
 			PaginationToken: token,
-			AttributesToGet: []string{"sub", "email", "name", "custom:perfil"},
 		})
 		if err != nil {
 			return nil, err

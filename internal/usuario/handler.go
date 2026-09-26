@@ -2,6 +2,7 @@ package usuario
 
 import (
 	"context"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 
@@ -16,6 +17,8 @@ import (
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	usuarios, err := listarContas(ctx)
 	if err != nil {
+		// Vai pro CloudWatch — o cliente só recebe a mensagem genérica.
+		log.Printf("GET /usuarios: %v", err)
 		return common.Erro(500, "falha ao listar usuários"), nil
 	}
 
