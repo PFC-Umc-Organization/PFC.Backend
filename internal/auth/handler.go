@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
@@ -25,12 +26,20 @@ func HandleLogin(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	if errors.As(err, &naoConfirmado) {
 		// Senha certa, mas a conta ainda espera o código do e-mail. O front
 		// usa o 403 pra mandar o aluno pra tela de confirmação.
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "auth.login", Resultado: "falha", Motivo: "conta ainda não confirmada",
+			Ator: &auditoria.Ator{Email: cred.Email},
+		}, req)
 		return common.Erro(403, "conta ainda não confirmada — digite o código enviado por e-mail"), nil
 	}
 	if err != nil {
 		// Não expõe o erro cru do Cognito pro cliente — mensagem genérica,
 		// consistente com o que o front já trata hoje no mock
 		// ("E-mail ou senha inválidos.").
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "auth.login", Resultado: "falha", Motivo: "credenciais inválidas",
+			Ator: &auditoria.Ator{Email: cred.Email},
+		}, req)
 		return common.Erro(401, "e-mail ou senha inválidos"), nil
 	}
 
@@ -41,6 +50,11 @@ func HandleLogin(ctx context.Context, req events.APIGatewayProxyRequest) (events
 
 	perfil := perfilDosClaims(claims)
 	usuario := usuarioDosClaims(claims, perfil)
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "auth.login", Resultado: "sucesso",
+		Ator: &auditoria.Ator{Sub: usuario.ID, Perfil: string(perfil), Email: usuario.Email},
+	}, req)
 
 	return common.JSON(200, RespostaAuth{Usuario: usuario, Token: idToken}), nil
 }
@@ -64,8 +78,17 @@ func HandleRegistrar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		// que diz o que corrigir (ver mensagemDeErroNoCadastro).
 		log.Printf("POST /auth/registrar: %v", err)
 		status, mensagem := mensagemDeErroNoCadastro(err)
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "auth.cadastro", Resultado: "falha", Motivo: mensagem,
+			Ator: &auditoria.Ator{Email: novo.Email},
+		}, req)
 		return common.Erro(status, mensagem), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "auth.cadastro", Resultado: "sucesso",
+		Ator: &auditoria.Ator{Email: novo.Email},
+	}, req)
 
 	// SignUp não retorna token — o Cognito pode exigir confirmação por
 	// e-mail antes do primeiro login (ver ConfirmSignUp). O frontend
@@ -92,8 +115,18 @@ func HandleConfirmar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	if err := cognitoConfirmar(ctx, c); err != nil {
 		log.Printf("POST /auth/confirmar: %v", err)
 		status, mensagem := mensagemDeErroNaConfirmacao(err)
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "auth.conta_confirmada", Resultado: "falha", Motivo: mensagem,
+			Ator: &auditoria.Ator{Email: c.Email},
+		}, req)
 		return common.Erro(status, mensagem), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "auth.conta_confirmada", Resultado: "sucesso",
+		Ator: &auditoria.Ator{Email: c.Email},
+	}, req)
+
 	return common.JSON(200, map[string]string{
 		"mensagem": "conta confirmada — você já pode entrar",
 	}), nil

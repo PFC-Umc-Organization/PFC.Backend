@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
@@ -15,6 +16,9 @@ import (
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.criado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -41,6 +45,12 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(500, "falha ao criar projeto"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.criado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: p.ID},
+		Detalhes: map[string]any{"programaId": programaID, "nome": p.Nome},
+	}, req)
+
 	return common.JSON(201, p), nil
 }
 
@@ -56,6 +66,9 @@ func HandleListarPorPrograma(ctx context.Context, req events.APIGatewayProxyRequ
 
 func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.orientador_associado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -73,12 +86,21 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.orientador_associado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+		Detalhes: map[string]any{"orientadorId": body.OrientadorID},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
 }
 
 
 func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.orientador_removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -88,12 +110,20 @@ func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequ
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.orientador_removido", Resultado: "sucesso",
+		Recurso: &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "orientador removido"}), nil
 }
 
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.atualizado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -111,11 +141,20 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.atualizado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+		Detalhes: map[string]any{"nome": dados.Nome},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "projeto atualizado"}), nil
 }
 
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -125,12 +164,20 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.removido", Resultado: "sucesso",
+		Recurso: &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "projeto removido"}), nil
 }
 
 // HandleAdicionarIntegrante implementa PUT /projetos/:projetoId/integrantes.
 func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.integrante_adicionado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -158,6 +205,12 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 			return common.Erro(500, "falha ao validar matrícula"), nil
 		}
 		if !temConta {
+			auditoria.Registrar(ctx, auditoria.Evento{
+				Acao: "projeto.integrante_adicionado", Resultado: "falha",
+				Motivo:  "RGM não está pré-autorizado e não tem conta de aluno",
+				Recurso: &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+				Detalhes: map[string]any{"rgm": body.RGM},
+			}, req)
 			return common.Erro(404, "RGM não está pré-autorizado e não tem conta de aluno"), nil
 		}
 	}
@@ -166,11 +219,20 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.integrante_adicionado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+		Detalhes: map[string]any{"rgm": body.RGM},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "aluno associado ao projeto"}), nil
 }
 
 func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.integrante_removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -187,6 +249,12 @@ func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequ
 	if err := removerIntegrante(ctx, projetoID, body.RGM); err != nil {
 		return common.Erro(404, "projeto não encontrado"), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "projeto.integrante_removido", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+		Detalhes: map[string]any{"rgm": body.RGM},
+	}, req)
 
 	return common.JSON(200, map[string]string{"mensagem": "aluno removido do projeto"}), nil
 }

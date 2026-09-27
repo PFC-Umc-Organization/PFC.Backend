@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
 )
@@ -109,6 +110,11 @@ func HandleAdicionar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return resp, nil
 	}
 	if !podeEditar(common.PerfilDaRequisicao(req), common.RGMDaRequisicao(req), p) {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "referencia.adicionada", Resultado: "falha",
+			Motivo:  "apenas integrantes do projeto podem alterar as referências",
+			Recurso: &auditoria.Recurso{Tipo: "projeto", ID: p.ID},
+		}, req)
 		return common.Erro(403, "apenas integrantes do projeto podem alterar as referências"), nil
 	}
 
@@ -141,6 +147,13 @@ func HandleAdicionar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	if err != nil {
 		return common.Erro(500, "falha ao salvar referência"), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "referencia.adicionada", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "referencia", ID: salva.ID},
+		Detalhes: map[string]any{"projetoId": p.ID, "doi": salva.DOI},
+	}, req)
+
 	return common.JSON(201, salva), nil
 }
 
@@ -151,16 +164,29 @@ func HandleRemover(ctx context.Context, req events.APIGatewayProxyRequest) (even
 		return resp, nil
 	}
 	if !podeEditar(common.PerfilDaRequisicao(req), common.RGMDaRequisicao(req), p) {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "referencia.removida", Resultado: "falha",
+			Motivo:  "apenas integrantes do projeto podem alterar as referências",
+			Recurso: &auditoria.Recurso{Tipo: "projeto", ID: p.ID},
+		}, req)
 		return common.Erro(403, "apenas integrantes do projeto podem alterar as referências"), nil
 	}
 
-	err := remover(ctx, p.ID, req.PathParameters["referenciaId"])
+	referenciaID := req.PathParameters["referenciaId"]
+	err := remover(ctx, p.ID, referenciaID)
 	if errors.Is(err, errNaoEncontrado) {
 		return common.Erro(404, "referência não encontrada"), nil
 	}
 	if err != nil {
 		return common.Erro(500, "falha ao remover referência"), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "referencia.removida", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "referencia", ID: referenciaID},
+		Detalhes: map[string]any{"projetoId": p.ID},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "referência removida"}), nil
 }
 

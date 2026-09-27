@@ -21,6 +21,11 @@ func NomeDaRequisicao(req events.APIGatewayProxyRequest) string {
 	return claimString(req, "name")
 }
 
+// EmailDaRequisicao devolve o e-mail cadastrado no Cognito (atributo email).
+func EmailDaRequisicao(req events.APIGatewayProxyRequest) string {
+	return claimString(req, "email")
+}
+
 // RGMDaRequisicao extrai o RGM do e-mail do aluno. O e-mail de aluno é
 // sempre <rgm>@alunos.umc.br — o Pre Sign-up Lambda barra qualquer outro
 // formato —, então a parte local é o RGM. Pra professor/coordenador o valor

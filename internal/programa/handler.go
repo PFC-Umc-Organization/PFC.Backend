@@ -6,12 +6,16 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "programa.criado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -28,6 +32,12 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(500, "falha ao criar programa"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "programa.criado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "programa", ID: p.ID},
+		Detalhes: map[string]any{"cursoId": p.CursoID},
+	}, req)
+
 	return common.JSON(201, p), nil
 }
 
@@ -43,6 +53,9 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "programa.atualizado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -60,12 +73,21 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(404, "programa não encontrado"), nil
 	}
 
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "programa.atualizado", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "programa", ID: id},
+		Detalhes: map[string]any{"cursoId": dados.CursoID},
+	}, req)
+
 	return common.JSON(200, map[string]string{"mensagem": "programa atualizado"}), nil
 }
 
 
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "programa.removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+		}, req)
 		return common.Erro(403, "acesso restrito a coordenadores"), nil
 	}
 
@@ -73,10 +95,19 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 
 	if err := deletar(ctx, id); err != nil {
 		if err == errProgramaComProjetos {
+			auditoria.Registrar(ctx, auditoria.Evento{
+				Acao: "programa.removido", Resultado: "falha", Motivo: "programa possui projetos vinculados",
+				Recurso: &auditoria.Recurso{Tipo: "programa", ID: id},
+			}, req)
 			return common.Erro(409, "programa possui projetos vinculados, não pode ser removido"), nil
 		}
 		return common.Erro(404, "programa não encontrado"), nil
 	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "programa.removido", Resultado: "sucesso",
+		Recurso: &auditoria.Recurso{Tipo: "programa", ID: id},
+	}, req)
 
 	return common.JSON(200, map[string]string{"mensagem": "programa removido"}), nil
 }
