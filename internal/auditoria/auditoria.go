@@ -87,5 +87,5 @@ func Registrar(ctx context.Context, ev Evento, req events.APIGatewayProxyRequest
 		atributos = append(atributos, slog.String("requestId", id))
 	}
 
-	logger.InfoContext(ctx, "evento de auditoria", atributos...)
+	logger.InfoContext(ctx, "audit_event", atributos...)
 }
