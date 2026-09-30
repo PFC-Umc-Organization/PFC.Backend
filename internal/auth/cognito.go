@@ -102,7 +102,7 @@ func atributosDoCadastro(novo NovoUsuario) []types.AttributeType {
 	return []types.AttributeType{
 		{Name: aws.String("email"), Value: aws.String(novo.Email)},
 		{Name: aws.String("name"), Value: aws.String(novo.Nome)},
-		{Name: aws.String("custom:perfil"), Value: aws.String(string(PerfilAluno))},
+		{Name: aws.String("custom:perfil"), Value: aws.String(string(common.Aluno))},
 	}
 }
 
@@ -146,7 +146,7 @@ func usuarioDosClaims(claims map[string]any, perfil Perfil) Usuario {
 		Status:   StatusAtivo,
 		CursoIds: []string{},
 	}
-	if perfil == PerfilAluno {
+	if perfil == common.Aluno {
 		u.RGM = common.RGMDoEmail(email)
 	}
 	return u

@@ -121,9 +121,9 @@ func TestPermissoes(t *testing.T) {
 		{"integrante com perfil ALUNO explícito", "ALUNO", "22222222", true, true},
 		{"aluno de outro grupo", "", "33333333", false, false},
 		{"aluno sem e-mail no token", "", "", false, false},
-		{"professor", "PROFESSOR", "alessandro.horas", true, false},
-		{"coordenador", "COORDENADOR", "coordenacao", true, false},
-		{"coordenador cujo usuário coincide com um RGM", "COORDENADOR", "11111111", true, false},
+		{"orientador", "ORIENTADOR", "alessandro.horas", true, false},
+		{"admin", "ADMIN", "coordenacao", true, false},
+		{"admin cujo usuário coincide com um RGM", "ADMIN", "11111111", true, false},
 	}
 	for _, c := range casos {
 		if got := podeVer(c.perfil, c.rgm, p); got != c.ver {

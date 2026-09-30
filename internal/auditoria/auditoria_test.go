@@ -17,7 +17,7 @@ func comAtorFalso() events.APIGatewayProxyRequest {
 			Authorizer: map[string]interface{}{
 				"claims": map[string]interface{}{
 					"sub":           "sub-abc",
-					"custom:perfil": "COORDENADOR",
+					"custom:perfil": "ADMIN",
 					"email":         "coord@umc.br",
 				},
 			},
@@ -62,7 +62,7 @@ func TestRegistrarEventoDeSucesso(t *testing.T) {
 	if !ok {
 		t.Fatalf("ator não veio como objeto: %v", linha["ator"])
 	}
-	if ator["sub"] != "sub-abc" || ator["perfil"] != "COORDENADOR" || ator["ip"] != "203.0.113.5" {
+	if ator["sub"] != "sub-abc" || ator["perfil"] != "ADMIN" || ator["ip"] != "203.0.113.5" {
 		t.Errorf("ator incompleto: %v", ator)
 	}
 
@@ -81,7 +81,7 @@ func TestRegistrarEventoDeFalhaOmiteRecurso(t *testing.T) {
 	Registrar(context.Background(), Evento{
 		Acao:      "programa.criado",
 		Resultado: "falha",
-		Motivo:    "acesso restrito a coordenadores",
+		Motivo:    "acesso restrito a administradores",
 	}, comAtorFalso())
 
 	var linha map[string]any
@@ -89,7 +89,7 @@ func TestRegistrarEventoDeFalhaOmiteRecurso(t *testing.T) {
 		t.Fatalf("linha de log não é JSON válido: %v", err)
 	}
 
-	if linha["motivo"] != "acesso restrito a coordenadores" {
+	if linha["motivo"] != "acesso restrito a administradores" {
 		t.Errorf("motivo = %v", linha["motivo"])
 	}
 	if _, existe := linha["recurso"]; existe {

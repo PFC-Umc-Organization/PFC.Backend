@@ -22,14 +22,10 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 		return common.Erro(500, "falha ao listar usuários"), nil
 	}
 
-	if !ehEquipeAcademica(common.PerfilDaRequisicao(req)) {
+	if !common.PerfilPermitido(req, common.Admin, common.Orientador) {
 		for i := range usuarios {
 			usuarios[i].Email = ""
 		}
 	}
 	return common.JSON(200, usuarios), nil
-}
-
-func ehEquipeAcademica(perfil string) bool {
-	return perfil == PerfilProfessor || perfil == PerfilCoordenador
 }

@@ -69,9 +69,9 @@ func HandleRegistrar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	// IMPORTANTE: o campo `novo.Perfil` vem do cliente e NUNCA é usado pra
 	// decidir o perfil real. Esse endpoint é público (sem autenticação) —
 	// se confiássemos no valor enviado, qualquer requisição poderia se
-	// autodeclarar PROFESSOR. Cadastro público sempre cria ALUNO; contas de
-	// professor só existem via AdminCreateUser (fora deste endpoint).
-	novo.Perfil = PerfilAluno
+	// autodeclarar ORIENTADOR. Cadastro público sempre cria ALUNO; contas de
+	// orientador só existem via AdminCreateUser (fora deste endpoint).
+	novo.Perfil = common.Aluno
 
 	if err := cognitoSignUp(ctx, novo); err != nil {
 		// O erro cru vai pro CloudWatch; o cliente recebe uma mensagem
@@ -216,12 +216,12 @@ func mensagemDeErroNoCadastro(err error) (status int, mensagem string) {
 
 // perfilDosClaims lê custom:perfil do JWT recém-emitido. Contas
 // self-registradas (aluno) nunca têm esse atributo setado — por isso o
-// default é ALUNO quando ausente. Contas de professor/coordenador são
-// criadas via AdminCreateUser com o atributo explícito (fora deste
-// endpoint, feito pelo admin/coordenador).
+// default é ALUNO quando ausente. Contas de orientador/admin são criadas
+// via AdminCreateUser com o atributo explícito (fora deste endpoint, feito
+// pelo admin).
 func perfilDosClaims(claims map[string]any) Perfil {
 	if raw, ok := claims["custom:perfil"].(string); ok && raw != "" {
 		return Perfil(raw)
 	}
-	return PerfilAluno
+	return common.Aluno
 }

@@ -67,7 +67,7 @@ func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
 		return false, err
 	}
 	for _, u := range out.Users {
-		if c := usuarioDoCognito(u); c.Perfil == PerfilAluno && c.RGM == rgm {
+		if c := usuarioDoCognito(u); c.Perfil == string(common.Aluno) && c.RGM == rgm {
 			return true, nil
 		}
 	}
@@ -122,7 +122,7 @@ func usuarioDoCognito(u types.UserType) Usuario {
 
 	perfil := atributos["custom:perfil"]
 	if perfil == "" {
-		perfil = PerfilAluno
+		perfil = string(common.Aluno)
 	}
 
 	id := atributos["sub"]
@@ -145,7 +145,7 @@ func usuarioDoCognito(u types.UserType) Usuario {
 		Confirmado: u.UserStatus == types.UserStatusTypeConfirmed,
 		CursoIds:   []string{},
 	}
-	if perfil == PerfilAluno {
+	if perfil == string(common.Aluno) {
 		usuario.RGM = common.RGMDoEmail(usuario.Email)
 	}
 	return usuario

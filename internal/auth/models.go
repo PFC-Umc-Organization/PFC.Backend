@@ -1,13 +1,11 @@
 package auth
 
-// Perfil espelha o union type `Perfil` do frontend (usuario.model.ts).
-type Perfil string
+import "github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 
-const (
-	PerfilAluno       Perfil = "ALUNO"
-	PerfilProfessor   Perfil = "PROFESSOR"
-	PerfilCoordenador Perfil = "COORDENADOR"
-)
+// Perfil é um alias de common.Perfil — fonte única dos papéis, ver
+// internal/common/perfil.go. Existe aqui só pra não reescrever o tipo dos
+// campos Usuario.Perfil/NovoUsuario.Perfil deste arquivo.
+type Perfil = common.Perfil
 
 // StatusUsuario espelha `StatusUsuario` do frontend.
 type StatusUsuario string

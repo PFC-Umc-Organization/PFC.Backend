@@ -203,20 +203,18 @@ func carregarProjeto(ctx context.Context, req events.APIGatewayProxyRequest) (pr
 	return p, events.APIGatewayProxyResponse{}, true
 }
 
-func ehEquipeAcademica(perfil string) bool {
-	return perfil == "PROFESSOR" || perfil == "COORDENADOR"
-}
-
-// podeVer: a equipe acadêmica acompanha a bibliografia de qualquer PFC; o
-// aluno só a do próprio grupo.
+// podeVer: a equipe acadêmica (admin ou orientador) acompanha a
+// bibliografia de qualquer PFC; o aluno só a do próprio grupo.
 func podeVer(perfil, rgm string, p projeto.Projeto) bool {
-	return ehEquipeAcademica(perfil) || podeEditar(perfil, rgm, p)
+	pf := common.Perfil(perfil)
+	return pf == common.Admin || pf == common.Orientador || podeEditar(perfil, rgm, p)
 }
 
 // podeEditar: a lista é do grupo, então só integrante mexe. Aluno
 // auto-cadastrado não tem custom:perfil (perfil vazio = ALUNO).
 func podeEditar(perfil, rgm string, p projeto.Projeto) bool {
-	if ehEquipeAcademica(perfil) || rgm == "" {
+	pf := common.Perfil(perfil)
+	if pf == common.Admin || pf == common.Orientador || rgm == "" {
 		return false
 	}
 	return slices.Contains(p.Integrantes, rgm)

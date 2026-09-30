@@ -15,11 +15,11 @@ import (
 )
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.criado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.criado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	programaID := req.PathParameters["programaId"]
@@ -65,11 +65,11 @@ func HandleListarPorPrograma(ctx context.Context, req events.APIGatewayProxyRequ
 }
 
 func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.orientador_associado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.orientador_associado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]
@@ -97,11 +97,11 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 
 
 func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.orientador_removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.orientador_removido", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]
@@ -120,11 +120,11 @@ func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequ
 
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.atualizado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.atualizado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]
@@ -151,11 +151,11 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 }
 
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.removido", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]
@@ -174,11 +174,11 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 
 // HandleAdicionarIntegrante implementa PUT /projetos/:projetoId/integrantes.
 func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.integrante_adicionado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.integrante_adicionado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]
@@ -229,11 +229,11 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 }
 
 func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "projeto.integrante_removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "projeto.integrante_removido", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	projetoID := req.PathParameters["projetoId"]

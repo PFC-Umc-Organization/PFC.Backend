@@ -12,11 +12,11 @@ import (
 
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "programa.criado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "programa.criado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	var novo NovoPrograma
@@ -52,11 +52,11 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "programa.atualizado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "programa.atualizado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	id := req.PathParameters["programaId"]
@@ -84,11 +84,11 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 
 
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if common.PerfilDaRequisicao(req) != "COORDENADOR" {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "programa.removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "programa.removido", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	id := req.PathParameters["programaId"]

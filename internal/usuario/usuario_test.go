@@ -37,13 +37,13 @@ func TestUsuarioDoCognito(t *testing.T) {
 			},
 		},
 		{
-			nome: "coordenador com e-mail @umc.br não tem RGM",
+			nome: "admin com e-mail @umc.br não tem RGM",
 			conta: conta("sub-coord", true, types.UserStatusTypeConfirmed, map[string]string{
-				"sub": "sub-coord", "email": "coordenacao@umc.br", "name": "Coordenação Teste", "custom:perfil": "COORDENADOR",
+				"sub": "sub-coord", "email": "coordenacao@umc.br", "name": "Coordenação Teste", "custom:perfil": "ADMIN",
 			}),
 			want: Usuario{
 				ID: "sub-coord", Nome: "Coordenação Teste", Email: "coordenacao@umc.br",
-				Perfil: "COORDENADOR", Status: "ATIVO", Confirmado: true, CursoIds: []string{},
+				Perfil: "ADMIN", Status: "ATIVO", Confirmado: true, CursoIds: []string{},
 			},
 		},
 		{
@@ -83,15 +83,15 @@ func TestHandleListar(t *testing.T) {
 	listarContas = func(context.Context) ([]Usuario, error) {
 		return []Usuario{
 			{ID: "1", Nome: "Aluno", Email: "1@alunos.umc.br", Perfil: "ALUNO", RGM: "1", CursoIds: []string{}},
-			{ID: "2", Nome: "Coord", Email: "coord@umc.br", Perfil: "COORDENADOR", CursoIds: []string{}},
+			{ID: "2", Nome: "Coord", Email: "coord@umc.br", Perfil: "ADMIN", CursoIds: []string{}},
 		}, nil
 	}
 
 	casos := map[string]bool{ // perfil de quem chama → recebe e-mail?
-		"COORDENADOR": true,
-		"PROFESSOR":   true,
-		"ALUNO":       false,
-		"":            false, // aluno self sign-up não tem custom:perfil
+		"ADMIN":      true,
+		"ORIENTADOR": true,
+		"ALUNO":      false,
+		"":           false, // aluno self sign-up não tem custom:perfil
 	}
 	for perfil, recebeEmail := range casos {
 		resp, _ := HandleListar(context.Background(), comPerfil(perfil))
@@ -113,7 +113,7 @@ func TestHandleListar(t *testing.T) {
 	}
 
 	listarContas = func(context.Context) ([]Usuario, error) { return nil, errors.New("AccessDenied") }
-	if resp, _ := HandleListar(context.Background(), comPerfil("COORDENADOR")); resp.StatusCode != 500 {
+	if resp, _ := HandleListar(context.Background(), comPerfil("ADMIN")); resp.StatusCode != 500 {
 		t.Errorf("erro do Cognito: status = %d, want 500", resp.StatusCode)
 	}
 }

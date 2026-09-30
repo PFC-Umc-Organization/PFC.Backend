@@ -1,10 +1,6 @@
 package usuario
 
 const (
-	PerfilAluno       = "ALUNO"
-	PerfilProfessor   = "PROFESSOR"
-	PerfilCoordenador = "COORDENADOR"
-
 	StatusAtivo   = "ATIVO"
 	StatusInativo = "INATIVO"
 )

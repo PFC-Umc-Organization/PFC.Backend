@@ -12,14 +12,9 @@ import (
 )
 
 
-func ehCoordenador(req events.APIGatewayProxyRequest) bool {
-	return common.PerfilDaRequisicao(req) == "COORDENADOR"
-}
-
-
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if !ehCoordenador(req) {
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+	if !common.PerfilPermitido(req, common.Admin) {
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	matriculas, err := listarRGMs(ctx)
@@ -31,11 +26,11 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 
 
 func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if !ehCoordenador(req) {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "matricula.provisionado", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "matricula.provisionado", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	var body RGMRequest
@@ -66,11 +61,11 @@ func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (
 
 
 func HandleRemover(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if !ehCoordenador(req) {
+	if !common.PerfilPermitido(req, common.Admin) {
 		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "matricula.removido", Resultado: "falha", Motivo: "acesso restrito a coordenadores",
+			Acao: "matricula.removido", Resultado: "falha", Motivo: "acesso restrito a administradores",
 		}, req)
-		return common.Erro(403, "acesso restrito a coordenadores"), nil
+		return common.Erro(403, "acesso restrito a administradores"), nil
 	}
 
 	var body RGMRequest

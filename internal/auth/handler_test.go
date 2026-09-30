@@ -43,7 +43,7 @@ func TestMensagemDeErroNoCadastro(t *testing.T) {
 
 func TestAtributosDoCadastroSempreAluno(t *testing.T) {
 	// mesmo que o cliente mande outro perfil, o cadastro público grava ALUNO
-	attrs := atributosDoCadastro(NovoUsuario{Nome: "Fulano de Tal", Email: "123@alunos.umc.br", Perfil: "PROFESSOR"})
+	attrs := atributosDoCadastro(NovoUsuario{Nome: "Fulano de Tal", Email: "123@alunos.umc.br", Perfil: "ORIENTADOR"})
 	valores := map[string]string{}
 	for _, a := range attrs {
 		valores[aws.ToString(a.Name)] = aws.ToString(a.Value)
