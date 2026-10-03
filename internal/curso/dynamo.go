@@ -45,6 +45,35 @@ func toCurso(it item) Curso {
 	}
 }
 
+// existeDuplicado verifica (via Scan) se já existe turma com o mesmo
+// curso+turno+período. excluirID deixa de fora o próprio item ao validar
+// uma edição (senão a turma sempre "colidiria com ela mesma").
+func existeDuplicado(ctx context.Context, excluirID, nome, turno, periodo string) (bool, error) {
+	out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
+		TableName:        aws.String(tableName),
+		FilterExpression: aws.String("begins_with(PK, :prefixo) AND nome = :n AND turno = :t AND periodo = :p"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":prefixo": &types.AttributeValueMemberS{Value: "CURSO#"},
+			":n":       &types.AttributeValueMemberS{Value: nome},
+			":t":       &types.AttributeValueMemberS{Value: turno},
+			":p":       &types.AttributeValueMemberS{Value: periodo},
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, i := range out.Items {
+		var it item
+		if err := attributevalue.UnmarshalMap(i, &it); err != nil {
+			continue
+		}
+		if it.PK != "CURSO#"+excluirID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func salvar(ctx context.Context, novo NovoCurso) (Curso, error) {
 	id := uuid.NewString()
 
@@ -69,6 +98,22 @@ func salvar(ctx context.Context, novo NovoCurso) (Curso, error) {
 	}
 
 	return toCurso(it), nil
+}
+
+// Existe diz se há uma turma com este id — usado por `programa` pra
+// validar o cursoId antes de criar/atualizar um Programa.
+func Existe(ctx context.Context, id string) (bool, error) {
+	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "CURSO#" + id},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	return out.Item != nil, nil
 }
 
 // listar faz Scan — aceitável aqui pelo mesmo motivo que em `programa`:

@@ -3,6 +3,7 @@ package curso
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 
@@ -23,11 +24,29 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	if err := json.Unmarshal([]byte(req.Body), &novo); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	novo.Nome = strings.TrimSpace(novo.Nome)
+	novo.Turno = strings.TrimSpace(novo.Turno)
+	novo.Periodo = strings.TrimSpace(novo.Periodo)
 	if novo.Nome == "" || novo.Turno == "" || novo.Periodo == "" {
 		return common.Erro(400, "nome, turno e periodo são obrigatórios"), nil
 	}
 	if !nomeValido(novo.Nome) {
 		return common.Erro(400, "curso inválido — escolha um dos cursos disponíveis"), nil
+	}
+	if !turnoValido(novo.Turno) {
+		return common.Erro(400, "turno inválido — escolha manhã ou noite"), nil
+	}
+
+	duplicada, err := existeDuplicado(ctx, "", novo.Nome, novo.Turno, novo.Periodo)
+	if err != nil {
+		return common.Erro(500, "falha ao criar turma"), nil
+	}
+	if duplicada {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "turma.criada", Resultado: "falha", Motivo: "turma já existe",
+			Detalhes: map[string]any{"nome": novo.Nome, "turno": novo.Turno, "periodo": novo.Periodo},
+		}, req)
+		return common.Erro(409, "já existe uma turma com esse curso, turno e período"), nil
 	}
 
 	c, err := salvar(ctx, novo)
@@ -68,11 +87,30 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	if err := json.Unmarshal([]byte(req.Body), &dados); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	dados.Nome = strings.TrimSpace(dados.Nome)
+	dados.Turno = strings.TrimSpace(dados.Turno)
+	dados.Periodo = strings.TrimSpace(dados.Periodo)
 	if dados.Nome == "" || dados.Turno == "" || dados.Periodo == "" {
 		return common.Erro(400, "nome, turno e periodo são obrigatórios"), nil
 	}
 	if !nomeValido(dados.Nome) {
 		return common.Erro(400, "curso inválido — escolha um dos cursos disponíveis"), nil
+	}
+	if !turnoValido(dados.Turno) {
+		return common.Erro(400, "turno inválido — escolha manhã ou noite"), nil
+	}
+
+	duplicada, err := existeDuplicado(ctx, id, dados.Nome, dados.Turno, dados.Periodo)
+	if err != nil {
+		return common.Erro(500, "falha ao atualizar turma"), nil
+	}
+	if duplicada {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "turma.atualizada", Resultado: "falha", Motivo: "turma já existe",
+			Recurso:  &auditoria.Recurso{Tipo: "turma", ID: id},
+			Detalhes: map[string]any{"nome": dados.Nome, "turno": dados.Turno, "periodo": dados.Periodo},
+		}, req)
+		return common.Erro(409, "já existe uma turma com esse curso, turno e período"), nil
 	}
 
 	if err := atualizar(ctx, id, dados); err != nil {

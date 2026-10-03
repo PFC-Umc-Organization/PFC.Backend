@@ -8,6 +8,7 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 )
 
 
@@ -25,6 +26,26 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	}
 	if novo.CursoID == "" {
 		return common.Erro(400, "cursoId é obrigatório"), nil
+	}
+
+	cursoExiste, err := curso.Existe(ctx, novo.CursoID)
+	if err != nil {
+		return common.Erro(500, "falha ao criar programa"), nil
+	}
+	if !cursoExiste {
+		return common.Erro(404, "curso não encontrado"), nil
+	}
+
+	duplicado, err := existeParaCurso(ctx, "", novo.CursoID)
+	if err != nil {
+		return common.Erro(500, "falha ao criar programa"), nil
+	}
+	if duplicado {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "programa.criado", Resultado: "falha", Motivo: "programa já existe para este curso",
+			Detalhes: map[string]any{"cursoId": novo.CursoID},
+		}, req)
+		return common.Erro(409, "este curso já possui um programa de PFC"), nil
 	}
 
 	p, err := salvar(ctx, novo)
@@ -67,6 +88,27 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	}
 	if dados.CursoID == "" {
 		return common.Erro(400, "cursoId é obrigatório"), nil
+	}
+
+	cursoExiste, err := curso.Existe(ctx, dados.CursoID)
+	if err != nil {
+		return common.Erro(500, "falha ao atualizar programa"), nil
+	}
+	if !cursoExiste {
+		return common.Erro(404, "curso não encontrado"), nil
+	}
+
+	duplicado, err := existeParaCurso(ctx, id, dados.CursoID)
+	if err != nil {
+		return common.Erro(500, "falha ao atualizar programa"), nil
+	}
+	if duplicado {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "programa.atualizado", Resultado: "falha", Motivo: "programa já existe para este curso",
+			Recurso:  &auditoria.Recurso{Tipo: "programa", ID: id},
+			Detalhes: map[string]any{"cursoId": dados.CursoID},
+		}, req)
+		return common.Erro(409, "este curso já possui um programa de PFC"), nil
 	}
 
 	if err := atualizar(ctx, id, dados); err != nil {

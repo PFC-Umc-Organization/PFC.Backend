@@ -74,6 +74,23 @@ func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
 	return false, nil
 }
 
+// OrientadorExiste diz se existe conta de ORIENTADOR com este id (sub do
+// Cognito). Usado por `projeto` pra validar orientadorId antes de associar
+// — a tela só oferece ids de orientadores reais, mas a API não deve confiar
+// só nisso (mesmo princípio de `AlunoExiste`).
+func OrientadorExiste(ctx context.Context, orientadorID string) (bool, error) {
+	usuarios, err := listarContas(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, u := range usuarios {
+		if u.ID == orientadorID && u.Perfil == string(common.Orientador) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func listarDoCognito(ctx context.Context) ([]Usuario, error) {
 	if userPoolID == "" {
 		return nil, fmt.Errorf("COGNITO_USER_POOL_ID não configurado")

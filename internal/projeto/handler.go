@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 
@@ -36,6 +37,7 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	if err := json.Unmarshal([]byte(req.Body), &novo); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	novo.Nome = strings.TrimSpace(novo.Nome)
 	if novo.Nome == "" {
 		return common.Erro(400, "nome é obrigatório"), nil
 	}
@@ -80,6 +82,20 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	}
 	if body.OrientadorID == "" {
 		return common.Erro(400, "orientadorId é obrigatório"), nil
+	}
+
+	ehOrientador, err := usuario.OrientadorExiste(ctx, body.OrientadorID)
+	if err != nil {
+		log.Printf("PUT /projetos/%s/orientador: %v", projetoID, err)
+		return common.Erro(500, "falha ao validar orientador"), nil
+	}
+	if !ehOrientador {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.orientador_associado", Resultado: "falha",
+			Motivo:  "orientadorId não corresponde a uma conta de orientador",
+			Recurso: &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+		}, req)
+		return common.Erro(404, "orientador não encontrado"), nil
 	}
 
 	if err := associarOrientador(ctx, projetoID, body.OrientadorID); err != nil {
@@ -133,6 +149,7 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	if err := json.Unmarshal([]byte(req.Body), &dados); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	dados.Nome = strings.TrimSpace(dados.Nome)
 	if dados.Nome == "" {
 		return common.Erro(400, "nome é obrigatório"), nil
 	}

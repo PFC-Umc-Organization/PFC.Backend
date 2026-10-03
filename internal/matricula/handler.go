@@ -4,12 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
+
+// rgmsValidos remove espaços, descarta entradas vazias e duplicadas —
+// sem isso, um RGM em branco no array grava um item "STUDENT#" fantasma
+// (sem RGM de fato) e repetir o mesmo RGM no mesmo lote é trabalho em
+// dobro à toa.
+func rgmsValidos(rgms []string) []string {
+	vistos := make(map[string]bool, len(rgms))
+	validos := make([]string, 0, len(rgms))
+	for _, rgm := range rgms {
+		rgm = strings.TrimSpace(rgm)
+		if rgm == "" || vistos[rgm] {
+			continue
+		}
+		vistos[rgm] = true
+		validos = append(validos, rgm)
+	}
+	return validos
+}
 
 
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -37,24 +56,25 @@ func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
-	if len(body.RGMs) == 0 {
+	rgms := rgmsValidos(body.RGMs)
+	if len(rgms) == 0 {
 		return common.Erro(400, "informe ao menos um RGM"), nil
 	}
 
-	falhas := gravarRGMs(ctx, body.RGMs)
+	falhas := gravarRGMs(ctx, rgms)
 
 	evento := auditoria.Evento{
 		Acao: "matricula.provisionado", Resultado: "sucesso",
-		Detalhes: map[string]any{"rgms": body.RGMs, "processados": len(body.RGMs) - len(falhas)},
+		Detalhes: map[string]any{"rgms": rgms, "processados": len(rgms) - len(falhas)},
 	}
 	if len(falhas) > 0 {
 		evento.Resultado = "falha"
-		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(body.RGMs))
+		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(rgms))
 	}
 	auditoria.Registrar(ctx, evento, req)
 
 	return common.JSON(200, RGMResponse{
-		Processados: len(body.RGMs) - len(falhas),
+		Processados: len(rgms) - len(falhas),
 		Falhas:      falhas,
 	}), nil
 }
@@ -72,24 +92,25 @@ func HandleRemover(ctx context.Context, req events.APIGatewayProxyRequest) (even
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
-	if len(body.RGMs) == 0 {
+	rgms := rgmsValidos(body.RGMs)
+	if len(rgms) == 0 {
 		return common.Erro(400, "informe ao menos um RGM"), nil
 	}
 
-	falhas := removerRGMs(ctx, body.RGMs)
+	falhas := removerRGMs(ctx, rgms)
 
 	evento := auditoria.Evento{
 		Acao: "matricula.removido", Resultado: "sucesso",
-		Detalhes: map[string]any{"rgms": body.RGMs, "processados": len(body.RGMs) - len(falhas)},
+		Detalhes: map[string]any{"rgms": rgms, "processados": len(rgms) - len(falhas)},
 	}
 	if len(falhas) > 0 {
 		evento.Resultado = "falha"
-		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(body.RGMs))
+		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(rgms))
 	}
 	auditoria.Registrar(ctx, evento, req)
 
 	return common.JSON(200, RGMResponse{
-		Processados: len(body.RGMs) - len(falhas),
+		Processados: len(rgms) - len(falhas),
 		Falhas:      falhas,
 	}), nil
 }

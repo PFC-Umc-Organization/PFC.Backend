@@ -35,6 +35,33 @@ type item struct {
 	CursoID string `dynamodbav:"cursoId"`
 }
 
+// existeParaCurso verifica (via Scan, mesmo padrão de curso.possuiPrograma)
+// se já existe Programa para este curso. excluirID deixa de fora o próprio
+// item ao validar uma edição.
+func existeParaCurso(ctx context.Context, excluirID, cursoID string) (bool, error) {
+	out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
+		TableName:        aws.String(tableName),
+		FilterExpression: aws.String("begins_with(PK, :prefixo) AND cursoId = :c"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":prefixo": &types.AttributeValueMemberS{Value: "PROGRAM#"},
+			":c":       &types.AttributeValueMemberS{Value: cursoID},
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, i := range out.Items {
+		var it item
+		if err := attributevalue.UnmarshalMap(i, &it); err != nil {
+			continue
+		}
+		if it.PK != "PROGRAM#"+excluirID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func salvar(ctx context.Context, novo NovoPrograma) (Programa, error) {
 	id := uuid.NewString()
 

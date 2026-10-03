@@ -13,6 +13,17 @@ func nomeValido(nome string) bool {
 	return cursosDisponiveis[nome]
 }
 
+// turnosDisponiveis espelha `Turno` do frontend (curso.model.ts) — mesma
+// lista fechada, validada aqui pelo mesmo motivo de `cursosDisponiveis`.
+var turnosDisponiveis = map[string]bool{
+	"MANHA": true,
+	"NOITE": true,
+}
+
+func turnoValido(turno string) bool {
+	return turnosDisponiveis[turno]
+}
+
 // Curso é a Turma em que o PFC é ofertado — espelha `Curso` do frontend
 // (curso.model.ts).
 type Curso struct {

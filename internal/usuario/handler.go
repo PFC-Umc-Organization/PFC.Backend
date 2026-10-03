@@ -54,6 +54,11 @@ func HandleCriarConta(ctx context.Context, req events.APIGatewayProxyRequest) (e
 	if body.Nome == "" || body.Email == "" {
 		return common.Erro(400, "nome e email são obrigatórios"), nil
 	}
+	// @umc.br é o domínio institucional de professor/admin — diferente de
+	// @alunos.umc.br, que é só de aluno (self sign-up).
+	if !strings.HasSuffix(body.Email, "@umc.br") {
+		return common.Erro(400, "use um e-mail institucional (@umc.br)"), nil
+	}
 
 	perfil := common.Perfil(body.Perfil)
 	if perfil != common.Orientador && perfil != common.Admin {
