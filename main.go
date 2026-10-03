@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
@@ -28,6 +29,12 @@ func init() {
 
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", usuario.HandleListar)
+
+	// Turmas
+	r.Handle("POST", "/turmas", curso.HandleCriar)
+	r.Handle("GET", "/turmas", curso.HandleListar)
+	r.Handle("PUT", "/turmas/:turmaId", curso.HandleAtualizar)
+	r.Handle("DELETE", "/turmas/:turmaId", curso.HandleDeletar)
 
 	// Matrículas
 	r.Handle("GET", "/admin/students", matricula.HandleListar)
