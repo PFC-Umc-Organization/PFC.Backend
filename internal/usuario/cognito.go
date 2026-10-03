@@ -111,6 +111,29 @@ func listarDoCognito(ctx context.Context) ([]Usuario, error) {
 	return usuarios, nil
 }
 
+// CriarConta cadastra uma conta de orientador/admin via AdminCreateUser —
+// diferente do self sign-up (SignUp), não exige senha: o Cognito gera uma
+// temporária e manda um convite por e-mail (comportamento padrão quando
+// TemporaryPassword não é informado). custom:perfil já sai setado, então
+// não depende de dedução nenhuma no primeiro login.
+func CriarConta(ctx context.Context, nome, email string, perfil common.Perfil) error {
+	if userPoolID == "" {
+		return fmt.Errorf("COGNITO_USER_POOL_ID não configurado")
+	}
+
+	_, err := cip.AdminCreateUser(ctx, &cognitoidentityprovider.AdminCreateUserInput{
+		UserPoolId: aws.String(userPoolID),
+		Username:   aws.String(email),
+		UserAttributes: []types.AttributeType{
+			{Name: aws.String("email"), Value: aws.String(email)},
+			{Name: aws.String("email_verified"), Value: aws.String("true")},
+			{Name: aws.String("name"), Value: aws.String(nome)},
+			{Name: aws.String("custom:perfil"), Value: aws.String(string(perfil))},
+		},
+	})
+	return err
+}
+
 // usuarioDoCognito converte a conta do Cognito no formato que o frontend
 // espera. Conta sem custom:perfil é ALUNO — é assim que o self sign-up cria
 // (mesma regra do login, ver auth.perfilDosClaims).

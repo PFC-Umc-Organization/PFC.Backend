@@ -19,3 +19,12 @@ type Usuario struct {
 	CursoIds   []string `json:"cursoIds"`
 	RGM        string   `json:"rgm,omitempty"`
 }
+
+// NovaConta é o corpo esperado em POST /admin/usuarios — cadastro de
+// orientador/admin feito pelo administrador. Perfil nunca é ALUNO aqui:
+// aluno só se cadastra pelo self sign-up (POST /auth/registrar).
+type NovaConta struct {
+	Nome   string `json:"nome"`
+	Email  string `json:"email"`
+	Perfil string `json:"perfil"`
+}

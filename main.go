@@ -29,6 +29,7 @@ func init() {
 
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", usuario.HandleListar)
+	r.Handle("POST", "/admin/usuarios", usuario.HandleCriarConta)
 
 	// Turmas
 	r.Handle("POST", "/turmas", curso.HandleCriar)
