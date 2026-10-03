@@ -26,6 +26,9 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	if novo.Nome == "" || novo.Turno == "" || novo.Periodo == "" {
 		return common.Erro(400, "nome, turno e periodo são obrigatórios"), nil
 	}
+	if !nomeValido(novo.Nome) {
+		return common.Erro(400, "curso inválido — escolha um dos cursos disponíveis"), nil
+	}
 
 	c, err := salvar(ctx, novo)
 	if err != nil {
@@ -67,6 +70,9 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	}
 	if dados.Nome == "" || dados.Turno == "" || dados.Periodo == "" {
 		return common.Erro(400, "nome, turno e periodo são obrigatórios"), nil
+	}
+	if !nomeValido(dados.Nome) {
+		return common.Erro(400, "curso inválido — escolha um dos cursos disponíveis"), nil
 	}
 
 	if err := atualizar(ctx, id, dados); err != nil {
