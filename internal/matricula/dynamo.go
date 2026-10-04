@@ -28,7 +28,7 @@ func init() {
 const batchSize = 25
 
 
-func gravarRGMs(ctx context.Context, rgms []string) []RGMFalha {
+func gravarRGMs(ctx context.Context, rgms []string, turmaID string) []RGMFalha {
 	var falhas []RGMFalha
 
 	for i := 0; i < len(rgms); i += batchSize {
@@ -39,9 +39,10 @@ func gravarRGMs(ctx context.Context, rgms []string) []RGMFalha {
 			writes = append(writes, types.WriteRequest{
 				PutRequest: &types.PutRequest{
 					Item: map[string]types.AttributeValue{
-						"PK":     &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
-						"SK":     &types.AttributeValueMemberS{Value: "PROFILE"},
-						"status": &types.AttributeValueMemberS{Value: "ACTIVE"},
+						"PK":      &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
+						"SK":      &types.AttributeValueMemberS{Value: "PROFILE"},
+						"status":  &types.AttributeValueMemberS{Value: "ACTIVE"},
+						"turmaId": &types.AttributeValueMemberS{Value: turmaID},
 					},
 				},
 			})
@@ -85,12 +86,42 @@ func listarRGMs(ctx context.Context) ([]Matricula, error) {
 			status = "ATIVO"
 		}
 
+		turmaID := ""
+		if t, ok := i["turmaId"].(*types.AttributeValueMemberS); ok {
+			turmaID = t.Value
+		}
+
 		matriculas = append(matriculas, Matricula{
-			RGM:    pk.Value[len("STUDENT#"):],
-			Status: status,
+			RGM:     pk.Value[len("STUDENT#"):],
+			Status:  status,
+			TurmaID: turmaID,
 		})
 	}
 	return matriculas, nil
+}
+
+// TurmaDoRGM devolve a turma vinculada ao RGM pré-autorizado, ou "" se o
+// RGM não está na allowlist (ou foi pré-autorizado antes desta turmaId
+// existir). Usado por `auth` e `usuario` pra preencher CursoIds do aluno.
+func TurmaDoRGM(ctx context.Context, rgm string) (string, error) {
+	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
+			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if out.Item == nil {
+		return "", nil
+	}
+	turma, ok := out.Item["turmaId"].(*types.AttributeValueMemberS)
+	if !ok {
+		return "", nil
+	}
+	return turma.Value, nil
 }
 
 

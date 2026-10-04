@@ -3,6 +3,7 @@ package usuario
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 )
 
 // O Cognito é a fonte de verdade das contas — não há cópia no DynamoDB.
@@ -29,6 +31,9 @@ var (
 // listarContas é variável pra os testes do handler não dependerem do
 // Cognito.
 var listarContas = listarDoCognito
+
+// turmaDoRGM é variável pra os testes não dependerem do DynamoDB real.
+var turmaDoRGM = matricula.TurmaDoRGM
 
 func init() {
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -67,7 +72,7 @@ func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
 		return false, err
 	}
 	for _, u := range out.Users {
-		if c := usuarioDoCognito(u); c.Perfil == string(common.Aluno) && c.RGM == rgm {
+		if c := usuarioDoCognito(ctx, u); c.Perfil == string(common.Aluno) && c.RGM == rgm {
 			return true, nil
 		}
 	}
@@ -113,7 +118,7 @@ func listarDoCognito(ctx context.Context) ([]Usuario, error) {
 		}
 
 		for _, u := range out.Users {
-			usuarios = append(usuarios, usuarioDoCognito(u))
+			usuarios = append(usuarios, usuarioDoCognito(ctx, u))
 		}
 
 		if out.PaginationToken == nil || *out.PaginationToken == "" {
@@ -153,8 +158,10 @@ func CriarConta(ctx context.Context, nome, email string, perfil common.Perfil) e
 
 // usuarioDoCognito converte a conta do Cognito no formato que o frontend
 // espera. Conta sem custom:perfil é ALUNO — é assim que o self sign-up cria
-// (mesma regra do login, ver auth.perfilDosClaims).
-func usuarioDoCognito(u types.UserType) Usuario {
+// (mesma regra do login, ver auth.perfilDosClaims). CursoIds vem da turma
+// vinculada ao RGM na pré-autorização (ver matricula.TurmaDoRGM) — se a
+// consulta falhar, só loga e segue com CursoIds vazio.
+func usuarioDoCognito(ctx context.Context, u types.UserType) Usuario {
 	atributos := map[string]string{}
 	for _, a := range u.Attributes {
 		atributos[aws.ToString(a.Name)] = aws.ToString(a.Value)
@@ -187,6 +194,11 @@ func usuarioDoCognito(u types.UserType) Usuario {
 	}
 	if perfil == string(common.Aluno) {
 		usuario.RGM = common.RGMDoEmail(usuario.Email)
+		if turmaID, err := turmaDoRGM(ctx, usuario.RGM); err != nil {
+			log.Printf("usuarioDoCognito: falha ao buscar turma do RGM %s: %v", usuario.RGM, err)
+		} else if turmaID != "" {
+			usuario.CursoIds = []string{turmaID}
+		}
 	}
 	return usuario
 }

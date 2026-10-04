@@ -10,6 +10,7 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 )
 
 // rgmsValidos remove espaços, descarta entradas vazias e duplicadas —
@@ -56,16 +57,28 @@ func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	turmaID := strings.TrimSpace(body.TurmaID)
+	if turmaID == "" {
+		return common.Erro(400, "turmaId é obrigatório"), nil
+	}
+	cursoExiste, err := curso.Existe(ctx, turmaID)
+	if err != nil {
+		return common.Erro(500, "falha ao validar turma"), nil
+	}
+	if !cursoExiste {
+		return common.Erro(404, "turma não encontrada"), nil
+	}
+
 	rgms := rgmsValidos(body.RGMs)
 	if len(rgms) == 0 {
 		return common.Erro(400, "informe ao menos um RGM"), nil
 	}
 
-	falhas := gravarRGMs(ctx, rgms)
+	falhas := gravarRGMs(ctx, rgms, turmaID)
 
 	evento := auditoria.Evento{
 		Acao: "matricula.provisionado", Resultado: "sucesso",
-		Detalhes: map[string]any{"rgms": rgms, "processados": len(rgms) - len(falhas)},
+		Detalhes: map[string]any{"rgms": rgms, "turmaId": turmaID, "processados": len(rgms) - len(falhas)},
 	}
 	if len(falhas) > 0 {
 		evento.Resultado = "falha"

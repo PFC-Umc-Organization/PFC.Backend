@@ -21,19 +21,35 @@ func conta(username string, enabled bool, status types.UserStatusType, atributos
 }
 
 func TestUsuarioDoCognito(t *testing.T) {
+	anterior := turmaDoRGM
+	t.Cleanup(func() { turmaDoRGM = anterior })
+
 	casos := []struct {
-		nome  string
-		conta types.UserType
-		want  Usuario
+		nome    string
+		conta   types.UserType
+		turmaID string
+		want    Usuario
 	}{
 		{
 			nome: "aluno self sign-up: sem custom:perfil, RGM vem do e-mail",
 			conta: conta("sub-aluno", true, types.UserStatusTypeConfirmed, map[string]string{
 				"sub": "sub-aluno", "email": "12345678901@alunos.umc.br", "name": "Aluno Teste",
 			}),
+			turmaID: "",
 			want: Usuario{
 				ID: "sub-aluno", Nome: "Aluno Teste", Email: "12345678901@alunos.umc.br",
 				Perfil: "ALUNO", Status: "ATIVO", Confirmado: true, CursoIds: []string{}, RGM: "12345678901",
+			},
+		},
+		{
+			nome: "aluno com turma pré-autorizada: CursoIds vem da matrícula",
+			conta: conta("sub-aluno2", true, types.UserStatusTypeConfirmed, map[string]string{
+				"sub": "sub-aluno2", "email": "22222222222@alunos.umc.br", "name": "Aluno Com Turma",
+			}),
+			turmaID: "turma-1",
+			want: Usuario{
+				ID: "sub-aluno2", Nome: "Aluno Com Turma", Email: "22222222222@alunos.umc.br",
+				Perfil: "ALUNO", Status: "ATIVO", Confirmado: true, CursoIds: []string{"turma-1"}, RGM: "22222222222",
 			},
 		},
 		{
@@ -60,7 +76,8 @@ func TestUsuarioDoCognito(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
-			if got := usuarioDoCognito(c.conta); !reflect.DeepEqual(got, c.want) {
+			turmaDoRGM = func(context.Context, string) (string, error) { return c.turmaID, nil }
+			if got := usuarioDoCognito(context.Background(), c.conta); !reflect.DeepEqual(got, c.want) {
 				t.Errorf("\n got: %+v\nwant: %+v", got, c.want)
 			}
 		})

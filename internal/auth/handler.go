@@ -49,7 +49,7 @@ func HandleLogin(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	}
 
 	perfil := perfilDosClaims(claims)
-	usuario := usuarioDosClaims(claims, perfil)
+	usuario := usuarioDosClaims(ctx, claims, perfil)
 
 	auditoria.Registrar(ctx, auditoria.Evento{
 		Acao: "auth.login", Resultado: "sucesso",

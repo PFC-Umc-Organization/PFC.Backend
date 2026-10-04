@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -14,7 +15,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 )
+
+// turmaDoRGM é variável pra os testes não dependerem do DynamoDB real.
+var turmaDoRGM = matricula.TurmaDoRGM
 
 var (
 	cognitoClientID = os.Getenv("COGNITO_CLIENT_ID")
@@ -129,11 +134,10 @@ func claimsDoIdToken(idToken string) (map[string]any, error) {
 
 // usuarioDosClaims monta o Usuario que o frontend espera a partir do JWT.
 //
-// TODO: cursoIds hoje sempre vem vazio. Matrícula em curso é dado de
-// negócio que ainda não tem lugar definido — quando o desenho de
-// matriculação for fechado (provavelmente mais um atributo na allowlist do
-// DynamoDB), popular aqui.
-func usuarioDosClaims(claims map[string]any, perfil Perfil) Usuario {
+// CursoIds vem da turma vinculada ao RGM na pré-autorização (ver
+// matricula.TurmaDoRGM). Se a consulta falhar, não bloqueia o login por
+// isso — só loga e devolve CursoIds vazio, como antes.
+func usuarioDosClaims(ctx context.Context, claims map[string]any, perfil Perfil) Usuario {
 	email, _ := claims["email"].(string)
 	nome, _ := claims["name"].(string)
 	sub, _ := claims["sub"].(string)
@@ -148,6 +152,11 @@ func usuarioDosClaims(claims map[string]any, perfil Perfil) Usuario {
 	}
 	if perfil == common.Aluno {
 		u.RGM = common.RGMDoEmail(email)
+		if turmaID, err := turmaDoRGM(ctx, u.RGM); err != nil {
+			log.Printf("usuarioDosClaims: falha ao buscar turma do RGM %s: %v", u.RGM, err)
+		} else if turmaID != "" {
+			u.CursoIds = []string{turmaID}
+		}
 	}
 	return u
 }
