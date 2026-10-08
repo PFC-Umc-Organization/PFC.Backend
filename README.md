@@ -66,7 +66,7 @@ precisa mudar.
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa                                          | qualquer autenticado |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | COORDENADOR |
 | GET    | `/atividades`                            | Lista atividades (com `campos`), ordenadas por prazo               | qualquer autenticado |
-| POST   | `/atividades`                            | Cria atividade (`{ titulo, descricao, prazo }`); nasce com 1 campo de arquivo obrigatório | ADMIN, ORIENTADOR |
+| POST   | `/atividades`                            | Cria atividade (`{ titulo, descricao, prazo, campos? }`); sem `campos` nasce com 1 campo de arquivo obrigatório | ADMIN, ORIENTADOR |
 | PUT    | `/atividades/:atividadeId`               | Edita título/descrição/prazo                                       | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId`               | Remove a atividade e as entregas dela                               | ADMIN, ORIENTADOR |
 | POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20) | ADMIN, ORIENTADOR |
@@ -74,6 +74,7 @@ precisa mudar.
 | GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN, ORIENTADOR |
 | GET    | `/projetos/:projetoId/entregas`          | Entregas do grupo                                                   | integrantes, ADMIN, ORIENTADOR |
 | PUT    | `/projetos/:projetoId/entregas/:atividadeId` | Entrega/reenvia (`{ respostas: { <campoId>: valor } }`), validada contra os campos | integrantes do projeto |
+| DELETE | `/projetos/:projetoId/entregas/:atividadeId` | Remove a entrega do grupo (devolve pra refazer)                  | ADMIN, ORIENTADOR |
 | GET    | `/referencias/busca?q=&pagina=`          | Busca artigos por tema na **OpenAlex** (10 por página, até 50 páginas) | qualquer autenticado |
 | GET    | `/referencias/doi?doi=`                  | Consulta o DOI no **Crossref** e devolve a referência em ABNT (`abnt`, `abntHtml`) | qualquer autenticado |
 | GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, PROFESSOR, COORDENADOR |

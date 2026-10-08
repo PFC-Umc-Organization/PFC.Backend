@@ -69,6 +69,7 @@ func init() {
 	r.Handle("GET", "/atividades/:atividadeId/entregas", atividade.HandleListarEntregasDaAtividade)
 	r.Handle("GET", "/projetos/:projetoId/entregas", atividade.HandleListarEntregasDoProjeto)
 	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", atividade.HandleEntregar)
+	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", atividade.HandleRemoverEntrega)
 
 	// Referências bibliográficas (OpenAlex + Crossref)
 	r.Handle("GET", "/referencias/busca", referencia.HandleBuscar)

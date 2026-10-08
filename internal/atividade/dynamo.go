@@ -32,10 +32,11 @@ var (
 )
 
 var (
-	errNaoEncontrada  = errors.New("atividade não encontrada")
-	errCampoNaoExiste = errors.New("campo não encontrado")
-	errUltimoCampo    = errors.New("a atividade precisa de ao menos um campo de entrega")
-	errLimiteDeCampos = errors.New("limite de campos da atividade atingido")
+	errNaoEncontrada    = errors.New("atividade não encontrada")
+	errCampoNaoExiste   = errors.New("campo não encontrado")
+	errUltimoCampo      = errors.New("a atividade precisa de ao menos um campo de entrega")
+	errEntregaNaoExiste = errors.New("entrega não encontrada")
+	errLimiteDeCampos   = errors.New("limite de campos da atividade atingido")
 )
 
 func init() {
@@ -103,9 +104,13 @@ func toEntrega(it itemEntrega) Entrega {
 	}
 }
 
-// salvar cria a atividade já com o campo de entrega padrão.
-func salvar(ctx context.Context, d dadosAtividade) (Atividade, error) {
+// salvar cria a atividade com os campos de entrega informados.
+func salvar(ctx context.Context, d dadosAtividade, novos []NovoCampo) (Atividade, error) {
 	id := uuid.NewString()
+	campos := make([]Campo, 0, len(novos))
+	for _, c := range novos {
+		campos = append(campos, Campo{ID: uuid.NewString(), Rotulo: c.Rotulo, Tipo: c.Tipo, Obrigatorio: c.Obrigatorio})
+	}
 	it := item{
 		PK:          "ACTIVITY#" + id,
 		SK:          "PROFILE",
@@ -115,9 +120,7 @@ func salvar(ctx context.Context, d dadosAtividade) (Atividade, error) {
 		Descricao:   d.Descricao,
 		Prazo:       d.Prazo,
 		PublicadaEm: time.Now().UTC().Format(time.RFC3339),
-		Campos: []Campo{{
-			ID: uuid.NewString(), Rotulo: "Arquivo da entrega", Tipo: CampoArquivo, Obrigatorio: true,
-		}},
+		Campos:      campos,
 	}
 	av, err := attributevalue.MarshalMap(it)
 	if err != nil {
@@ -341,6 +344,21 @@ func salvarEntrega(ctx context.Context, projetoID, atividadeID, por string, resp
 		return Entrega{}, err
 	}
 	return toEntrega(it), nil
+}
+
+// removerEntrega apaga a entrega do grupo; errEntregaNaoExiste se não havia.
+func removerEntrega(ctx context.Context, projetoID, atividadeID string) error {
+	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": str("PROJECT#" + projetoID), "SK": str("ENTREGA#" + atividadeID),
+		},
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+	})
+	if isCondicao(err) {
+		return errEntregaNaoExiste
+	}
+	return err
 }
 
 func entregasDoProjeto(ctx context.Context, projetoID string) ([]Entrega, error) {

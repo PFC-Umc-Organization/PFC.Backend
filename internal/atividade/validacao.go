@@ -78,6 +78,26 @@ func normalizarCampo(c NovoCampo) (NovoCampo, string) {
 	return c, ""
 }
 
+// normalizarCampos valida os campos informados na criação da atividade.
+// Lista vazia vira o campo padrão (arquivo obrigatório).
+func normalizarCampos(campos []NovoCampo) ([]NovoCampo, string) {
+	if len(campos) == 0 {
+		return []NovoCampo{{Rotulo: "Arquivo da entrega", Tipo: CampoArquivo, Obrigatorio: true}}, ""
+	}
+	if len(campos) > maxCampos {
+		return nil, "campos demais na atividade"
+	}
+	limpos := make([]NovoCampo, 0, len(campos))
+	for _, c := range campos {
+		n, msg := normalizarCampo(c)
+		if msg != "" {
+			return nil, msg
+		}
+		limpos = append(limpos, n)
+	}
+	return limpos, ""
+}
+
 // validarRespostas confere as respostas contra os campos da atividade:
 // só ids conhecidos, obrigatórios preenchidos, tamanho e formato por tipo.
 // Devolve as respostas já aparadas (sem as vazias) ou a mensagem de erro.

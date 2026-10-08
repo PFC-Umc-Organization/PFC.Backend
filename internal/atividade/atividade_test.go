@@ -26,6 +26,7 @@ func TestEscritaSoParaEquipeAcademica(t *testing.T) {
 		"adicionarCampo": HandleAdicionarCampo,
 		"removerCampo":   HandleRemoverCampo,
 		"entregasAtiv":   HandleListarEntregasDaAtividade,
+		"removerEntrega": HandleRemoverEntrega,
 	}
 	for nome, h := range handlers {
 		resp, _ := h(context.Background(), reqComPerfil("ALUNO"))
@@ -60,6 +61,22 @@ func TestNormalizarCampo(t *testing.T) {
 	}
 	if _, msg := normalizarCampo(NovoCampo{Rotulo: "x", Tipo: "XYZ"}); msg == "" {
 		t.Error("tipo desconhecido deveria falhar")
+	}
+}
+
+func TestNormalizarCampos(t *testing.T) {
+	padrao, msg := normalizarCampos(nil)
+	if msg != "" || len(padrao) != 1 || padrao[0].Tipo != CampoArquivo || !padrao[0].Obrigatorio {
+		t.Errorf("padrão inesperado: %+v (%s)", padrao, msg)
+	}
+	if _, msg := normalizarCampos([]NovoCampo{{Rotulo: "Repo", Tipo: CampoLink}, {Rotulo: "Resumo", Tipo: CampoTextoLongo}}); msg != "" {
+		t.Errorf("campos válidos recusados: %s", msg)
+	}
+	if _, msg := normalizarCampos([]NovoCampo{{Rotulo: "", Tipo: CampoLink}}); msg == "" {
+		t.Error("campo inválido deveria falhar")
+	}
+	if _, msg := normalizarCampos(make([]NovoCampo, maxCampos+1)); msg == "" {
+		t.Error("campos demais deveriam falhar")
 	}
 }
 

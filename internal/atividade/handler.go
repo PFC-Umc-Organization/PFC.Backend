@@ -27,8 +27,8 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 	return common.JSON(200, atividades), nil
 }
 
-// HandleCriar implementa POST /atividades. A atividade nasce com um campo
-// de entrega padrão (arquivo obrigatório).
+// HandleCriar implementa POST /atividades. Sem `campos` no corpo, a
+// atividade nasce com um campo de entrega padrão (arquivo obrigatório).
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin, common.Orientador) {
 		negar(ctx, req, "atividade.criada", "")
@@ -44,7 +44,12 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(400, msg), nil
 	}
 
-	a, err := salvar(ctx, dados)
+	campos, msg := normalizarCampos(body.Campos)
+	if msg != "" {
+		return common.Erro(400, msg), nil
+	}
+
+	a, err := salvar(ctx, dados, campos)
 	if err != nil {
 		log.Printf("POST /atividades: %v", err)
 		return common.Erro(500, "falha ao criar atividade"), nil
@@ -269,6 +274,33 @@ func HandleEntregar(ctx context.Context, req events.APIGatewayProxyRequest) (eve
 		Detalhes: map[string]any{"projetoId": p.ID},
 	}, req)
 	return common.JSON(200, e), nil
+}
+
+// HandleRemoverEntrega implementa DELETE /projetos/:projetoId/entregas/:atividadeId.
+// Só a equipe acadêmica: é como o orientador devolve a atividade pro grupo
+// refazer. O conteúdo da entrega não é editado por ninguém além do grupo.
+func HandleRemoverEntrega(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	projetoID := req.PathParameters["projetoId"]
+	atividadeID := req.PathParameters["atividadeId"]
+	if !common.PerfilPermitido(req, common.Admin, common.Orientador) {
+		negar(ctx, req, "entrega.removida", atividadeID)
+		return common.Erro(403, msgSoEquipe), nil
+	}
+
+	if err := removerEntrega(ctx, projetoID, atividadeID); err != nil {
+		if errors.Is(err, errEntregaNaoExiste) {
+			return common.Erro(404, "entrega não encontrada"), nil
+		}
+		log.Printf("DELETE /projetos/%s/entregas/%s: %v", projetoID, atividadeID, err)
+		return common.Erro(500, "falha ao remover entrega"), nil
+	}
+
+	auditoria.Registrar(ctx, auditoria.Evento{
+		Acao: "entrega.removida", Resultado: "sucesso",
+		Recurso:  &auditoria.Recurso{Tipo: "atividade", ID: atividadeID},
+		Detalhes: map[string]any{"projetoId": projetoID},
+	}, req)
+	return common.JSON(200, map[string]string{"mensagem": "entrega removida"}), nil
 }
 
 func negar(ctx context.Context, req events.APIGatewayProxyRequest, acao, atividadeID string) {

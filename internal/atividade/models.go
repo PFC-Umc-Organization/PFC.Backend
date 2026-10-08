@@ -39,6 +39,9 @@ type NovaAtividade struct {
 	Titulo    string `json:"titulo"`
 	Descricao string `json:"descricao"`
 	Prazo     string `json:"prazo"`
+	// Campos é opcional: sem ele a atividade nasce com o campo de arquivo
+	// padrão. Informado, precisa ter de 1 a 20 campos.
+	Campos []NovoCampo `json:"campos"`
 }
 
 type AtualizarAtividade struct {
