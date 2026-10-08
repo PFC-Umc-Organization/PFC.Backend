@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/atividade"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
@@ -57,6 +58,17 @@ func init() {
 	r.Handle("DELETE", "/projetos/:projetoId/orientador", projeto.HandleRemoverOrientador)
 	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
 	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
+
+	// Atividades, campos de entrega e entregas
+	r.Handle("GET", "/atividades", atividade.HandleListar)
+	r.Handle("POST", "/atividades", atividade.HandleCriar)
+	r.Handle("PUT", "/atividades/:atividadeId", atividade.HandleAtualizar)
+	r.Handle("DELETE", "/atividades/:atividadeId", atividade.HandleDeletar)
+	r.Handle("POST", "/atividades/:atividadeId/campos", atividade.HandleAdicionarCampo)
+	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", atividade.HandleRemoverCampo)
+	r.Handle("GET", "/atividades/:atividadeId/entregas", atividade.HandleListarEntregasDaAtividade)
+	r.Handle("GET", "/projetos/:projetoId/entregas", atividade.HandleListarEntregasDoProjeto)
+	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", atividade.HandleEntregar)
 
 	// Referências bibliográficas (OpenAlex + Crossref)
 	r.Handle("GET", "/referencias/busca", referencia.HandleBuscar)
