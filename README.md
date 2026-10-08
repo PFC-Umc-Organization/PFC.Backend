@@ -62,6 +62,7 @@ precisa mudar.
 | DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | COORDENADOR |
 | POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | COORDENADOR |
 | GET    | `/programas`                             | Lista programas                                                     | qualquer autenticado |
+| POST   | `/meu-pfc`                               | Aluno pré-autorizado cria o projeto do grupo (`{ nome, descricao, integrantes: RGMs }`) no programa da própria turma; ele entra como integrante. 403 sem turma, 409 sem programa na turma ou integrante já em projeto, 400 colega fora da turma | ALUNO |
 | POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa                                  | COORDENADOR |
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa                                          | qualquer autenticado |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | COORDENADOR |

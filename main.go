@@ -50,6 +50,7 @@ func init() {
 	r.Handle("DELETE", "/programas/:programaId", programa.HandleDeletar)
 
 	// Projetos
+	r.Handle("POST", "/meu-pfc", projeto.HandleCriarDoAluno)
 	r.Handle("POST", "/programas/:programaId/projetos", projeto.HandleCriar)
 	r.Handle("GET", "/programas/:programaId/projetos", projeto.HandleListarPorPrograma)
 	r.Handle("PUT", "/projetos/:projetoId", projeto.HandleAtualizar)

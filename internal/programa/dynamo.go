@@ -35,6 +35,37 @@ type item struct {
 	CursoID string `dynamodbav:"cursoId"`
 }
 
+// IDDoCurso devolve o id do Programa de PFC da turma (curso). ok=false
+// quando a turma ainda não tem programa.
+func IDDoCurso(ctx context.Context, cursoID string) (id string, ok bool, err error) {
+	var inicio map[string]types.AttributeValue
+	for {
+		out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
+			TableName:        aws.String(tableName),
+			FilterExpression: aws.String("begins_with(PK, :prefixo) AND cursoId = :c"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":prefixo": &types.AttributeValueMemberS{Value: "PROGRAM#"},
+				":c":       &types.AttributeValueMemberS{Value: cursoID},
+			},
+			ExclusiveStartKey: inicio,
+		})
+		if err != nil {
+			return "", false, err
+		}
+		for _, i := range out.Items {
+			var it item
+			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
+				continue
+			}
+			return it.PK[len("PROGRAM#"):], true, nil
+		}
+		if out.LastEvaluatedKey == nil {
+			return "", false, nil
+		}
+		inicio = out.LastEvaluatedKey
+	}
+}
+
 // existeParaCurso verifica (via Scan, mesmo padrão de curso.possuiPrograma)
 // se já existe Programa para este curso. excluirID deixa de fora o próprio
 // item ao validar uma edição.
