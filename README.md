@@ -22,7 +22,7 @@ internal/
 │   ├── models.go
 │   ├── dynamo.go            # PK PROGRAM#id — Scan aceitável (baixo volume)
 │   └── handler.go            # handlers HTTP: POST/GET /programas
-└── projeto/                # Projeto vinculado a um Programa, com orientador
+└── projeto/                # Projeto vinculado a um Programa, com orientador e convites (convite.go / convite_dynamo.go)
     ├── models.go
     ├── dynamo.go            # PK PROJECT#id, GSI1 pra listar por programa
     └── handler.go            # handlers HTTP: /programas/:id/projetos, /projetos/:id/orientador
@@ -57,15 +57,21 @@ precisa mudar.
 | ------ | ---------------------------------------- | ------------------------------------------------------------------ | ----------- |
 | POST   | `/auth/login`                            | Autentica via Cognito, devolve `{ usuario, token }`                | pública |
 | POST   | `/auth/registrar`                        | Cadastro self-service de aluno. `perfil` do corpo é ignorado — sempre ALUNO | pública |
-| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra PROFESSOR/COORDENADOR |
-| POST   | `/admin/students`                        | Grava RGMs na allowlist (`STUDENT#<rgm>` ACTIVE)                   | COORDENADOR |
-| DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | COORDENADOR |
-| POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | COORDENADOR |
+| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra ORIENTADOR/ADMIN |
+| POST   | `/admin/students`                        | Grava RGMs na allowlist (`STUDENT#<rgm>` ACTIVE)                   | ADMIN |
+| DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | ADMIN |
+| POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | ADMIN |
 | GET    | `/programas`                             | Lista programas                                                     | qualquer autenticado |
-| POST   | `/meu-pfc`                               | Aluno pré-autorizado cria o projeto do grupo (`{ nome, descricao, integrantes: RGMs }`) no programa da própria turma; ele entra como integrante. 403 sem turma, 409 sem programa na turma ou integrante já em projeto, 400 colega fora da turma | ALUNO |
-| POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa                                  | COORDENADOR |
+| POST   | `/meu-pfc`                               | Aluno pré-autorizado cria o projeto do grupo (`{ nome, descricao, integrantes: RGMs }`) no programa da própria turma; só ele entra como integrante, os colegas recebem **convite** (ver `/meus-convites`). 403 sem turma, 409 sem programa na turma ou integrante já em projeto, 400 colega fora da turma | ALUNO |
+| POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa                                  | ADMIN |
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa                                          | qualquer autenticado |
-| PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | COORDENADOR |
+| PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | ADMIN |
+| GET    | `/meus-convites`                         | Convites pendentes recebidos pelo aluno logado                      | ALUNO |
+| POST   | `/meus-convites/:projetoId/aceitar`      | Aceita: entra no grupo (revalida turma, se está livre e o limite de 10) e apaga os outros convites dele. 404 sem convite ou grupo apagado, 409 já em projeto/fora da turma/grupo cheio | ALUNO |
+| POST   | `/meus-convites/:projetoId/recusar`      | Recusa (apaga o convite)                                            | ALUNO |
+| GET    | `/projetos/:projetoId/convites`          | Convites pendentes do grupo                                         | integrantes, ADMIN, ORIENTADOR |
+| POST   | `/projetos/:projetoId/convites`          | Convida mais um colega (`{ rgm }`), com as regras do `/meu-pfc`; convite pendente conta no limite de 10 | integrantes do projeto |
+| DELETE | `/projetos/:projetoId/convites/:rgm`     | Cancela um convite                                                  | integrantes do projeto |
 | GET    | `/atividades`                            | Lista atividades (com `campos`), ordenadas por prazo               | qualquer autenticado |
 | POST   | `/atividades`                            | Cria atividade (`{ titulo, descricao, prazo, campos? }`); sem `campos` nasce com 1 campo de arquivo obrigatório | ADMIN, ORIENTADOR |
 | PUT    | `/atividades/:atividadeId`               | Edita título/descrição/prazo                                       | ADMIN, ORIENTADOR |
@@ -78,7 +84,7 @@ precisa mudar.
 | DELETE | `/projetos/:projetoId/entregas/:atividadeId` | Remove a entrega do grupo (devolve pra refazer)                  | ADMIN, ORIENTADOR |
 | GET    | `/referencias/busca?q=&pagina=`          | Busca artigos por tema na **OpenAlex** (10 por página, até 50 páginas) | qualquer autenticado |
 | GET    | `/referencias/doi?doi=`                  | Consulta o DOI no **Crossref** e devolve a referência em ABNT (`abnt`, `abntHtml`) | qualquer autenticado |
-| GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, PROFESSOR, COORDENADOR |
+| GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, ORIENTADOR, ADMIN |
 | POST   | `/projetos/:projetoId/referencias`       | Adiciona pelo DOI (`{ doi }`); 409 se já estiver na lista           | integrantes do projeto |
 | DELETE | `/projetos/:projetoId/referencias/:referenciaId` | Remove da lista                                             | integrantes do projeto |
 
@@ -86,7 +92,7 @@ precisa mudar.
 
 - **`perfil` nunca vem do cliente em `/auth/registrar`.** Endpoint público;
   se o valor enviado no corpo fosse usado pra decidir o perfil, qualquer
-  requisição poderia se autodeclarar COORDENADOR. Cadastro público sempre
+  requisição poderia se autodeclarar ADMIN. Cadastro público sempre
   cria ALUNO; contas de professor/coordenador só existem via
   `AdminCreateUser`, com `custom:perfil` setado explicitamente por quem
   cria a conta.
@@ -104,6 +110,15 @@ precisa mudar.
   authorizer, `/{proxy+}` com Cognito Authorizer) — nenhuma rota nova
   exige mudança de Terraform, só registrar em `main.go`. O router interno
   (`internal/router`) é quem resolve path parameters (`:programaId` etc.).
+- **Convite de integrante fica no sistema, sem e-mail (por enquanto).**
+  Não temos SES; o convite é salvo no DynamoDB (`PK PROJECT#<id>`,
+  `SK CONVITE#<rgm>`, GSI1 `CONVITE#<rgm>` pra listar os recebidos) e o
+  aluno responde pela tela. O envio de e-mail é um gancho único,
+  `notificarConvite` em `internal/projeto/aluno.go`, que hoje só loga.
+  Ninguém vira integrante sem aceitar. O aceite grava com condição atômica
+  (sem duplicar o RGM nem passar de 10). Limitação conhecida: aceitar dois
+  convites de grupos diferentes no mesmo instante poderia pôr o aluno em
+  dois grupos — risco baixo; a correção é uma transação com trava por aluno.
 - **Referências: o front nunca chama OpenAlex/Crossref direto.** A
   integração fica no backend, que também formata em ABNT. O `POST` recebe
   só o DOI e busca os metadados de novo no Crossref — o aluno não consegue

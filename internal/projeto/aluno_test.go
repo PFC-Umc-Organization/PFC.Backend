@@ -20,15 +20,25 @@ func reqAluno(perfil, email, corpo string) events.APIGatewayProxyRequest {
 }
 
 // falsos monta os colaboradores do handler. turmas: RGM -> turma;
-// ocupados: RGMs que já estão em algum projeto.
-func falsos(t *testing.T, turmas map[string]string, programas map[string]string, ocupados map[string]bool) *[]NovoProjeto {
+// ocupados: RGMs que já estão em algum projeto. Devolve os projetos salvos
+// e os RGMs que receberam convite.
+func falsos(t *testing.T, turmas map[string]string, programas map[string]string, ocupados map[string]bool) (*[]NovoProjeto, *[]string) {
 	t.Helper()
 	salvos := &[]NovoProjeto{}
+	convidados := &[]string{}
 
 	origTurma, origProg, origProj, origSalvar := turmaDoRGM, programaDaTurma, projetoDoRGM, salvarProjeto
+	origConvite, origNotificar := criarConvite, notificarConvite
 	t.Cleanup(func() {
 		turmaDoRGM, programaDaTurma, projetoDoRGM, salvarProjeto = origTurma, origProg, origProj, origSalvar
+		criarConvite, notificarConvite = origConvite, origNotificar
 	})
+
+	criarConvite = func(_ context.Context, projetoID, projetoNome, rgm, por string) (Convite, error) {
+		*convidados = append(*convidados, rgm)
+		return Convite{ProjetoID: projetoID, ProjetoNome: projetoNome, RGM: rgm, ConvidadoPor: por}, nil
+	}
+	notificarConvite = func(Convite) {}
 
 	turmaDoRGM = func(_ context.Context, rgm string) (string, error) { return turmas[rgm], nil }
 	programaDaTurma = func(_ context.Context, turma string) (string, bool, error) {
@@ -42,11 +52,11 @@ func falsos(t *testing.T, turmas map[string]string, programas map[string]string,
 		*salvos = append(*salvos, n)
 		return Projeto{ID: "p1", Nome: n.Nome, ProgramaID: programaID, Integrantes: n.Integrantes}, nil
 	}
-	return salvos
+	return salvos, convidados
 }
 
 func TestCriarDoAlunoSucesso(t *testing.T) {
-	salvos := falsos(t,
+	salvos, convidados := falsos(t,
 		map[string]string{"111": "turma-a", "222": "turma-a"},
 		map[string]string{"turma-a": "prog-a"},
 		nil)
@@ -63,8 +73,11 @@ func TestCriarDoAlunoSucesso(t *testing.T) {
 	if p.ProgramaID != "prog-a" || p.Nome != "Athena" {
 		t.Errorf("projeto inesperado: %+v", p)
 	}
-	if len(p.Integrantes) != 2 || p.Integrantes[0] != "111" || p.Integrantes[1] != "222" {
-		t.Errorf("integrantes = %v, esperado [111 222] (criador primeiro, sem repetição)", p.Integrantes)
+	if len(p.Integrantes) != 1 || p.Integrantes[0] != "111" {
+		t.Errorf("integrantes = %v, esperado [111] (só o criador entra na hora)", p.Integrantes)
+	}
+	if len(*convidados) != 1 || (*convidados)[0] != "222" {
+		t.Errorf("convidados = %v, esperado [222] (colega vira convite, sem repetição)", *convidados)
 	}
 	if len(*salvos) != 1 {
 		t.Errorf("salvou %d projetos", len(*salvos))
@@ -95,13 +108,13 @@ func TestCriarDoAlunoRecusas(t *testing.T) {
 		{"colega já em projeto", "ALUNO", "111@alunos.umc.br", `{"nome":"A","integrantes":["222"]}`, map[string]bool{"222": true}, 409},
 	}
 	for _, c := range casos {
-		salvos := falsos(t, turmas, programas, c.ocupados)
+		salvos, convidados := falsos(t, turmas, programas, c.ocupados)
 		resp, _ := HandleCriarDoAluno(context.Background(), reqAluno(c.perfil, c.email, c.corpo))
 		if resp.StatusCode != c.esperado {
 			t.Errorf("%s: status = %d (%s), esperado %d", c.nome, resp.StatusCode, resp.Body, c.esperado)
 		}
-		if len(*salvos) != 0 {
-			t.Errorf("%s: não deveria ter salvado nada", c.nome)
+		if len(*salvos) != 0 || len(*convidados) != 0 {
+			t.Errorf("%s: não deveria ter salvado projeto nem convite", c.nome)
 		}
 	}
 }

@@ -31,6 +31,15 @@ var (
 	programaDaTurma = programa.IDDoCurso
 	projetoDoRGM    = buscarPorRGM
 	salvarProjeto   = salvar
+	criarConvite    = salvarConvite
+
+	// notificarConvite é o gancho de e-mail do convite. Sem SES, por
+	// enquanto só registra no log; com um provedor de e-mail, troca-se só
+	// esta função. O convidado responde pela tela de qualquer forma.
+	notificarConvite = func(c Convite) {
+		log.Printf("convite: RGM %s convidado para o projeto %q (%s) por %s",
+			c.RGM, c.ProjetoNome, c.ProjetoID, c.ConvidadoPor)
+	}
 )
 
 // buscarPorRGM acha o projeto em que o RGM é integrante (Scan paginado, no
@@ -170,16 +179,31 @@ func HandleCriarDoAluno(ctx context.Context, req events.APIGatewayProxyRequest) 
 		}
 	}
 
-	p, err := salvarProjeto(ctx, programaID, NovoProjeto{Nome: nome, Descricao: descricao, Integrantes: grupo})
+	// Só o criador entra na hora; os colegas recebem convite e só viram
+	// integrantes quando aceitarem.
+	p, err := salvarProjeto(ctx, programaID, NovoProjeto{Nome: nome, Descricao: descricao, Integrantes: []string{rgm}})
 	if err != nil {
 		log.Printf("POST /meu-pfc: %v", err)
 		return common.Erro(500, "falha ao criar projeto"), nil
 	}
 
+	// Falha num convite não desfaz o projeto (que já existe): fica no log e
+	// o grupo pode convidar de novo por POST /projetos/:projetoId/convites.
+	convidados := []string{}
+	for _, colega := range grupo[1:] {
+		c, err := criarConvite(ctx, p.ID, p.Nome, colega, common.NomeDaRequisicao(req))
+		if err != nil {
+			log.Printf("POST /meu-pfc: convite pro RGM %s: %v", colega, err)
+			continue
+		}
+		notificarConvite(c)
+		convidados = append(convidados, colega)
+	}
+
 	auditoria.Registrar(ctx, auditoria.Evento{
 		Acao: "projeto.criado_pelo_aluno", Resultado: "sucesso",
 		Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: p.ID},
-		Detalhes: map[string]any{"programaId": programaID, "nome": p.Nome, "integrantes": grupo},
+		Detalhes: map[string]any{"programaId": programaID, "nome": p.Nome, "convidados": convidados},
 	}, req)
 
 	return common.JSON(201, p), nil

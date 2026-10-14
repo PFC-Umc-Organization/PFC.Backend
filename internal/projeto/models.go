@@ -28,3 +28,13 @@ type AtualizarProjeto struct {
 	Nome      string `json:"nome"`
 	Descricao string `json:"descricao"`
 }
+
+// Convite é o pedido pendente pra um aluno entrar no grupo. Sem SES, ele
+// fica salvo no sistema e o convidado responde pela tela (aceitar/recusar).
+type Convite struct {
+	ProjetoID    string `json:"projetoId"`
+	ProjetoNome  string `json:"projetoNome"`
+	RGM          string `json:"rgm"`
+	ConvidadoPor string `json:"convidadoPor"`
+	CriadoEm     string `json:"criadoEm"`
+}

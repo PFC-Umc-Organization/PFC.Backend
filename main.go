@@ -60,6 +60,14 @@ func init() {
 	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
 	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
 
+	// Convites de integrante (o aluno só entra no grupo quando aceita)
+	r.Handle("GET", "/meus-convites", projeto.HandleListarMeusConvites)
+	r.Handle("POST", "/meus-convites/:projetoId/aceitar", projeto.HandleAceitarConvite)
+	r.Handle("POST", "/meus-convites/:projetoId/recusar", projeto.HandleRecusarConvite)
+	r.Handle("GET", "/projetos/:projetoId/convites", projeto.HandleListarConvitesDoGrupo)
+	r.Handle("POST", "/projetos/:projetoId/convites", projeto.HandleConvidar)
+	r.Handle("DELETE", "/projetos/:projetoId/convites/:rgm", projeto.HandleCancelarConvite)
+
 	// Atividades, campos de entrega e entregas
 	r.Handle("GET", "/atividades", atividade.HandleListar)
 	r.Handle("POST", "/atividades", atividade.HandleCriar)
