@@ -41,3 +41,16 @@ var jsonHeaders = func() map[string]string {
 func ToLambda(r Response) events.APIGatewayProxyResponse {
 	return events.APIGatewayProxyResponse{StatusCode: r.Status, Headers: jsonHeaders, Body: r.Body}
 }
+
+// Reply ends a handler: a non-nil err wins over the body.
+func Reply(status int, v any, err error) (Response, error) {
+	if err != nil {
+		return Response{}, err
+	}
+	return JSON(status, v), nil
+}
+
+// Message replies 200 {"mensagem": msg} unless err is set.
+func Message(msg string, err error) (Response, error) {
+	return Reply(200, map[string]string{"mensagem": msg}, err)
+}

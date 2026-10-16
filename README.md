@@ -29,10 +29,8 @@ internal/
 │   ├── service.go         # regras de negócio + auditoria
 │   ├── store.go           # DynamoDB: chaves, travas, transações
 │   └── http.go            # rotas /turmas, /programas, /admin/students
-└── projeto/                # Projeto vinculado a um Programa, com orientador e convites (convite.go / convite_dynamo.go)
-    ├── models.go
-    ├── dynamo.go            # PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
-    └── handler.go            # handlers HTTP: /programas/:id/projetos, /projetos/:id/orientador
+├── groups/                # módulo: projetos, integrantes, orientador e convites
+│   └── (mesmos arquivos)  # store.go: PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
 ├── atividade/              # atividades, campos de entrega (formulário) e entregas dos grupos
 │   ├── models.go / validacao.go / dynamo.go / handler.go
 └── referencia/             # referências bibliográficas (APIs externas OpenAlex + Crossref)
@@ -157,7 +155,7 @@ ver [Migração](#migração).
   Não temos SES; o convite é salvo no DynamoDB (`PK PROJECT#<id>`,
   `SK CONVITE#<rgm>`, GSI1 `CONVITE#<rgm>` pra listar os recebidos) e o
   aluno responde pela tela. O envio de e-mail é um gancho único,
-  `notificarConvite` em `internal/projeto/aluno.go`, que hoje só loga.
+  `notify` do `groups.Service`, que hoje só loga.
   Ninguém vira integrante sem aceitar. O aceite grava com condição atômica
   (sem duplicar o RGM nem passar de 10) e com o vínculo "projeto do aluno"
   na mesma transação: dois aceites simultâneos em grupos diferentes não põem

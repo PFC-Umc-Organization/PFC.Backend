@@ -10,12 +10,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/atividade"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/config"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
@@ -44,13 +46,17 @@ func Load(ctx context.Context) (Deps, error) {
 func New(d Deps) *httpapi.Router {
 	common.Use(d.Table.Client, d.Cognito)
 
-	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), projeto.Projects{})
+	groupsStore := groups.NewDynamoStore(d.Table)
+	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), groupsStore)
+	groupsSvc := groups.NewService(groupsStore, academicSvc, usuario.Accounts{})
 	auth.UseAcademic(academicSvc)
 	usuario.UseAcademic(academicSvc)
-	projeto.UseAcademic(academicSvc)
+	atividade.UseGroups(groupsSvc)
+	referencia.UseGroups(groupsSvc)
 
 	r := httpapi.NewRouter()
 	academic.Routes(r, academicSvc)
+	groups.Routes(r, groupsSvc)
 	legacyRoutes(r)
 	return r
 }

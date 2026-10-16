@@ -10,7 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 )
 
 func requisicao(query map[string]string) events.APIGatewayProxyRequest {
@@ -110,7 +110,7 @@ func TestHandleConsultarDOI(t *testing.T) {
 }
 
 func TestPermissoes(t *testing.T) {
-	p := projeto.Projeto{ID: "p1", Integrantes: []string{"11111111", "22222222"}}
+	p := groups.Project{ID: "p1", Members: []string{"11111111", "22222222"}}
 
 	casos := []struct {
 		nome          string

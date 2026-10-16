@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"slices"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
 const msgSoEquipe = "acesso restrito à equipe acadêmica"
@@ -309,28 +309,24 @@ func negar(ctx context.Context, req events.APIGatewayProxyRequest, acao, ativida
 
 // carregarProjeto busca o projeto do path. ok=false traz a resposta de erro
 // pronta pra devolver.
-func carregarProjeto(ctx context.Context, req events.APIGatewayProxyRequest) (projeto.Projeto, events.APIGatewayProxyResponse, bool) {
-	p, existe, err := projeto.Buscar(ctx, req.PathParameters["projetoId"])
+func carregarProjeto(ctx context.Context, req events.APIGatewayProxyRequest) (groups.Project, events.APIGatewayProxyResponse, bool) {
+	p, existe, err := buscarProjeto(ctx, req.PathParameters["projetoId"])
 	if err != nil {
-		return projeto.Projeto{}, common.Erro(500, "falha ao carregar projeto"), false
+		return groups.Project{}, common.Erro(500, "falha ao carregar projeto"), false
 	}
 	if !existe {
-		return projeto.Projeto{}, common.Erro(404, "projeto não encontrado"), false
+		return groups.Project{}, common.Erro(404, "projeto não encontrado"), false
 	}
 	return p, events.APIGatewayProxyResponse{}, true
 }
 
 // ehIntegrante: o integrante é identificado pelo RGM do e-mail (aluno).
 // Admin/orientador nunca entregam pelo grupo.
-func ehIntegrante(req events.APIGatewayProxyRequest, p projeto.Projeto) bool {
-	if common.PerfilPermitido(req, common.Admin, common.Orientador) {
-		return false
-	}
-	rgm := common.RGMDaRequisicao(req)
-	return rgm != "" && slices.Contains(p.Integrantes, rgm)
+func ehIntegrante(req events.APIGatewayProxyRequest, p groups.Project) bool {
+	return groups.IsMember(httpapi.ActorOf(req), p)
 }
 
 // podeVer: equipe acadêmica acompanha qualquer PFC; o aluno só o do grupo.
-func podeVer(req events.APIGatewayProxyRequest, p projeto.Projeto) bool {
-	return common.PerfilPermitido(req, common.Admin, common.Orientador) || ehIntegrante(req, p)
+func podeVer(req events.APIGatewayProxyRequest, p groups.Project) bool {
+	return groups.CanView(httpapi.ActorOf(req), p)
 }

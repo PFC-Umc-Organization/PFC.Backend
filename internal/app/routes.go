@@ -4,7 +4,6 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/atividade"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
@@ -21,25 +20,6 @@ func legacyRoutes(r *httpapi.Router) {
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", l(usuario.HandleListar))
 	r.Handle("POST", "/admin/usuarios", l(usuario.HandleCriarConta))
-
-	// Projetos
-	r.Handle("POST", "/meu-pfc", l(projeto.HandleCriarDoAluno))
-	r.Handle("POST", "/programas/:programaId/projetos", l(projeto.HandleCriar))
-	r.Handle("GET", "/programas/:programaId/projetos", l(projeto.HandleListarPorPrograma))
-	r.Handle("PUT", "/projetos/:projetoId", l(projeto.HandleAtualizar))
-	r.Handle("DELETE", "/projetos/:projetoId", l(projeto.HandleDeletar))
-	r.Handle("PUT", "/projetos/:projetoId/orientador", l(projeto.HandleAssociarOrientador))
-	r.Handle("DELETE", "/projetos/:projetoId/orientador", l(projeto.HandleRemoverOrientador))
-	r.Handle("PUT", "/projetos/:projetoId/integrantes", l(projeto.HandleAdicionarIntegrante))
-	r.Handle("DELETE", "/projetos/:projetoId/integrantes", l(projeto.HandleRemoverIntegrante))
-
-	// Convites de integrante (o aluno só entra no grupo quando aceita)
-	r.Handle("GET", "/meus-convites", l(projeto.HandleListarMeusConvites))
-	r.Handle("POST", "/meus-convites/:projetoId/aceitar", l(projeto.HandleAceitarConvite))
-	r.Handle("POST", "/meus-convites/:projetoId/recusar", l(projeto.HandleRecusarConvite))
-	r.Handle("GET", "/projetos/:projetoId/convites", l(projeto.HandleListarConvitesDoGrupo))
-	r.Handle("POST", "/projetos/:projetoId/convites", l(projeto.HandleConvidar))
-	r.Handle("DELETE", "/projetos/:projetoId/convites/:rgm", l(projeto.HandleCancelarConvite))
 
 	// Atividades, campos de entrega e entregas
 	r.Handle("GET", "/atividades", l(atividade.HandleListar))

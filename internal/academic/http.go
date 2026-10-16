@@ -35,28 +35,18 @@ func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
 	}, h)
 }
 
-func message(msg string) httpapi.Response {
-	return httpapi.JSON(200, map[string]string{"mensagem": msg})
-}
-
 func (h handlers) createCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in CohortInput
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
 	c, err := h.svc.CreateCohort(ctx, in)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(201, c), nil
+	return httpapi.Reply(201, c, err)
 }
 
 func (h handlers) listCohorts(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	cohorts, err := h.svc.ListCohorts(ctx)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(200, cohorts), nil
+	return httpapi.Reply(200, cohorts, err)
 }
 
 func (h handlers) updateCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -64,25 +54,16 @@ func (h handlers) updateCohort(ctx context.Context, r *httpapi.Request) (httpapi
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	if err := h.svc.UpdateCohort(ctx, r.Param("turmaId"), in); err != nil {
-		return httpapi.Response{}, err
-	}
-	return message("turma atualizada"), nil
+	return httpapi.Message("turma atualizada", h.svc.UpdateCohort(ctx, r.Param("turmaId"), in))
 }
 
 func (h handlers) deleteCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	if err := h.svc.DeleteCohort(ctx, r.Param("turmaId")); err != nil {
-		return httpapi.Response{}, err
-	}
-	return message("turma removida"), nil
+	return httpapi.Message("turma removida", h.svc.DeleteCohort(ctx, r.Param("turmaId")))
 }
 
 func (h handlers) listEnrollments(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	enrollments, err := h.svc.ListEnrollments(ctx)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(200, enrollments), nil
+	return httpapi.Reply(200, enrollments, err)
 }
 
 func (h handlers) enroll(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -91,10 +72,7 @@ func (h handlers) enroll(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 		return httpapi.Response{}, err
 	}
 	result, err := h.svc.Enroll(ctx, in)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(200, result), nil
+	return httpapi.Reply(200, result, err)
 }
 
 func (h handlers) unenroll(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -103,10 +81,7 @@ func (h handlers) unenroll(ctx context.Context, r *httpapi.Request) (httpapi.Res
 		return httpapi.Response{}, err
 	}
 	result, err := h.svc.Unenroll(ctx, in)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(200, result), nil
+	return httpapi.Reply(200, result, err)
 }
 
 func (h handlers) createProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -115,18 +90,12 @@ func (h handlers) createProgram(ctx context.Context, r *httpapi.Request) (httpap
 		return httpapi.Response{}, err
 	}
 	p, err := h.svc.CreateProgram(ctx, in)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(201, p), nil
+	return httpapi.Reply(201, p, err)
 }
 
 func (h handlers) listPrograms(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	programs, err := h.svc.ListPrograms(ctx)
-	if err != nil {
-		return httpapi.Response{}, err
-	}
-	return httpapi.JSON(200, programs), nil
+	return httpapi.Reply(200, programs, err)
 }
 
 func (h handlers) updateProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -134,15 +103,9 @@ func (h handlers) updateProgram(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	if err := h.svc.UpdateProgram(ctx, r.Param("programaId"), in); err != nil {
-		return httpapi.Response{}, err
-	}
-	return message("programa atualizado"), nil
+	return httpapi.Message("programa atualizado", h.svc.UpdateProgram(ctx, r.Param("programaId"), in))
 }
 
 func (h handlers) deleteProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	if err := h.svc.DeleteProgram(ctx, r.Param("programaId")); err != nil {
-		return httpapi.Response{}, err
-	}
-	return message("programa removido"), nil
+	return httpapi.Message("programa removido", h.svc.DeleteProgram(ctx, r.Param("programaId")))
 }

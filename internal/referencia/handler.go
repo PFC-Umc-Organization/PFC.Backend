@@ -14,7 +14,7 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 )
 
 const (
@@ -192,30 +192,30 @@ func HandleRemover(ctx context.Context, req events.APIGatewayProxyRequest) (even
 
 // carregarProjeto busca o projeto do path. ok=false traz a resposta de erro
 // pronta pra devolver.
-func carregarProjeto(ctx context.Context, req events.APIGatewayProxyRequest) (projeto.Projeto, events.APIGatewayProxyResponse, bool) {
-	p, existe, err := projeto.Buscar(ctx, req.PathParameters["projetoId"])
+func carregarProjeto(ctx context.Context, req events.APIGatewayProxyRequest) (groups.Project, events.APIGatewayProxyResponse, bool) {
+	p, existe, err := buscarProjeto(ctx, req.PathParameters["projetoId"])
 	if err != nil {
-		return projeto.Projeto{}, common.Erro(500, "falha ao carregar projeto"), false
+		return groups.Project{}, common.Erro(500, "falha ao carregar projeto"), false
 	}
 	if !existe {
-		return projeto.Projeto{}, common.Erro(404, "projeto não encontrado"), false
+		return groups.Project{}, common.Erro(404, "projeto não encontrado"), false
 	}
 	return p, events.APIGatewayProxyResponse{}, true
 }
 
 // podeVer: a equipe acadêmica (admin ou orientador) acompanha a
 // bibliografia de qualquer PFC; o aluno só a do próprio grupo.
-func podeVer(perfil, rgm string, p projeto.Projeto) bool {
+func podeVer(perfil, rgm string, p groups.Project) bool {
 	pf := common.Perfil(perfil)
 	return pf == common.Admin || pf == common.Orientador || podeEditar(perfil, rgm, p)
 }
 
 // podeEditar: a lista é do grupo, então só integrante mexe. Aluno
 // auto-cadastrado não tem custom:perfil (perfil vazio = ALUNO).
-func podeEditar(perfil, rgm string, p projeto.Projeto) bool {
+func podeEditar(perfil, rgm string, p groups.Project) bool {
 	pf := common.Perfil(perfil)
 	if pf == common.Admin || pf == common.Orientador || rgm == "" {
 		return false
 	}
-	return slices.Contains(p.Integrantes, rgm)
+	return slices.Contains(p.Members, rgm)
 }
