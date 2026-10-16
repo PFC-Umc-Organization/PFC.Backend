@@ -4,16 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"testing"
 )
 
 func capture(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	original := logger
-	logger = slog.New(slog.NewJSONHandler(&buf, nil))
-	t.Cleanup(func() { logger = original })
+	t.Cleanup(SetOutput(&buf))
 	return &buf
 }
 

@@ -23,14 +23,12 @@ internal/
 │   ├── models.go          # espelha os tipos TS do frontend
 │   ├── cognito.go          # chamadas ao Cognito (InitiateAuth, SignUp)
 │   └── handler.go          # handlers HTTP: POST /auth/login, /auth/registrar
-├── matricula/              # allowlist de RGMs (provisionamento pelo admin)
-│   ├── models.go           # request/response do lote de RGMs
-│   ├── dynamo.go            # BatchWriteItem/Delete; listagem pelo GSI1
-│   └── handler.go            # handlers HTTP: POST/DELETE /admin/students
-├── programa/               # Programa de PFC — referencia um Curso (cursoId)
-│   ├── models.go
-│   ├── dynamo.go            # PK PROGRAM#id + vínculo CURSO#id/PROGRAMA (um por turma)
-│   └── handler.go            # handlers HTTP: POST/GET /programas
+├── academic/              # módulo: turmas, programa da turma e allowlist de RGMs
+│   ├── domain.go          # tipos, validação, mensagens
+│   ├── ports.go           # interfaces que o serviço usa (Store, Projects)
+│   ├── service.go         # regras de negócio + auditoria
+│   ├── store.go           # DynamoDB: chaves, travas, transações
+│   └── http.go            # rotas /turmas, /programas, /admin/students
 └── projeto/                # Projeto vinculado a um Programa, com orientador e convites (convite.go / convite_dynamo.go)
     ├── models.go
     ├── dynamo.go            # PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
@@ -173,7 +171,7 @@ ver [Migração](#migração).
   `<rgm>@alunos.umc.br` (garantido pelo Pre Sign-up), então
   `actor.Actor.RGM()` usa a parte local do claim `email`.
 - **`cursoIds` do Usuario vem da matrícula** — a turma em que o RGM foi
-  pré-autorizado (`matricula.TurmaDoRGM`); vazio pra quem não é aluno.
+  pré-autorizado (`academic.Service.CohortOf`); vazio pra quem não é aluno.
 - **Um cliente AWS por processo.** `app.Load` cria os clientes do DynamoDB e
   do Cognito uma vez, na fase de init da Lambda, e `app.New` os entrega a
   todos os pacotes (um pool de conexões só).

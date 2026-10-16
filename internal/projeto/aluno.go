@@ -12,8 +12,6 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 )
 
 const msgJaTemProjeto = "você já faz parte de um projeto"
@@ -26,9 +24,11 @@ const (
 
 // Funções variáveis pra os testes não dependerem do DynamoDB.
 var (
-	turmaDoRGM      = matricula.TurmaDoRGM
-	turmasDosRGMs   = matricula.TurmasDosRGMs
-	programaDaTurma = programa.IDDoCurso
+	turmaDoRGM      func(context.Context, string) (string, error)
+	turmasDosRGMs   func(context.Context, []string) (map[string]string, error)
+	programaDaTurma func(context.Context, string) (string, bool, error)
+	programaExiste  func(context.Context, string) (bool, error)
+	matriculado     func(context.Context, string) (bool, error)
 	projetoDoRGM    = buscarPorRGM
 	ocupadosDoGrupo = projetosDosRGMs
 	salvarProjeto   = salvar

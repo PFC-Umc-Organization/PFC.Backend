@@ -5,6 +5,7 @@ package audit
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 )
@@ -49,6 +50,13 @@ func WithOrigin(ctx context.Context, o Origin) context.Context {
 }
 
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+// SetOutput redirects the events, for tests; restore puts stdout back.
+func SetOutput(w io.Writer) (restore func()) {
+	previous := logger
+	logger = slog.New(slog.NewJSONHandler(w, nil))
+	return func() { logger = previous }
+}
 
 func Record(ctx context.Context, ev Event) {
 	origin, _ := ctx.Value(originKey{}).(Origin)

@@ -1,15 +1,18 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
 func call(t *testing.T, rt *Router, ev events.APIGatewayProxyRequest) (int, string, map[string]string) {
@@ -131,5 +134,32 @@ func TestLegacy(t *testing.T) {
 	resp, _ := rt.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: "DELETE", Path: "/turmas/t1"})
 	if resp.StatusCode != 200 || resp.Body != `{"id":"t1"}` || resp.Headers["Content-Type"] != "application/json" {
 		t.Fatalf("legacy %+v", resp)
+	}
+}
+
+func TestRestrict(t *testing.T) {
+	var buf bytes.Buffer
+	t.Cleanup(audit.SetOutput(&buf))
+
+	rt := NewRouter()
+	ok := func(context.Context, *Request) (Response, error) { return JSON(200, "ok"), nil }
+	policy := Policy{Roles: []actor.Role{actor.RoleAdmin}, Message: "acesso restrito a administradores"}
+	rt.Handle("GET", "/quiet", Restrict(policy, ok))
+	policy.AuditAction = "turma.criada"
+	rt.Handle("GET", "/audited", Restrict(policy, ok))
+
+	as := func(role string, path string) events.APIGatewayProxyRequest {
+		return events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: path, RequestContext: events.APIGatewayProxyRequestContext{
+			Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": role}},
+		}}
+	}
+	if status, _, _ := call(t, rt, as("ADMIN", "/audited")); status != 200 {
+		t.Fatalf("admin: %d", status)
+	}
+	if status, msg, _ := call(t, rt, as("ALUNO", "/quiet")); status != 403 || msg != policy.Message || buf.Len() != 0 {
+		t.Fatalf("quiet denial: %d %q, audit %q", status, msg, buf.String())
+	}
+	if status, _, _ := call(t, rt, as("ALUNO", "/audited")); status != 403 || !strings.Contains(buf.String(), `"acao":"turma.criada"`) {
+		t.Fatalf("audited denial: %d, audit %q", status, buf.String())
 	}
 }

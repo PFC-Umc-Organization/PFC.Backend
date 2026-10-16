@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 )
 
 // O Cognito é a fonte de verdade das contas — não há cópia no DynamoDB.
@@ -32,7 +31,7 @@ var (
 var listarContas = listarDoCognito
 
 // turmaDoRGM é variável pra os testes não dependerem do DynamoDB real.
-var turmaDoRGM = matricula.TurmaDoRGM
+var turmaDoRGM func(context.Context, string) (string, error)
 
 // O ListUsers devolve no máximo 60 contas por página.
 const porPagina = 60

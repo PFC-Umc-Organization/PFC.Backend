@@ -13,8 +13,6 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
@@ -28,7 +26,7 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 
 	programaID := req.PathParameters["programaId"]
 
-	existe, err := programa.Existe(ctx, programaID)
+	existe, err := programaExiste(ctx, programaID)
 	if err != nil {
 		return common.Erro(500, "falha ao validar programa"), nil
 	}
@@ -249,11 +247,11 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 		return common.Erro(409, "o grupo já está cheio"), nil
 	}
 
-	matriculado, err := matricula.Existe(ctx, body.RGM)
+	estaMatriculado, err := matriculado(ctx, body.RGM)
 	if err != nil {
 		return common.Erro(500, "falha ao validar matrícula"), nil
 	}
-	if !matriculado {
+	if !estaMatriculado {
 		// Fora da allowlist, mas pode já ter conta de aluno (criada antes
 		// da lista, ou RGM removido dela depois do cadastro) — conta
 		// existente é aluno legítimo.

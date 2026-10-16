@@ -14,11 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 )
 
 // turmaDoRGM é variável pra os testes não dependerem do DynamoDB real.
-var turmaDoRGM = matricula.TurmaDoRGM
+var turmaDoRGM func(context.Context, string) (string, error)
 
 var (
 	cognitoClientID = os.Getenv("COGNITO_CLIENT_ID")

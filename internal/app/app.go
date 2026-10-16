@@ -9,10 +9,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/config"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
 type Deps struct {
@@ -39,7 +43,14 @@ func Load(ctx context.Context) (Deps, error) {
 
 func New(d Deps) *httpapi.Router {
 	common.Use(d.Table.Client, d.Cognito)
+
+	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), projeto.Projects{})
+	auth.UseAcademic(academicSvc)
+	usuario.UseAcademic(academicSvc)
+	projeto.UseAcademic(academicSvc)
+
 	r := httpapi.NewRouter()
-	routes(r)
+	academic.Routes(r, academicSvc)
+	legacyRoutes(r)
 	return r
 }

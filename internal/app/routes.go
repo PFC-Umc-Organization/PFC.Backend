@@ -3,16 +3,13 @@ package app
 import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/atividade"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
-func routes(r *httpapi.Router) {
+func legacyRoutes(r *httpapi.Router) {
 	l := httpapi.Legacy
 
 	// Autenticação
@@ -24,23 +21,6 @@ func routes(r *httpapi.Router) {
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", l(usuario.HandleListar))
 	r.Handle("POST", "/admin/usuarios", l(usuario.HandleCriarConta))
-
-	// Turmas
-	r.Handle("POST", "/turmas", l(curso.HandleCriar))
-	r.Handle("GET", "/turmas", l(curso.HandleListar))
-	r.Handle("PUT", "/turmas/:turmaId", l(curso.HandleAtualizar))
-	r.Handle("DELETE", "/turmas/:turmaId", l(curso.HandleDeletar))
-
-	// Matrículas
-	r.Handle("GET", "/admin/students", l(matricula.HandleListar))
-	r.Handle("POST", "/admin/students", l(matricula.HandleProvisionar))
-	r.Handle("DELETE", "/admin/students", l(matricula.HandleRemover))
-
-	// Programas
-	r.Handle("POST", "/programas", l(programa.HandleCriar))
-	r.Handle("GET", "/programas", l(programa.HandleListar))
-	r.Handle("PUT", "/programas/:programaId", l(programa.HandleAtualizar))
-	r.Handle("DELETE", "/programas/:programaId", l(programa.HandleDeletar))
 
 	// Projetos
 	r.Handle("POST", "/meu-pfc", l(projeto.HandleCriarDoAluno))
