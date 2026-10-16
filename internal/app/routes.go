@@ -5,79 +5,78 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/projeto"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/router"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
-func Router() *router.Router {
-	r := router.New()
+func routes(r *httpapi.Router) {
+	l := httpapi.Legacy
 
 	// Autenticação
-	r.Handle("POST", "/auth/login", auth.HandleLogin)
-	r.Handle("POST", "/auth/registrar", auth.HandleRegistrar)
-	r.Handle("POST", "/auth/confirmar", auth.HandleConfirmar)
-	r.Handle("POST", "/auth/reenviar-codigo", auth.HandleReenviarCodigo)
+	r.Handle("POST", "/auth/login", l(auth.HandleLogin))
+	r.Handle("POST", "/auth/registrar", l(auth.HandleRegistrar))
+	r.Handle("POST", "/auth/confirmar", l(auth.HandleConfirmar))
+	r.Handle("POST", "/auth/reenviar-codigo", l(auth.HandleReenviarCodigo))
 
 	// Usuários (contas do Cognito)
-	r.Handle("GET", "/usuarios", usuario.HandleListar)
-	r.Handle("POST", "/admin/usuarios", usuario.HandleCriarConta)
+	r.Handle("GET", "/usuarios", l(usuario.HandleListar))
+	r.Handle("POST", "/admin/usuarios", l(usuario.HandleCriarConta))
 
 	// Turmas
-	r.Handle("POST", "/turmas", curso.HandleCriar)
-	r.Handle("GET", "/turmas", curso.HandleListar)
-	r.Handle("PUT", "/turmas/:turmaId", curso.HandleAtualizar)
-	r.Handle("DELETE", "/turmas/:turmaId", curso.HandleDeletar)
+	r.Handle("POST", "/turmas", l(curso.HandleCriar))
+	r.Handle("GET", "/turmas", l(curso.HandleListar))
+	r.Handle("PUT", "/turmas/:turmaId", l(curso.HandleAtualizar))
+	r.Handle("DELETE", "/turmas/:turmaId", l(curso.HandleDeletar))
 
 	// Matrículas
-	r.Handle("GET", "/admin/students", matricula.HandleListar)
-	r.Handle("POST", "/admin/students", matricula.HandleProvisionar)
-	r.Handle("DELETE", "/admin/students", matricula.HandleRemover)
+	r.Handle("GET", "/admin/students", l(matricula.HandleListar))
+	r.Handle("POST", "/admin/students", l(matricula.HandleProvisionar))
+	r.Handle("DELETE", "/admin/students", l(matricula.HandleRemover))
 
 	// Programas
-	r.Handle("POST", "/programas", programa.HandleCriar)
-	r.Handle("GET", "/programas", programa.HandleListar)
-	r.Handle("PUT", "/programas/:programaId", programa.HandleAtualizar)
-	r.Handle("DELETE", "/programas/:programaId", programa.HandleDeletar)
+	r.Handle("POST", "/programas", l(programa.HandleCriar))
+	r.Handle("GET", "/programas", l(programa.HandleListar))
+	r.Handle("PUT", "/programas/:programaId", l(programa.HandleAtualizar))
+	r.Handle("DELETE", "/programas/:programaId", l(programa.HandleDeletar))
 
 	// Projetos
-	r.Handle("POST", "/meu-pfc", projeto.HandleCriarDoAluno)
-	r.Handle("POST", "/programas/:programaId/projetos", projeto.HandleCriar)
-	r.Handle("GET", "/programas/:programaId/projetos", projeto.HandleListarPorPrograma)
-	r.Handle("PUT", "/projetos/:projetoId", projeto.HandleAtualizar)
-	r.Handle("DELETE", "/projetos/:projetoId", projeto.HandleDeletar)
-	r.Handle("PUT", "/projetos/:projetoId/orientador", projeto.HandleAssociarOrientador)
-	r.Handle("DELETE", "/projetos/:projetoId/orientador", projeto.HandleRemoverOrientador)
-	r.Handle("PUT", "/projetos/:projetoId/integrantes", projeto.HandleAdicionarIntegrante)
-	r.Handle("DELETE", "/projetos/:projetoId/integrantes", projeto.HandleRemoverIntegrante)
+	r.Handle("POST", "/meu-pfc", l(projeto.HandleCriarDoAluno))
+	r.Handle("POST", "/programas/:programaId/projetos", l(projeto.HandleCriar))
+	r.Handle("GET", "/programas/:programaId/projetos", l(projeto.HandleListarPorPrograma))
+	r.Handle("PUT", "/projetos/:projetoId", l(projeto.HandleAtualizar))
+	r.Handle("DELETE", "/projetos/:projetoId", l(projeto.HandleDeletar))
+	r.Handle("PUT", "/projetos/:projetoId/orientador", l(projeto.HandleAssociarOrientador))
+	r.Handle("DELETE", "/projetos/:projetoId/orientador", l(projeto.HandleRemoverOrientador))
+	r.Handle("PUT", "/projetos/:projetoId/integrantes", l(projeto.HandleAdicionarIntegrante))
+	r.Handle("DELETE", "/projetos/:projetoId/integrantes", l(projeto.HandleRemoverIntegrante))
 
 	// Convites de integrante (o aluno só entra no grupo quando aceita)
-	r.Handle("GET", "/meus-convites", projeto.HandleListarMeusConvites)
-	r.Handle("POST", "/meus-convites/:projetoId/aceitar", projeto.HandleAceitarConvite)
-	r.Handle("POST", "/meus-convites/:projetoId/recusar", projeto.HandleRecusarConvite)
-	r.Handle("GET", "/projetos/:projetoId/convites", projeto.HandleListarConvitesDoGrupo)
-	r.Handle("POST", "/projetos/:projetoId/convites", projeto.HandleConvidar)
-	r.Handle("DELETE", "/projetos/:projetoId/convites/:rgm", projeto.HandleCancelarConvite)
+	r.Handle("GET", "/meus-convites", l(projeto.HandleListarMeusConvites))
+	r.Handle("POST", "/meus-convites/:projetoId/aceitar", l(projeto.HandleAceitarConvite))
+	r.Handle("POST", "/meus-convites/:projetoId/recusar", l(projeto.HandleRecusarConvite))
+	r.Handle("GET", "/projetos/:projetoId/convites", l(projeto.HandleListarConvitesDoGrupo))
+	r.Handle("POST", "/projetos/:projetoId/convites", l(projeto.HandleConvidar))
+	r.Handle("DELETE", "/projetos/:projetoId/convites/:rgm", l(projeto.HandleCancelarConvite))
 
 	// Atividades, campos de entrega e entregas
-	r.Handle("GET", "/atividades", atividade.HandleListar)
-	r.Handle("POST", "/atividades", atividade.HandleCriar)
-	r.Handle("PUT", "/atividades/:atividadeId", atividade.HandleAtualizar)
-	r.Handle("DELETE", "/atividades/:atividadeId", atividade.HandleDeletar)
-	r.Handle("POST", "/atividades/:atividadeId/campos", atividade.HandleAdicionarCampo)
-	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", atividade.HandleRemoverCampo)
-	r.Handle("GET", "/atividades/:atividadeId/entregas", atividade.HandleListarEntregasDaAtividade)
-	r.Handle("GET", "/projetos/:projetoId/entregas", atividade.HandleListarEntregasDoProjeto)
-	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", atividade.HandleEntregar)
-	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", atividade.HandleRemoverEntrega)
+	r.Handle("GET", "/atividades", l(atividade.HandleListar))
+	r.Handle("POST", "/atividades", l(atividade.HandleCriar))
+	r.Handle("PUT", "/atividades/:atividadeId", l(atividade.HandleAtualizar))
+	r.Handle("DELETE", "/atividades/:atividadeId", l(atividade.HandleDeletar))
+	r.Handle("POST", "/atividades/:atividadeId/campos", l(atividade.HandleAdicionarCampo))
+	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", l(atividade.HandleRemoverCampo))
+	r.Handle("GET", "/atividades/:atividadeId/entregas", l(atividade.HandleListarEntregasDaAtividade))
+	r.Handle("GET", "/projetos/:projetoId/entregas", l(atividade.HandleListarEntregasDoProjeto))
+	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", l(atividade.HandleEntregar))
+	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", l(atividade.HandleRemoverEntrega))
 
 	// Referências bibliográficas (OpenAlex + Crossref)
-	r.Handle("GET", "/referencias/busca", referencia.HandleBuscar)
-	r.Handle("GET", "/referencias/doi", referencia.HandleConsultarDOI)
-	r.Handle("GET", "/projetos/:projetoId/referencias", referencia.HandleListar)
-	r.Handle("POST", "/projetos/:projetoId/referencias", referencia.HandleAdicionar)
-	r.Handle("DELETE", "/projetos/:projetoId/referencias/:referenciaId", referencia.HandleRemover)
-	return r
+	r.Handle("GET", "/referencias/busca", l(referencia.HandleBuscar))
+	r.Handle("GET", "/referencias/doi", l(referencia.HandleConsultarDOI))
+	r.Handle("GET", "/projetos/:projetoId/referencias", l(referencia.HandleListar))
+	r.Handle("POST", "/projetos/:projetoId/referencias", l(referencia.HandleAdicionar))
+	r.Handle("DELETE", "/projetos/:projetoId/referencias/:referenciaId", l(referencia.HandleRemover))
 }

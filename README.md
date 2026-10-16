@@ -6,11 +6,18 @@ uma API Gateway REST API.
 ## Estrutura
 
 ```
-main.go                    # entrypoint do Lambda, registra as rotas
+main.go                    # entrypoint do Lambda: app.Load + app.New
 cmd/migrar/                # migração idempotente da tabela pra modelagem atual
 internal/
-├── router/                # roteamento método+path → handler, sem framework
-├── common/                # clientes AWS únicos, helpers do DynamoDB, resposta HTTP
+├── app/                   # composition root: clientes AWS, config e rotas
+├── platform/              # infraestrutura compartilhada pelos módulos
+│   ├── config/            # variáveis de ambiente obrigatórias
+│   ├── httpapi/           # router, Request/Response, erro → status, CORS, recover
+│   ├── apperr/            # erros de aplicação (tipo + mensagem pro usuário)
+│   ├── dynamo/            # helpers do DynamoDB (query paginada, lotes, transações)
+│   ├── actor/             # quem chama (claims do Cognito), perfis e RGM
+│   └── audit/             # eventos de auditoria no CloudWatch
+├── common/ auditoria/     # ponte temporária pros pacotes antigos (sai na fase 7)
 ├── integracao/            # testes ponta a ponta contra o DynamoDB Local
 ├── auth/                  # domínio de autenticação (ponte com o Cognito)
 │   ├── models.go          # espelha os tipos TS do frontend
@@ -39,7 +46,7 @@ internal/
 ```
 
 Cada novo domínio (atividade, material, usuário, etc.) ganha seu próprio
-pacote em `internal/`, registrado no `main.go` — nenhuma rota existente
+pacote em `internal/`, registrado em `internal/app/routes.go` — nenhuma rota existente
 precisa mudar.
 
 ## Variáveis de ambiente
@@ -54,7 +61,7 @@ precisa mudar.
 | `OPENALEX_API_KEY`  | Opcional. Chave da OpenAlex pra limites maiores — funciona sem |
 
 As quatro primeiras são obrigatórias: sem elas a Lambda falha no init, com
-a lista do que falta no log (`common.AmbienteIncompleto`).
+a lista do que falta no log (`platform/config`).
 
 ## Modelagem no DynamoDB
 
@@ -138,7 +145,7 @@ ver [Migração](#migração).
 - **Perfil vem do atributo customizado `custom:perfil`, não de grupo
   Cognito.** Grupo é mecanismo de infraestrutura (mapeamento de IAM Role,
   usado no harness pra dar credenciais AWS); perfil é dado de negócio (quem
-  essa pessoa é). Ver `internal/common/claims.go`.
+  essa pessoa é). Ver `internal/platform/httpapi/request.go`.
 - **Token não é validado no login.** O IdToken usado pra montar a resposta
   acabou de ser emitido pelo Cognito na mesma chamada — validar assinatura
   importa em rotas protegidas (via authorizer do API Gateway), não aqui.
@@ -146,8 +153,8 @@ ver [Migração](#migração).
   que cria o programa confere que a turma existe.
 - **API Gateway usa dois proxies genéricos** (`/auth/{proxy+}` sem
   authorizer, `/{proxy+}` com Cognito Authorizer) — nenhuma rota nova
-  exige mudança de Terraform, só registrar em `main.go`. O router interno
-  (`internal/router`) é quem resolve path parameters (`:programaId` etc.).
+  exige mudança de Terraform, só registrar em `internal/app/routes.go`. O router
+  interno (`internal/platform/httpapi`) é quem resolve path parameters (`:programaId` etc.).
 - **Convite de integrante fica no sistema, sem e-mail (por enquanto).**
   Não temos SES; o convite é salvo no DynamoDB (`PK PROJECT#<id>`,
   `SK CONVITE#<rgm>`, GSI1 `CONVITE#<rgm>` pra listar os recebidos) e o
@@ -164,12 +171,12 @@ ver [Migração](#migração).
   entrega): só integrante altera; professor/coordenador acompanham.
 - **Integrante é identificado pelo RGM do e-mail.** O e-mail de aluno é
   `<rgm>@alunos.umc.br` (garantido pelo Pre Sign-up), então
-  `common.RGMDaRequisicao` usa a parte local do claim `email`.
+  `actor.Actor.RGM()` usa a parte local do claim `email`.
 - **`cursoIds` do Usuario vem da matrícula** — a turma em que o RGM foi
   pré-autorizado (`matricula.TurmaDoRGM`); vazio pra quem não é aluno.
-- **Um cliente AWS por processo.** `common.DynamoDB()` e `common.Cognito()`
-  são criados uma vez, na fase de init da Lambda, e compartilhados por todos
-  os pacotes (um pool de conexões só).
+- **Um cliente AWS por processo.** `app.Load` cria os clientes do DynamoDB e
+  do Cognito uma vez, na fase de init da Lambda, e `app.New` os entrega a
+  todos os pacotes (um pool de conexões só).
 
 ## Build
 

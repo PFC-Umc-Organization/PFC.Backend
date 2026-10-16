@@ -18,12 +18,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/app"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/router"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
 var (
-	r       *router.Router
+	r       *httpapi.Router
+	table   *dynamo.Table
 	cognito = newFakeCognito()
 )
 
@@ -46,7 +47,12 @@ func TestMain(m *testing.M) {
 		fmt.Println("integracao: apis externas falsas:", err)
 		os.Exit(1)
 	}
-	r = app.Router()
+	deps, err := app.Load(context.Background())
+	if err != nil {
+		fmt.Println("integracao:", err)
+		os.Exit(1)
+	}
+	table, r = deps.Table, app.New(deps)
 	os.Exit(m.Run())
 }
 
@@ -62,8 +68,8 @@ func resetar(t *testing.T) {
 // criarTabela recria a tabela com o mesmo formato da infra: PK/SK e o GSI1
 // (GSI1PK/GSI1SK) com projeção ALL.
 func criarTabela(ctx context.Context) error {
-	ddb := common.DynamoDB()
-	_, _ = ddb.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: aws.String(common.Tabela)})
+	ddb := table.Client
+	_, _ = ddb.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: aws.String(table.Name)})
 	s := func(n string) types.AttributeDefinition {
 		return types.AttributeDefinition{AttributeName: aws.String(n), AttributeType: types.ScalarAttributeTypeS}
 	}
@@ -74,12 +80,12 @@ func criarTabela(ctx context.Context) error {
 		}
 	}
 	_, err := ddb.CreateTable(ctx, &dynamodb.CreateTableInput{
-		TableName:            aws.String(common.Tabela),
+		TableName:            aws.String(table.Name),
 		BillingMode:          types.BillingModePayPerRequest,
 		AttributeDefinitions: []types.AttributeDefinition{s("PK"), s("SK"), s("GSI1PK"), s("GSI1SK")},
 		KeySchema:            chave("PK", "SK"),
 		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{{
-			IndexName:  aws.String(common.Indice),
+			IndexName:  aws.String(table.Index),
 			KeySchema:  chave("GSI1PK", "GSI1SK"),
 			Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
 		}},
@@ -112,7 +118,7 @@ func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 	req.RequestContext.Authorizer = map[string]interface{}{
 		"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": "sub-" + q.email, "name": q.email},
 	}
-	resp, err := r.Dispatch(context.Background(), req)
+	resp, err := r.Lambda(context.Background(), req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", metodo, caminho, err)
 	}
