@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 // As referências moram na mesma partição do projeto:
@@ -22,20 +21,7 @@ import (
 // Um Query na PK com begins_with(SK, "REF#") lista tudo sem Scan nem GSI, e
 // o id derivado do DOI (ver idDaReferencia) impede duplicata no projeto.
 
-var (
-	tableName = os.Getenv("TABLE_NAME")
-	ddb       *dynamodb.Client
-)
-
 var errJaExiste = errors.New("referência já cadastrada no projeto")
-
-func init() {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		panic(fmt.Sprintf("falha ao carregar config AWS: %v", err))
-	}
-	ddb = dynamodb.NewFromConfig(cfg)
-}
 
 type item struct {
 	PK              string `dynamodbav:"PK"`
@@ -87,13 +73,12 @@ func salvar(ctx context.Context, projetoID string, r Referencia, autorID string)
 		return Referencia{}, fmt.Errorf("falha ao serializar referência: %w", err)
 	}
 
-	_, err = ddb.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(tableName),
+	_, err = common.DynamoDB().PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           aws.String(common.Tabela),
 		Item:                av,
 		ConditionExpression: aws.String("attribute_not_exists(SK)"),
 	})
-	var condicao *types.ConditionalCheckFailedException
-	if errors.As(err, &condicao) {
+	if common.FalhouCondicao(err) {
 		return Referencia{}, errJaExiste
 	}
 	if err != nil {
@@ -105,36 +90,13 @@ func salvar(ctx context.Context, projetoID string, r Referencia, autorID string)
 // listar devolve as referências do projeto em ordem alfabética — é a ordem
 // da lista de referências no trabalho (NBR 6023, sistema autor-data).
 func listar(ctx context.Context, projetoID string) ([]Referencia, error) {
-	referencias := []Referencia{}
-
-	// Pagina até o fim: um Query devolve no máximo 1 MB por chamada.
-	var inicio map[string]types.AttributeValue
-	for {
-		out, err := ddb.Query(ctx, &dynamodb.QueryInput{
-			TableName:              aws.String(tableName),
-			KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :ref)"),
-			ExpressionAttributeValues: map[string]types.AttributeValue{
-				":pk":  &types.AttributeValueMemberS{Value: chaveProjeto(projetoID)},
-				":ref": &types.AttributeValueMemberS{Value: "REF#"},
-			},
-			ExclusiveStartKey: inicio,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		for _, i := range out.Items {
-			var it item
-			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
-				continue
-			}
-			referencias = append(referencias, toReferencia(it))
-		}
-
-		if len(out.LastEvaluatedKey) == 0 {
-			break
-		}
-		inicio = out.LastEvaluatedKey
+	itens, err := common.QueryNaParticao[item](ctx, chaveProjeto(projetoID), "REF#")
+	if err != nil {
+		return nil, err
+	}
+	referencias := make([]Referencia, 0, len(itens))
+	for _, it := range itens {
+		referencias = append(referencias, toReferencia(it))
 	}
 
 	sort.Slice(referencias, func(a, b int) bool {
@@ -144,16 +106,12 @@ func listar(ctx context.Context, projetoID string) ([]Referencia, error) {
 }
 
 func remover(ctx context.Context, projetoID, referenciaID string) error {
-	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: chaveProjeto(projetoID)},
-			"SK": &types.AttributeValueMemberS{Value: "REF#" + referenciaID},
-		},
+	_, err := common.DynamoDB().DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:           aws.String(common.Tabela),
+		Key:                 common.Chave(chaveProjeto(projetoID), "REF#"+referenciaID),
 		ConditionExpression: aws.String("attribute_exists(SK)"),
 	})
-	var condicao *types.ConditionalCheckFailedException
-	if errors.As(err, &condicao) {
+	if common.FalhouCondicao(err) {
 		return errNaoEncontrado
 	}
 	return err

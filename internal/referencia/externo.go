@@ -17,8 +17,8 @@ import (
 // Endereços das APIs como variáveis (e não constantes) pra que os testes
 // apontem pra um httptest.Server.
 var (
-	crossrefURL = "https://api.crossref.org"
-	openAlexURL = "https://api.openalex.org"
+	crossrefURL = envOu("REFERENCIAS_CROSSREF_URL", "https://api.crossref.org")
+	openAlexURL = envOu("REFERENCIAS_OPENALEX_URL", "https://api.openalex.org")
 
 	// Timeout curto: a Lambda tem 10s no total e o front precisa de uma
 	// resposta de erro antes disso se a API externa travar.
@@ -87,4 +87,11 @@ func primeiro(valores []string) string {
 		return ""
 	}
 	return limparTexto(valores[0])
+}
+
+func envOu(nome, padrao string) string {
+	if v := os.Getenv(nome); v != "" {
+		return v
+	}
+	return padrao
 }

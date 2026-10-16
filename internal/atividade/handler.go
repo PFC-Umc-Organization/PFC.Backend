@@ -80,7 +80,8 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(400, msg), nil
 	}
 
-	if err := atualizar(ctx, id, dados); err != nil {
+	a, err := atualizar(ctx, id, dados)
+	if err != nil {
 		if errors.Is(err, errNaoEncontrada) {
 			return common.Erro(404, "atividade não encontrada"), nil
 		}
@@ -93,11 +94,6 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		Recurso:  &auditoria.Recurso{Tipo: "atividade", ID: id},
 		Detalhes: map[string]any{"titulo": dados.Titulo, "prazo": dados.Prazo},
 	}, req)
-
-	a, ok, err := buscar(ctx, id)
-	if err != nil || !ok {
-		return common.JSON(200, map[string]string{"mensagem": "atividade atualizada"}), nil
-	}
 	return common.JSON(200, a), nil
 }
 

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
@@ -25,7 +24,7 @@ import (
 
 var (
 	userPoolID = os.Getenv("COGNITO_USER_POOL_ID")
-	cip        *cognitoidentityprovider.Client
+	cip        = common.Cognito()
 )
 
 // listarContas é variável pra os testes do handler não dependerem do
@@ -34,14 +33,6 @@ var listarContas = listarDoCognito
 
 // turmaDoRGM é variável pra os testes não dependerem do DynamoDB real.
 var turmaDoRGM = matricula.TurmaDoRGM
-
-func init() {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		panic(fmt.Sprintf("falha ao carregar config AWS: %v", err))
-	}
-	cip = cognitoidentityprovider.NewFromConfig(cfg)
-}
 
 // O ListUsers devolve no máximo 60 contas por página.
 const porPagina = 60
@@ -72,7 +63,7 @@ func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
 		return false, err
 	}
 	for _, u := range out.Users {
-		if c := usuarioDoCognito(ctx, u); c.Perfil == string(common.Aluno) && c.RGM == rgm {
+		if c := contaDoCognito(u); c.Perfil == string(common.Aluno) && c.RGM == rgm {
 			return true, nil
 		}
 	}
@@ -84,16 +75,41 @@ func AlunoExiste(ctx context.Context, rgm string) (bool, error) {
 // — a tela só oferece ids de orientadores reais, mas a API não deve confiar
 // só nisso (mesmo princípio de `AlunoExiste`).
 func OrientadorExiste(ctx context.Context, orientadorID string) (bool, error) {
-	usuarios, err := listarContas(ctx)
+	// O id entra no filtro do ListUsers — só o formato de um sub do
+	// Cognito (UUID), pra não dar margem a montar outro filtro.
+	if !formatoDeSub.MatchString(orientadorID) {
+		return false, nil
+	}
+	contas, err := buscarPorSub(ctx, orientadorID)
 	if err != nil {
 		return false, err
 	}
-	for _, u := range usuarios {
-		if u.ID == orientadorID && u.Perfil == string(common.Orientador) {
+	for _, u := range contas {
+		if c := contaDoCognito(u); c.ID == orientadorID && c.Perfil == string(common.Orientador) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+var formatoDeSub = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
+
+// buscarPorSub é variável pra os testes não dependerem do Cognito. Uma
+// chamada filtrada pelo sub — antes eram listadas todas as contas do pool
+// (uma chamada a cada 60) só pra achar uma.
+var buscarPorSub = func(ctx context.Context, sub string) ([]types.UserType, error) {
+	if userPoolID == "" {
+		return nil, fmt.Errorf("COGNITO_USER_POOL_ID não configurado")
+	}
+	out, err := cip.ListUsers(ctx, &cognitoidentityprovider.ListUsersInput{
+		UserPoolId: aws.String(userPoolID),
+		Filter:     aws.String(fmt.Sprintf(`sub = "%s"`, sub)),
+		Limit:      aws.Int32(1),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out.Users, nil
 }
 
 func listarDoCognito(ctx context.Context) ([]Usuario, error) {
@@ -156,12 +172,10 @@ func CriarConta(ctx context.Context, nome, email string, perfil common.Perfil) e
 	return err
 }
 
-// usuarioDoCognito converte a conta do Cognito no formato que o frontend
-// espera. Conta sem custom:perfil é ALUNO — é assim que o self sign-up cria
-// (mesma regra do login, ver auth.perfilDosClaims). CursoIds vem da turma
-// vinculada ao RGM na pré-autorização (ver matricula.TurmaDoRGM) — se a
-// consulta falhar, só loga e segue com CursoIds vazio.
-func usuarioDoCognito(ctx context.Context, u types.UserType) Usuario {
+// contaDoCognito converte a conta do Cognito no formato que o frontend
+// espera, sem consultar o banco. Conta sem custom:perfil é ALUNO — é assim
+// que o self sign-up cria (mesma regra do login, ver auth.perfilDosClaims).
+func contaDoCognito(u types.UserType) Usuario {
 	atributos := map[string]string{}
 	for _, a := range u.Attributes {
 		atributos[aws.ToString(a.Name)] = aws.ToString(a.Value)
@@ -194,6 +208,16 @@ func usuarioDoCognito(ctx context.Context, u types.UserType) Usuario {
 	}
 	if perfil == string(common.Aluno) {
 		usuario.RGM = common.RGMDoEmail(usuario.Email)
+	}
+	return usuario
+}
+
+// usuarioDoCognito é contaDoCognito mais a turma do aluno: CursoIds vem da
+// turma vinculada ao RGM na pré-autorização (ver matricula.TurmaDoRGM) — se
+// a consulta falhar, só loga e segue com CursoIds vazio.
+func usuarioDoCognito(ctx context.Context, u types.UserType) Usuario {
+	usuario := contaDoCognito(u)
+	if usuario.RGM != "" {
 		if turmaID, err := turmaDoRGM(ctx, usuario.RGM); err != nil {
 			log.Printf("usuarioDoCognito: falha ao buscar turma do RGM %s: %v", usuario.RGM, err)
 		} else if turmaID != "" {

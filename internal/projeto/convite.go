@@ -103,7 +103,7 @@ func HandleAceitarConvite(ctx context.Context, req events.APIGatewayProxyRequest
 	}
 	if ocupado {
 		falha("aluno já está em um projeto")
-		return common.Erro(409, "você já faz parte de um projeto"), nil
+		return common.Erro(409, msgJaTemProjeto), nil
 	}
 
 	turmaID, err := turmaDoRGM(ctx, rgm)
@@ -121,7 +121,11 @@ func HandleAceitarConvite(ctx context.Context, req events.APIGatewayProxyRequest
 		return common.Erro(409, "você não está pré-autorizado na turma deste grupo — fale com a coordenação"), nil
 	}
 
-	if err := entrarComConvite(ctx, projetoID, rgm); err != nil {
+	if err := entrarComConvite(ctx, projetoID, rgm, p.Integrantes); err != nil {
+		if errors.Is(err, errAlunoJaTemProjeto) {
+			falha("aluno já está em um projeto")
+			return common.Erro(409, msgJaTemProjeto), nil
+		}
 		if errors.Is(err, errNaoPodeEntrar) {
 			falha("grupo cheio ou aluno já é integrante")
 			return common.Erro(409, "não foi possível entrar: o grupo está cheio ou você já é integrante"), nil

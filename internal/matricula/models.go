@@ -8,18 +8,15 @@ type RGMRequest struct {
 	TurmaID string   `json:"turmaId"`
 }
 
-
 type RGMFalha struct {
 	RGM  string `json:"rgm"`
 	Erro string `json:"erro"`
 }
 
-
 type RGMResponse struct {
 	Processados int        `json:"processados"`
 	Falhas      []RGMFalha `json:"falhas,omitempty"`
 }
-
 
 type Matricula struct {
 	RGM     string `json:"rgm"`

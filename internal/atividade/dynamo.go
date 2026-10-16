@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 // Modelagem (mesma tabela single-table dos demais domínios):
@@ -26,26 +26,12 @@ import (
 // o GSI1 permite listar as de uma atividade (visão do professor).
 
 var (
-	tableName = os.Getenv("TABLE_NAME")
-	gsiName   = os.Getenv("GSI_NAME")
-	ddb       *dynamodb.Client
-)
-
-var (
 	errNaoEncontrada    = errors.New("atividade não encontrada")
 	errCampoNaoExiste   = errors.New("campo não encontrado")
 	errUltimoCampo      = errors.New("a atividade precisa de ao menos um campo de entrega")
 	errEntregaNaoExiste = errors.New("entrega não encontrada")
 	errLimiteDeCampos   = errors.New("limite de campos da atividade atingido")
 )
-
-func init() {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		panic(fmt.Sprintf("falha ao carregar config AWS: %v", err))
-	}
-	ddb = dynamodb.NewFromConfig(cfg)
-}
 
 type item struct {
 	PK          string  `dynamodbav:"PK"`
@@ -69,11 +55,9 @@ type itemEntrega struct {
 	Respostas   map[string]string `dynamodbav:"respostas"`
 }
 
-func str(v string) types.AttributeValue { return &types.AttributeValueMemberS{Value: v} }
+var str = common.S
 
-func chaveAtividade(id string) map[string]types.AttributeValue {
-	return map[string]types.AttributeValue{"PK": str("ACTIVITY#" + id), "SK": str("PROFILE")}
-}
+func chaveAtividade(id string) common.Item { return common.Chave("ACTIVITY#"+id, "PROFILE") }
 
 func toAtividade(it item) Atividade {
 	campos := it.Campos
@@ -126,7 +110,7 @@ func salvar(ctx context.Context, d dadosAtividade, novos []NovoCampo) (Atividade
 	if err != nil {
 		return Atividade{}, fmt.Errorf("falha ao serializar atividade: %w", err)
 	}
-	if _, err := ddb.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(tableName), Item: av}); err != nil {
+	if _, err := common.DynamoDB().PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(common.Tabela), Item: av}); err != nil {
 		return Atividade{}, err
 	}
 	return toAtividade(it), nil
@@ -134,30 +118,13 @@ func salvar(ctx context.Context, d dadosAtividade, novos []NovoCampo) (Atividade
 
 // listar devolve as atividades ordenadas por prazo.
 func listar(ctx context.Context) ([]Atividade, error) {
-	atividades := []Atividade{}
-	var chave map[string]types.AttributeValue
-	for {
-		out, err := ddb.Query(ctx, &dynamodb.QueryInput{
-			TableName:                 aws.String(tableName),
-			IndexName:                 aws.String(gsiName),
-			KeyConditionExpression:    aws.String("GSI1PK = :pk"),
-			ExpressionAttributeValues: map[string]types.AttributeValue{":pk": str("ACTIVITIES")},
-			ExclusiveStartKey:         chave,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, i := range out.Items {
-			var it item
-			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
-				continue
-			}
-			atividades = append(atividades, toAtividade(it))
-		}
-		if out.LastEvaluatedKey == nil {
-			break
-		}
-		chave = out.LastEvaluatedKey
+	itens, err := common.QueryNoIndice[item](ctx, "ACTIVITIES")
+	if err != nil {
+		return nil, err
+	}
+	atividades := make([]Atividade, 0, len(itens))
+	for _, it := range itens {
+		atividades = append(atividades, toAtividade(it))
 	}
 	sort.Slice(atividades, func(a, b int) bool { return atividades[a].Prazo < atividades[b].Prazo })
 	return atividades, nil
@@ -165,44 +132,47 @@ func listar(ctx context.Context) ([]Atividade, error) {
 
 // buscar devolve a atividade pelo id. ok=false quando não existe.
 func buscar(ctx context.Context, id string) (a Atividade, ok bool, err error) {
-	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(tableName), Key: chaveAtividade(id)})
-	if err != nil {
-		return Atividade{}, false, err
-	}
-	if out.Item == nil {
-		return Atividade{}, false, nil
-	}
-	var it item
-	if err := attributevalue.UnmarshalMap(out.Item, &it); err != nil {
+	it, ok, err := common.Buscar[item](ctx, chaveAtividade(id))
+	if err != nil || !ok {
 		return Atividade{}, false, err
 	}
 	return toAtividade(it), true, nil
 }
 
-func atualizar(ctx context.Context, id string, d dadosAtividade) error {
-	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(tableName),
+// atualizar grava título, descrição e prazo e devolve a atividade já
+// atualizada (ALL_NEW) — sem uma segunda leitura.
+func atualizar(ctx context.Context, id string, d dadosAtividade) (Atividade, error) {
+	out, err := common.DynamoDB().UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           aws.String(common.Tabela),
 		Key:                 chaveAtividade(id),
 		UpdateExpression:    aws.String("SET titulo = :t, descricao = :d, prazo = :p"),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":t": str(d.Titulo), ":d": str(d.Descricao), ":p": str(d.Prazo),
 		},
+		ReturnValues: types.ReturnValueAllNew,
 	})
-	if isCondicao(err) {
-		return errNaoEncontrada
+	if common.FalhouCondicao(err) {
+		return Atividade{}, errNaoEncontrada
 	}
-	return err
+	if err != nil {
+		return Atividade{}, err
+	}
+	var it item
+	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+		return Atividade{}, err
+	}
+	return toAtividade(it), nil
 }
 
 // deletar remove a atividade e as entregas dela.
 func deletar(ctx context.Context, id string) error {
-	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(tableName),
+	_, err := common.DynamoDB().DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:           aws.String(common.Tabela),
 		Key:                 chaveAtividade(id),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 	})
-	if isCondicao(err) {
+	if common.FalhouCondicao(err) {
 		return errNaoEncontrada
 	}
 	if err != nil {
@@ -212,49 +182,21 @@ func deletar(ctx context.Context, id string) error {
 }
 
 func apagarEntregas(ctx context.Context, atividadeID string) error {
-	var pedidos []types.WriteRequest
-	var inicio map[string]types.AttributeValue
-	for {
-		out, err := ddb.Query(ctx, &dynamodb.QueryInput{
-			TableName:                 aws.String(tableName),
-			IndexName:                 aws.String(gsiName),
-			KeyConditionExpression:    aws.String("GSI1PK = :pk"),
-			ExpressionAttributeValues: map[string]types.AttributeValue{":pk": str("ENTREGAS#" + atividadeID)},
-			ProjectionExpression:      aws.String("PK, SK"),
-			ExclusiveStartKey:         inicio,
-		})
-		if err != nil {
-			return err
-		}
-		for _, i := range out.Items {
-			pedidos = append(pedidos, types.WriteRequest{DeleteRequest: &types.DeleteRequest{
-				Key: map[string]types.AttributeValue{"PK": i["PK"], "SK": i["SK"]},
-			}})
-		}
-		if out.LastEvaluatedKey == nil {
-			break
-		}
-		inicio = out.LastEvaluatedKey
+	itens, err := common.QueryTudo(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(common.Tabela),
+		IndexName:                 aws.String(common.Indice),
+		KeyConditionExpression:    aws.String("GSI1PK = :pk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":pk": str("ENTREGAS#" + atividadeID)},
+		ProjectionExpression:      aws.String("PK, SK"),
+	})
+	if err != nil {
+		return err
 	}
-
-	for len(pedidos) > 0 {
-		n := len(pedidos)
-		if n > 25 {
-			n = 25
-		}
-		lote := pedidos[:n]
-		pedidos = pedidos[n:]
-		for len(lote) > 0 {
-			out, err := ddb.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
-				RequestItems: map[string][]types.WriteRequest{tableName: lote},
-			})
-			if err != nil {
-				return err
-			}
-			lote = out.UnprocessedItems[tableName]
-		}
+	chaves := make([]common.Item, 0, len(itens))
+	for _, i := range itens {
+		chaves = append(chaves, common.Item{"PK": i["PK"], "SK": i["SK"]})
 	}
-	return nil
+	return common.ApagarChaves(ctx, chaves)
 }
 
 func adicionarCampo(ctx context.Context, atividadeID string, nc NovoCampo) (Campo, error) {
@@ -263,18 +205,22 @@ func adicionarCampo(ctx context.Context, atividadeID string, nc NovoCampo) (Camp
 	if err != nil {
 		return Campo{}, err
 	}
-	_, err = ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(tableName),
+	_, err = common.DynamoDB().UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           aws.String(common.Tabela),
 		Key:                 chaveAtividade(atividadeID),
 		UpdateExpression:    aws.String("SET campos = list_append(campos, :c)"),
 		ConditionExpression: aws.String("attribute_exists(PK) AND size(campos) < :max"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":c":   &types.AttributeValueMemberL{Value: []types.AttributeValue{av}},
-			":max": &types.AttributeValueMemberN{Value: fmt.Sprint(maxCampos)},
+			":max": common.N(maxCampos),
 		},
+		// Na recusa, o DynamoDB devolve o item como estava: dá pra saber se
+		// faltou a atividade ou sobrou campo sem uma segunda leitura.
+		ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
 	})
-	if isCondicao(err) {
-		if _, ok, e := buscar(ctx, atividadeID); e == nil && ok {
+	var recusa *types.ConditionalCheckFailedException
+	if errors.As(err, &recusa) {
+		if len(recusa.Item) > 0 {
 			return Campo{}, errLimiteDeCampos
 		}
 		return Campo{}, errNaoEncontrada
@@ -309,8 +255,8 @@ func removerCampo(ctx context.Context, atividadeID, campoID string) error {
 		return errUltimoCampo
 	}
 
-	_, err = ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(tableName),
+	_, err = common.DynamoDB().UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           aws.String(common.Tabela),
 		Key:                 chaveAtividade(atividadeID),
 		UpdateExpression:    aws.String(fmt.Sprintf("REMOVE campos[%d]", pos)),
 		ConditionExpression: aws.String(fmt.Sprintf("size(campos) > :um AND campos[%d].id = :id", pos)),
@@ -319,7 +265,7 @@ func removerCampo(ctx context.Context, atividadeID, campoID string) error {
 			":id": str(campoID),
 		},
 	})
-	if isCondicao(err) {
+	if common.FalhouCondicao(err) {
 		// Mudou entre a leitura e a escrita — o cliente tenta de novo.
 		return errCampoNaoExiste
 	}
@@ -340,7 +286,7 @@ func salvarEntrega(ctx context.Context, projetoID, atividadeID, por string, resp
 	if err != nil {
 		return Entrega{}, err
 	}
-	if _, err := ddb.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(tableName), Item: av}); err != nil {
+	if _, err := common.DynamoDB().PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(common.Tabela), Item: av}); err != nil {
 		return Entrega{}, err
 	}
 	return toEntrega(it), nil
@@ -348,60 +294,34 @@ func salvarEntrega(ctx context.Context, projetoID, atividadeID, por string, resp
 
 // removerEntrega apaga a entrega do grupo; errEntregaNaoExiste se não havia.
 func removerEntrega(ctx context.Context, projetoID, atividadeID string) error {
-	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(tableName),
+	_, err := common.DynamoDB().DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(common.Tabela),
 		Key: map[string]types.AttributeValue{
 			"PK": str("PROJECT#" + projetoID), "SK": str("ENTREGA#" + atividadeID),
 		},
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 	})
-	if isCondicao(err) {
+	if common.FalhouCondicao(err) {
 		return errEntregaNaoExiste
 	}
 	return err
 }
 
 func entregasDoProjeto(ctx context.Context, projetoID string) ([]Entrega, error) {
-	return queryEntregas(ctx, &dynamodb.QueryInput{
-		TableName:              aws.String(tableName),
-		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :e)"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": str("PROJECT#" + projetoID), ":e": str("ENTREGA#"),
-		},
-	})
+	return paraEntregas(common.QueryNaParticao[itemEntrega](ctx, "PROJECT#"+projetoID, "ENTREGA#"))
 }
 
 func entregasDaAtividade(ctx context.Context, atividadeID string) ([]Entrega, error) {
-	return queryEntregas(ctx, &dynamodb.QueryInput{
-		TableName:                 aws.String(tableName),
-		IndexName:                 aws.String(gsiName),
-		KeyConditionExpression:    aws.String("GSI1PK = :pk"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{":pk": str("ENTREGAS#" + atividadeID)},
-	})
+	return paraEntregas(common.QueryNoIndice[itemEntrega](ctx, "ENTREGAS#"+atividadeID))
 }
 
-func queryEntregas(ctx context.Context, in *dynamodb.QueryInput) ([]Entrega, error) {
-	entregas := []Entrega{}
-	for {
-		out, err := ddb.Query(ctx, in)
-		if err != nil {
-			return nil, err
-		}
-		for _, i := range out.Items {
-			var it itemEntrega
-			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
-				continue
-			}
-			entregas = append(entregas, toEntrega(it))
-		}
-		if out.LastEvaluatedKey == nil {
-			return entregas, nil
-		}
-		in.ExclusiveStartKey = out.LastEvaluatedKey
+func paraEntregas(itens []itemEntrega, err error) ([]Entrega, error) {
+	if err != nil {
+		return nil, err
 	}
-}
-
-func isCondicao(err error) bool {
-	var c *types.ConditionalCheckFailedException
-	return errors.As(err, &c)
+	entregas := make([]Entrega, 0, len(itens))
+	for _, it := range itens {
+		entregas = append(entregas, toEntrega(it))
+	}
+	return entregas, nil
 }

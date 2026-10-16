@@ -93,7 +93,7 @@ func (c *cenario) instalar(t *testing.T) {
 		p, ok := c.projetos[projetoID]
 		return p, ok, nil
 	}
-	entrarComConvite = func(_ context.Context, projetoID, rgm string) error {
+	entrarComConvite = func(_ context.Context, projetoID, rgm string, _ []string) error {
 		if c.cheio {
 			return errNaoPodeEntrar
 		}

@@ -3,21 +3,20 @@ package projeto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/matricula"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/programa"
 )
+
+const msgJaTemProjeto = "você já faz parte de um projeto"
 
 const (
 	tamanhoMaxNome      = 150
@@ -28,8 +27,10 @@ const (
 // Funções variáveis pra os testes não dependerem do DynamoDB.
 var (
 	turmaDoRGM      = matricula.TurmaDoRGM
+	turmasDosRGMs   = matricula.TurmasDosRGMs
 	programaDaTurma = programa.IDDoCurso
 	projetoDoRGM    = buscarPorRGM
+	ocupadosDoGrupo = projetosDosRGMs
 	salvarProjeto   = salvar
 	criarConvite    = salvarConvite
 
@@ -41,38 +42,6 @@ var (
 			c.RGM, c.ProjetoNome, c.ProjetoID, c.ConvidadoPor)
 	}
 )
-
-// buscarPorRGM acha o projeto em que o RGM é integrante (Scan paginado, no
-// mesmo padrão dos demais domínios de baixo volume). ok=false se não houver.
-func buscarPorRGM(ctx context.Context, rgm string) (p Projeto, ok bool, err error) {
-	var inicio map[string]types.AttributeValue
-	for {
-		out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
-			TableName:        aws.String(tableName),
-			FilterExpression: aws.String("begins_with(PK, :prefixo) AND SK = :perfil AND contains(integrantes, :rgm)"),
-			ExpressionAttributeValues: map[string]types.AttributeValue{
-				":prefixo": &types.AttributeValueMemberS{Value: "PROJECT#"},
-				":perfil":  &types.AttributeValueMemberS{Value: "PROFILE"},
-				":rgm":     &types.AttributeValueMemberS{Value: rgm},
-			},
-			ExclusiveStartKey: inicio,
-		})
-		if err != nil {
-			return Projeto{}, false, err
-		}
-		for _, i := range out.Items {
-			var it item
-			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
-				continue
-			}
-			return toProjeto(it), true, nil
-		}
-		if out.LastEvaluatedKey == nil {
-			return Projeto{}, false, nil
-		}
-		inicio = out.LastEvaluatedKey
-	}
-}
 
 // integrantesDoGrupo junta o criador e os colegas informados, sem
 // repetição e sem vazios. O criador sempre vem primeiro.
@@ -132,11 +101,14 @@ func HandleCriarDoAluno(ctx context.Context, req events.APIGatewayProxyRequest) 
 		return common.Erro(400, "grupo grande demais"), nil
 	}
 
-	turmaID, err := turmaDoRGM(ctx, rgm)
+	// Turma e projeto de todo o grupo em duas leituras em lote, em vez de
+	// duas leituras por integrante.
+	turmas, err := turmasDosRGMs(ctx, grupo)
 	if err != nil {
-		log.Printf("POST /meu-pfc: turma do RGM: %v", err)
+		log.Printf("POST /meu-pfc: turmas do grupo: %v", err)
 		return common.Erro(500, "falha ao validar a sua matrícula"), nil
 	}
+	turmaID := turmas[rgm]
 	if turmaID == "" {
 		falha("RGM sem turma vinculada")
 		return common.Erro(403, "o seu RGM não está pré-autorizado em nenhuma turma — fale com a coordenação"), nil
@@ -152,28 +124,22 @@ func HandleCriarDoAluno(ctx context.Context, req events.APIGatewayProxyRequest) 
 		return common.Erro(409, "a sua turma ainda não tem PFC iniciado — fale com a coordenação"), nil
 	}
 
+	ocupados, err := ocupadosDoGrupo(ctx, grupo)
+	if err != nil {
+		log.Printf("POST /meu-pfc: projetos do grupo: %v", err)
+		return common.Erro(500, "falha ao validar os integrantes"), nil
+	}
+
 	// Cada integrante (criador incluso) precisa estar na mesma turma e livre.
 	for _, r := range grupo {
-		if r != rgm {
-			t, err := turmaDoRGM(ctx, r)
-			if err != nil {
-				log.Printf("POST /meu-pfc: turma do RGM %s: %v", r, err)
-				return common.Erro(500, "falha ao validar os integrantes"), nil
-			}
-			if t != turmaID {
-				falha("integrante fora da turma")
-				return common.Erro(400, "o RGM "+r+" não está pré-autorizado na sua turma"), nil
-			}
+		if turmas[r] != turmaID {
+			falha("integrante fora da turma")
+			return common.Erro(400, "o RGM "+r+" não está pré-autorizado na sua turma"), nil
 		}
-		_, ocupado, err := projetoDoRGM(ctx, r)
-		if err != nil {
-			log.Printf("POST /meu-pfc: projeto do RGM %s: %v", r, err)
-			return common.Erro(500, "falha ao validar os integrantes"), nil
-		}
-		if ocupado {
+		if _, ocupado := ocupados[r]; ocupado {
 			falha("integrante já está em um projeto")
 			if r == rgm {
-				return common.Erro(409, "você já faz parte de um projeto"), nil
+				return common.Erro(409, msgJaTemProjeto), nil
 			}
 			return common.Erro(409, "o RGM "+r+" já faz parte de outro projeto"), nil
 		}
@@ -182,6 +148,11 @@ func HandleCriarDoAluno(ctx context.Context, req events.APIGatewayProxyRequest) 
 	// Só o criador entra na hora; os colegas recebem convite e só viram
 	// integrantes quando aceitarem.
 	p, err := salvarProjeto(ctx, programaID, NovoProjeto{Nome: nome, Descricao: descricao, Integrantes: []string{rgm}})
+	if errors.Is(err, errAlunoJaTemProjeto) {
+		// Outro pedido do mesmo aluno passou na frente.
+		falha("integrante já está em um projeto")
+		return common.Erro(409, msgJaTemProjeto), nil
+	}
 	if err != nil {
 		log.Printf("POST /meu-pfc: %v", err)
 		return common.Erro(500, "falha ao criar projeto"), nil

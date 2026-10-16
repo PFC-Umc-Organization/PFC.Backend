@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -31,6 +32,21 @@ func rgmsValidos(rgms []string) []string {
 	return validos
 }
 
+// soDigitos: o RGM é a parte local do e-mail do aluno e só tem números —
+// mesma regra de usuario.AlunoExiste, que nunca acharia um RGM com letras.
+var soDigitos = regexp.MustCompile(`^\d+$`)
+
+// separarPorFormato devolve os RGMs só com dígitos e, como falha, os demais.
+func separarPorFormato(rgms []string) (validos []string, invalidos []RGMFalha) {
+	for _, rgm := range rgms {
+		if soDigitos.MatchString(rgm) {
+			validos = append(validos, rgm)
+		} else {
+			invalidos = append(invalidos, RGMFalha{RGM: rgm, Erro: "RGM deve conter apenas números"})
+		}
+	}
+	return validos, invalidos
+}
 
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -43,7 +59,6 @@ func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (event
 	}
 	return common.JSON(200, matriculas), nil
 }
-
 
 func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -69,29 +84,31 @@ func HandleProvisionar(ctx context.Context, req events.APIGatewayProxyRequest) (
 		return common.Erro(404, "turma não encontrada"), nil
 	}
 
-	rgms := rgmsValidos(body.RGMs)
-	if len(rgms) == 0 {
+	recebidos := rgmsValidos(body.RGMs)
+	if len(recebidos) == 0 {
 		return common.Erro(400, "informe ao menos um RGM"), nil
 	}
+	rgms, falhas := separarPorFormato(recebidos)
 
-	falhas := gravarRGMs(ctx, rgms, turmaID)
+	falhasGravacao := gravarRGMs(ctx, rgms, turmaID)
+	processados := len(rgms) - len(falhasGravacao)
+	falhas = append(falhas, falhasGravacao...)
 
 	evento := auditoria.Evento{
 		Acao: "matricula.provisionado", Resultado: "sucesso",
-		Detalhes: map[string]any{"rgms": rgms, "turmaId": turmaID, "processados": len(rgms) - len(falhas)},
+		Detalhes: map[string]any{"rgms": recebidos, "turmaId": turmaID, "processados": processados},
 	}
 	if len(falhas) > 0 {
 		evento.Resultado = "falha"
-		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(rgms))
+		evento.Motivo = fmt.Sprintf("%d de %d RGMs falharam", len(falhas), len(recebidos))
 	}
 	auditoria.Registrar(ctx, evento, req)
 
 	return common.JSON(200, RGMResponse{
-		Processados: len(rgms) - len(falhas),
+		Processados: processados,
 		Falhas:      falhas,
 	}), nil
 }
-
 
 func HandleRemover(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {

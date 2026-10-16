@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 
@@ -23,16 +22,8 @@ var turmaDoRGM = matricula.TurmaDoRGM
 
 var (
 	cognitoClientID = os.Getenv("COGNITO_CLIENT_ID")
-	cip             *cognitoidentityprovider.Client
+	cip             = common.Cognito()
 )
-
-func init() {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		panic(fmt.Sprintf("falha ao carregar config AWS: %v", err))
-	}
-	cip = cognitoidentityprovider.NewFromConfig(cfg)
-}
 
 // cognitoLogin troca email/senha por um IdToken via InitiateAuth. Não
 // precisamos validar a assinatura do token aqui: ele acabou de ser emitido
@@ -61,6 +52,9 @@ func cognitoLogin(ctx context.Context, cred Credenciais) (idToken string, err er
 		return "", fmt.Errorf("challenge pendente: %s (contate o administrador)", out.ChallengeName)
 	}
 
+	if out.AuthenticationResult == nil || out.AuthenticationResult.IdToken == nil {
+		return "", fmt.Errorf("InitiateAuth sem token na resposta")
+	}
 	return *out.AuthenticationResult.IdToken, nil
 }
 
@@ -70,9 +64,9 @@ func cognitoLogin(ctx context.Context, cred Credenciais) (idToken string, err er
 // erro que o Cognito devolver se a validação falhar lá.
 func cognitoSignUp(ctx context.Context, novo NovoUsuario) error {
 	_, err := cip.SignUp(ctx, &cognitoidentityprovider.SignUpInput{
-		ClientId: aws.String(cognitoClientID),
-		Username: aws.String(novo.Email),
-		Password: aws.String(novo.Senha),
+		ClientId:       aws.String(cognitoClientID),
+		Username:       aws.String(novo.Email),
+		Password:       aws.String(novo.Senha),
 		UserAttributes: atributosDoCadastro(novo),
 	})
 	return err

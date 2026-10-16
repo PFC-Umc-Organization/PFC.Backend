@@ -27,10 +27,10 @@ func falsos(t *testing.T, turmas map[string]string, programas map[string]string,
 	salvos := &[]NovoProjeto{}
 	convidados := &[]string{}
 
-	origTurma, origProg, origProj, origSalvar := turmaDoRGM, programaDaTurma, projetoDoRGM, salvarProjeto
+	origTurmas, origProg, origOcupados, origSalvar := turmasDosRGMs, programaDaTurma, ocupadosDoGrupo, salvarProjeto
 	origConvite, origNotificar := criarConvite, notificarConvite
 	t.Cleanup(func() {
-		turmaDoRGM, programaDaTurma, projetoDoRGM, salvarProjeto = origTurma, origProg, origProj, origSalvar
+		turmasDosRGMs, programaDaTurma, ocupadosDoGrupo, salvarProjeto = origTurmas, origProg, origOcupados, origSalvar
 		criarConvite, notificarConvite = origConvite, origNotificar
 	})
 
@@ -40,13 +40,28 @@ func falsos(t *testing.T, turmas map[string]string, programas map[string]string,
 	}
 	notificarConvite = func(Convite) {}
 
-	turmaDoRGM = func(_ context.Context, rgm string) (string, error) { return turmas[rgm], nil }
+	// Os falsos em lote devolvem só os RGMs pedidos, como o BatchGetItem.
+	turmasDosRGMs = func(_ context.Context, rgms []string) (map[string]string, error) {
+		achadas := map[string]string{}
+		for _, r := range rgms {
+			if t, ok := turmas[r]; ok {
+				achadas[r] = t
+			}
+		}
+		return achadas, nil
+	}
 	programaDaTurma = func(_ context.Context, turma string) (string, bool, error) {
 		id, ok := programas[turma]
 		return id, ok, nil
 	}
-	projetoDoRGM = func(_ context.Context, rgm string) (Projeto, bool, error) {
-		return Projeto{}, ocupados[rgm], nil
+	ocupadosDoGrupo = func(_ context.Context, rgms []string) (map[string]string, error) {
+		achados := map[string]string{}
+		for _, r := range rgms {
+			if ocupados[r] {
+				achados[r] = "outro-projeto"
+			}
+		}
+		return achados, nil
 	}
 	salvarProjeto = func(_ context.Context, programaID string, n NovoProjeto) (Projeto, error) {
 		*salvos = append(*salvos, n)

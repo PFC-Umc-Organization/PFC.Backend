@@ -134,3 +134,42 @@ func TestHandleListar(t *testing.T) {
 		t.Errorf("erro do Cognito: status = %d, want 500", resp.StatusCode)
 	}
 }
+
+func TestOrientadorExiste(t *testing.T) {
+	anterior := buscarPorSub
+	t.Cleanup(func() { buscarPorSub = anterior })
+
+	const sub = "0a1b2c3d-0000-4000-8000-0123456789ab"
+	chamadas := 0
+	buscarPorSub = func(_ context.Context, s string) ([]types.UserType, error) {
+		chamadas++
+		switch s {
+		case sub:
+			return []types.UserType{conta(sub, true, types.UserStatusTypeConfirmed, map[string]string{
+				"sub": sub, "email": "prof@umc.br", "custom:perfil": "ORIENTADOR",
+			})}, nil
+		case "11111111-0000-4000-8000-000000000000":
+			return []types.UserType{conta("x", true, types.UserStatusTypeConfirmed, map[string]string{
+				"sub": "11111111-0000-4000-8000-000000000000", "email": "a@umc.br", "custom:perfil": "ADMIN",
+			})}, nil
+		}
+		return nil, nil
+	}
+
+	casos := map[string]bool{
+		sub:                                    true,
+		"11111111-0000-4000-8000-000000000000": false, // existe, mas é ADMIN
+		"22222222-0000-4000-8000-000000000000": false, // não existe
+	}
+	for id, want := range casos {
+		if got, err := OrientadorExiste(context.Background(), id); err != nil || got != want {
+			t.Errorf("OrientadorExiste(%q) = %v, %v; queria %v", id, got, err, want)
+		}
+	}
+
+	// Formato inválido nem chega ao Cognito (o id entra no filtro).
+	chamadas = 0
+	if ok, _ := OrientadorExiste(context.Background(), `x" or email ^= "`); ok || chamadas != 0 {
+		t.Errorf("id fora do formato de sub foi ao Cognito (%d chamadas)", chamadas)
+	}
+}

@@ -3,8 +3,11 @@ package projeto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
 
@@ -38,9 +41,19 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
 	novo.Nome = strings.TrimSpace(novo.Nome)
-	if novo.Nome == "" {
+	novo.Descricao = strings.TrimSpace(novo.Descricao)
+	switch {
+	case novo.Nome == "":
 		return common.Erro(400, "nome é obrigatório"), nil
+	case utf8.RuneCountInString(novo.Nome) > tamanhoMaxNome:
+		return common.Erro(400, "nome longo demais"), nil
+	case utf8.RuneCountInString(novo.Descricao) > tamanhoMaxDescricao:
+		return common.Erro(400, "descrição longa demais"), nil
 	}
+	// Integrantes entram depois, por PUT /projetos/:id/integrantes, que
+	// valida matrícula e a regra de um projeto por aluno. Aceitar a lista
+	// aqui deixaria gravar qualquer RGM sem validação nenhuma.
+	novo.Integrantes = []string{}
 
 	p, err := salvar(ctx, programaID, novo)
 	if err != nil {
@@ -61,6 +74,7 @@ func HandleListarPorPrograma(ctx context.Context, req events.APIGatewayProxyRequ
 
 	projetos, err := listarPorPrograma(ctx, programaID)
 	if err != nil {
+		log.Printf("GET /programas/%s/projetos: %v", programaID, err)
 		return common.Erro(500, "falha ao listar projetos"), nil
 	}
 	return common.JSON(200, projetos), nil
@@ -99,7 +113,7 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 	}
 
 	if err := associarOrientador(ctx, projetoID, body.OrientadorID); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+		return common.ErroDeEscrita(err, "projeto não encontrado"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -110,7 +124,6 @@ func HandleAssociarOrientador(ctx context.Context, req events.APIGatewayProxyReq
 
 	return common.JSON(200, map[string]string{"mensagem": "orientador associado"}), nil
 }
-
 
 func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -123,7 +136,7 @@ func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequ
 	projetoID := req.PathParameters["projetoId"]
 
 	if err := removerOrientador(ctx, projetoID); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+		return common.ErroDeEscrita(err, "projeto não encontrado"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -133,7 +146,6 @@ func HandleRemoverOrientador(ctx context.Context, req events.APIGatewayProxyRequ
 
 	return common.JSON(200, map[string]string{"mensagem": "orientador removido"}), nil
 }
-
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -150,12 +162,18 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
 	dados.Nome = strings.TrimSpace(dados.Nome)
-	if dados.Nome == "" {
+	dados.Descricao = strings.TrimSpace(dados.Descricao)
+	switch {
+	case dados.Nome == "":
 		return common.Erro(400, "nome é obrigatório"), nil
+	case utf8.RuneCountInString(dados.Nome) > tamanhoMaxNome:
+		return common.Erro(400, "nome longo demais"), nil
+	case utf8.RuneCountInString(dados.Descricao) > tamanhoMaxDescricao:
+		return common.Erro(400, "descrição longa demais"), nil
 	}
 
 	if err := atualizarProjeto(ctx, projetoID, dados); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+		return common.ErroDeEscrita(err, "projeto não encontrado"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -178,7 +196,14 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 	projetoID := req.PathParameters["projetoId"]
 
 	if err := deletarProjeto(ctx, projetoID); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+		switch {
+		case errors.Is(err, errProjetoNaoExiste):
+			return common.Erro(404, "projeto não encontrado"), nil
+		case errors.Is(err, errGrupoMudou):
+			return common.Erro(409, "o grupo mudou enquanto você editava — atualize a página e tente de novo"), nil
+		}
+		log.Printf("DELETE /projetos/%s: %v", projetoID, err)
+		return common.Erro(500, "falha ao remover projeto"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -204,8 +229,24 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	body.RGM = strings.TrimSpace(body.RGM)
 	if body.RGM == "" {
 		return common.Erro(400, "rgm é obrigatório"), nil
+	}
+
+	p, existe, err := projetoPorID(ctx, projetoID)
+	if err != nil {
+		log.Printf("PUT /projetos/%s/integrantes: %v", projetoID, err)
+		return common.Erro(500, "falha ao carregar projeto"), nil
+	}
+	if !existe {
+		return common.Erro(404, "projeto não encontrado"), nil
+	}
+	if slices.Contains(p.Integrantes, body.RGM) {
+		return common.Erro(409, "o RGM "+body.RGM+" já é integrante do grupo"), nil
+	}
+	if len(p.Integrantes) >= maxIntegrantes {
+		return common.Erro(409, "o grupo já está cheio"), nil
 	}
 
 	matriculado, err := matricula.Existe(ctx, body.RGM)
@@ -224,16 +265,38 @@ func HandleAdicionarIntegrante(ctx context.Context, req events.APIGatewayProxyRe
 		if !temConta {
 			auditoria.Registrar(ctx, auditoria.Evento{
 				Acao: "projeto.integrante_adicionado", Resultado: "falha",
-				Motivo:  "RGM não está pré-autorizado e não tem conta de aluno",
-				Recurso: &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+				Motivo:   "RGM não está pré-autorizado e não tem conta de aluno",
+				Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
 				Detalhes: map[string]any{"rgm": body.RGM},
 			}, req)
 			return common.Erro(404, "RGM não está pré-autorizado e não tem conta de aluno"), nil
 		}
 	}
 
-	if err := adicionarIntegrante(ctx, projetoID, body.RGM); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+	// Cada aluno participa de um único projeto — a mesma regra do /meu-pfc
+	// e do aceite de convite vale pra coordenação.
+	if outro, ocupado, err := projetoDoRGM(ctx, body.RGM); err != nil {
+		log.Printf("PUT /projetos/%s/integrantes: %v", projetoID, err)
+		return common.Erro(500, "falha ao validar o integrante"), nil
+	} else if ocupado {
+		auditoria.Registrar(ctx, auditoria.Evento{
+			Acao: "projeto.integrante_adicionado", Resultado: "falha",
+			Motivo:   "RGM já é integrante de outro projeto",
+			Recurso:  &auditoria.Recurso{Tipo: "projeto", ID: projetoID},
+			Detalhes: map[string]any{"rgm": body.RGM, "outroProjetoId": outro.ID},
+		}, req)
+		return common.Erro(409, "o RGM "+body.RGM+" já faz parte do projeto \""+outro.Nome+"\""), nil
+	}
+
+	if err := adicionarIntegrante(ctx, projetoID, body.RGM, p.Integrantes); err != nil {
+		if errors.Is(err, errAlunoJaTemProjeto) {
+			return common.Erro(409, "o RGM "+body.RGM+" já faz parte de outro projeto"), nil
+		}
+		if errors.Is(err, errGrupoMudou) {
+			return common.Erro(409, "o grupo mudou enquanto você editava — atualize a página e tente de novo"), nil
+		}
+		log.Printf("PUT /projetos/%s/integrantes: %v", projetoID, err)
+		return common.Erro(500, "falha ao adicionar integrante"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -259,12 +322,22 @@ func HandleRemoverIntegrante(ctx context.Context, req events.APIGatewayProxyRequ
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	body.RGM = strings.TrimSpace(body.RGM)
 	if body.RGM == "" {
 		return common.Erro(400, "rgm é obrigatório"), nil
 	}
 
 	if err := removerIntegrante(ctx, projetoID, body.RGM); err != nil {
-		return common.Erro(404, "projeto não encontrado"), nil
+		switch {
+		case errors.Is(err, errProjetoNaoExiste):
+			return common.Erro(404, "projeto não encontrado"), nil
+		case errors.Is(err, errNaoIntegrante):
+			return common.Erro(404, "o RGM "+body.RGM+" não é integrante do grupo"), nil
+		case errors.Is(err, errGrupoMudou):
+			return common.Erro(409, "o grupo mudou enquanto você editava — atualize a página e tente de novo"), nil
+		}
+		log.Printf("DELETE /projetos/%s/integrantes: %v", projetoID, err)
+		return common.Erro(500, "falha ao remover integrante"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{

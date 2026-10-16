@@ -3,12 +3,19 @@ package curso
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+)
+
+const (
+	msgDuplicada = "já existe uma turma com esse curso, turno e período"
+	msgMudou     = "a turma mudou enquanto você editava — atualize a página e tente de novo"
 )
 
 // HandleCriar implementa POST /turmas. Só admin cria turma.
@@ -37,20 +44,16 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(400, "turno inválido — escolha manhã ou noite"), nil
 	}
 
-	duplicada, err := existeDuplicado(ctx, "", novo.Nome, novo.Turno, novo.Periodo)
-	if err != nil {
-		return common.Erro(500, "falha ao criar turma"), nil
-	}
-	if duplicada {
+	c, err := salvar(ctx, novo)
+	if errors.Is(err, errTurmaDuplicada) {
 		auditoria.Registrar(ctx, auditoria.Evento{
 			Acao: "turma.criada", Resultado: "falha", Motivo: "turma já existe",
 			Detalhes: map[string]any{"nome": novo.Nome, "turno": novo.Turno, "periodo": novo.Periodo},
 		}, req)
-		return common.Erro(409, "já existe uma turma com esse curso, turno e período"), nil
+		return common.Erro(409, msgDuplicada), nil
 	}
-
-	c, err := salvar(ctx, novo)
 	if err != nil {
+		log.Printf("POST /turmas: %v", err)
 		return common.Erro(500, "falha ao criar turma"), nil
 	}
 
@@ -67,6 +70,7 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	cursos, err := listar(ctx)
 	if err != nil {
+		log.Printf("GET /turmas: %v", err)
 		return common.Erro(500, "falha ao listar turmas"), nil
 	}
 	return common.JSON(200, cursos), nil
@@ -100,21 +104,22 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(400, "turno inválido — escolha manhã ou noite"), nil
 	}
 
-	duplicada, err := existeDuplicado(ctx, id, dados.Nome, dados.Turno, dados.Periodo)
-	if err != nil {
-		return common.Erro(500, "falha ao atualizar turma"), nil
-	}
-	if duplicada {
-		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "turma.atualizada", Resultado: "falha", Motivo: "turma já existe",
-			Recurso:  &auditoria.Recurso{Tipo: "turma", ID: id},
-			Detalhes: map[string]any{"nome": dados.Nome, "turno": dados.Turno, "periodo": dados.Periodo},
-		}, req)
-		return common.Erro(409, "já existe uma turma com esse curso, turno e período"), nil
-	}
-
 	if err := atualizar(ctx, id, dados); err != nil {
-		return common.Erro(404, "turma não encontrada"), nil
+		switch {
+		case errors.Is(err, errTurmaDuplicada):
+			auditoria.Registrar(ctx, auditoria.Evento{
+				Acao: "turma.atualizada", Resultado: "falha", Motivo: "turma já existe",
+				Recurso:  &auditoria.Recurso{Tipo: "turma", ID: id},
+				Detalhes: map[string]any{"nome": dados.Nome, "turno": dados.Turno, "periodo": dados.Periodo},
+			}, req)
+			return common.Erro(409, msgDuplicada), nil
+		case errors.Is(err, errNaoEncontrada):
+			return common.Erro(404, "turma não encontrada"), nil
+		case errors.Is(err, errTurmaMudou):
+			return common.Erro(409, msgMudou), nil
+		}
+		log.Printf("PUT /turmas/%s: %v", id, err)
+		return common.Erro(500, "falha ao atualizar turma"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -138,14 +143,21 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 	id := req.PathParameters["turmaId"]
 
 	if err := deletar(ctx, id); err != nil {
-		if err == errCursoComPrograma {
+		if errors.Is(err, errCursoComPrograma) {
 			auditoria.Registrar(ctx, auditoria.Evento{
 				Acao: "turma.removida", Resultado: "falha", Motivo: "turma possui programa vinculado",
 				Recurso: &auditoria.Recurso{Tipo: "turma", ID: id},
 			}, req)
 			return common.Erro(409, "turma possui programa vinculado, não pode ser removida"), nil
 		}
-		return common.Erro(404, "turma não encontrada"), nil
+		switch {
+		case errors.Is(err, errNaoEncontrada):
+			return common.Erro(404, "turma não encontrada"), nil
+		case errors.Is(err, errTurmaMudou):
+			return common.Erro(409, msgMudou), nil
+		}
+		log.Printf("DELETE /turmas/%s: %v", id, err)
+		return common.Erro(500, "falha ao remover turma"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{

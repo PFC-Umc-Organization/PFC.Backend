@@ -1,6 +1,5 @@
 package projeto
 
-
 type Projeto struct {
 	ID           string   `json:"id"`
 	Nome         string   `json:"nome"`

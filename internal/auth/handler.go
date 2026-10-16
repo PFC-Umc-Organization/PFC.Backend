@@ -20,6 +20,12 @@ func HandleLogin(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	if err := json.Unmarshal([]byte(req.Body), &cred); err != nil {
 		return common.Erro(400, "corpo da requisição inválido"), nil
 	}
+	// Mesma normalização de /auth/confirmar: o e-mail é o username no
+	// Cognito, e "Fulano@..." com espaço no fim não deve virar outra conta.
+	cred.Email = strings.TrimSpace(strings.ToLower(cred.Email))
+	if cred.Email == "" || cred.Senha == "" {
+		return common.Erro(400, "informe o e-mail e a senha"), nil
+	}
 
 	idToken, err := cognitoLogin(ctx, cred)
 	var naoConfirmado *types.UserNotConfirmedException
@@ -72,6 +78,11 @@ func HandleRegistrar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 	// autodeclarar ORIENTADOR. Cadastro público sempre cria ALUNO; contas de
 	// orientador só existem via AdminCreateUser (fora deste endpoint).
 	novo.Perfil = common.Aluno
+	novo.Nome = strings.TrimSpace(novo.Nome)
+	novo.Email = strings.TrimSpace(strings.ToLower(novo.Email))
+	if novo.Nome == "" || novo.Email == "" || novo.Senha == "" {
+		return common.Erro(400, "nome, e-mail e senha são obrigatórios"), nil
+	}
 
 	if err := cognitoSignUp(ctx, novo); err != nil {
 		// O erro cru vai pro CloudWatch; o cliente recebe uma mensagem

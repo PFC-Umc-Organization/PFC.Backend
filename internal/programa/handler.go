@@ -3,14 +3,16 @@ package programa
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auditoria"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/curso"
 )
 
+const msgMudou = "o programa mudou enquanto você editava — atualize a página e tente de novo"
 
 func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -28,28 +30,18 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 		return common.Erro(400, "cursoId é obrigatório"), nil
 	}
 
-	cursoExiste, err := curso.Existe(ctx, novo.CursoID)
-	if err != nil {
-		return common.Erro(500, "falha ao criar programa"), nil
-	}
-	if !cursoExiste {
+	p, err := salvar(ctx, novo)
+	switch {
+	case errors.Is(err, errCursoNaoExiste):
 		return common.Erro(404, "curso não encontrado"), nil
-	}
-
-	duplicado, err := existeParaCurso(ctx, "", novo.CursoID)
-	if err != nil {
-		return common.Erro(500, "falha ao criar programa"), nil
-	}
-	if duplicado {
+	case errors.Is(err, errJaExisteParaCurso):
 		auditoria.Registrar(ctx, auditoria.Evento{
 			Acao: "programa.criado", Resultado: "falha", Motivo: "programa já existe para este curso",
 			Detalhes: map[string]any{"cursoId": novo.CursoID},
 		}, req)
-		return common.Erro(409, "este curso já possui um programa de PFC"), nil
-	}
-
-	p, err := salvar(ctx, novo)
-	if err != nil {
+		return common.Erro(409, errJaExisteParaCurso.Error()), nil
+	case err != nil:
+		log.Printf("POST /programas: %v", err)
 		return common.Erro(500, "falha ao criar programa"), nil
 	}
 
@@ -62,15 +54,14 @@ func HandleCriar(ctx context.Context, req events.APIGatewayProxyRequest) (events
 	return common.JSON(201, p), nil
 }
 
-
 func HandleListar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	programas, err := listar(ctx)
 	if err != nil {
+		log.Printf("GET /programas: %v", err)
 		return common.Erro(500, "falha ao listar programas"), nil
 	}
 	return common.JSON(200, programas), nil
 }
-
 
 func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -90,29 +81,24 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 		return common.Erro(400, "cursoId é obrigatório"), nil
 	}
 
-	cursoExiste, err := curso.Existe(ctx, dados.CursoID)
-	if err != nil {
-		return common.Erro(500, "falha ao atualizar programa"), nil
-	}
-	if !cursoExiste {
-		return common.Erro(404, "curso não encontrado"), nil
-	}
-
-	duplicado, err := existeParaCurso(ctx, id, dados.CursoID)
-	if err != nil {
-		return common.Erro(500, "falha ao atualizar programa"), nil
-	}
-	if duplicado {
-		auditoria.Registrar(ctx, auditoria.Evento{
-			Acao: "programa.atualizado", Resultado: "falha", Motivo: "programa já existe para este curso",
-			Recurso:  &auditoria.Recurso{Tipo: "programa", ID: id},
-			Detalhes: map[string]any{"cursoId": dados.CursoID},
-		}, req)
-		return common.Erro(409, "este curso já possui um programa de PFC"), nil
-	}
-
 	if err := atualizar(ctx, id, dados); err != nil {
-		return common.Erro(404, "programa não encontrado"), nil
+		switch {
+		case errors.Is(err, errNaoEncontrado):
+			return common.Erro(404, "programa não encontrado"), nil
+		case errors.Is(err, errCursoNaoExiste):
+			return common.Erro(404, "curso não encontrado"), nil
+		case errors.Is(err, errJaExisteParaCurso):
+			auditoria.Registrar(ctx, auditoria.Evento{
+				Acao: "programa.atualizado", Resultado: "falha", Motivo: "programa já existe para este curso",
+				Recurso:  &auditoria.Recurso{Tipo: "programa", ID: id},
+				Detalhes: map[string]any{"cursoId": dados.CursoID},
+			}, req)
+			return common.Erro(409, errJaExisteParaCurso.Error()), nil
+		case errors.Is(err, errProgramaMudou):
+			return common.Erro(409, msgMudou), nil
+		}
+		log.Printf("PUT /programas/%s: %v", id, err)
+		return common.Erro(500, "falha ao atualizar programa"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{
@@ -123,7 +109,6 @@ func HandleAtualizar(ctx context.Context, req events.APIGatewayProxyRequest) (ev
 
 	return common.JSON(200, map[string]string{"mensagem": "programa atualizado"}), nil
 }
-
 
 func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if !common.PerfilPermitido(req, common.Admin) {
@@ -136,14 +121,21 @@ func HandleDeletar(ctx context.Context, req events.APIGatewayProxyRequest) (even
 	id := req.PathParameters["programaId"]
 
 	if err := deletar(ctx, id); err != nil {
-		if err == errProgramaComProjetos {
+		if errors.Is(err, errProgramaComProjetos) {
 			auditoria.Registrar(ctx, auditoria.Evento{
 				Acao: "programa.removido", Resultado: "falha", Motivo: "programa possui projetos vinculados",
 				Recurso: &auditoria.Recurso{Tipo: "programa", ID: id},
 			}, req)
 			return common.Erro(409, "programa possui projetos vinculados, não pode ser removido"), nil
 		}
-		return common.Erro(404, "programa não encontrado"), nil
+		switch {
+		case errors.Is(err, errNaoEncontrado):
+			return common.Erro(404, "programa não encontrado"), nil
+		case errors.Is(err, errProgramaMudou):
+			return common.Erro(409, msgMudou), nil
+		}
+		log.Printf("DELETE /programas/%s: %v", id, err)
+		return common.Erro(500, "falha ao remover programa"), nil
 	}
 
 	auditoria.Registrar(ctx, auditoria.Evento{

@@ -2,31 +2,23 @@ package matricula
 
 import (
 	"context"
-	"fmt"
-	"os"
+	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
-var (
-	tableName = os.Getenv("TABLE_NAME")
-	ddb       *dynamodb.Client
-)
+// Modelagem:
+//
+//	matrícula  PK=STUDENT#<rgm>  SK=PROFILE  GSI1PK=MATRICULAS  GSI1SK=STUDENT#<rgm>  status, turmaId
+//
+// O GSI1 lista as matrículas sem Scan. O Pre Sign-up Lambda (fora deste
+// repo) lê este item pela chave — PK e SK não podem mudar.
 
-func init() {
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		panic(fmt.Sprintf("falha ao carregar config AWS: %v", err))
-	}
-	ddb = dynamodb.NewFromConfig(cfg)
-}
+func chave(rgm string) common.Item { return common.Chave("STUDENT#"+rgm, "PROFILE") }
 
-
-const batchSize = 25
-
+const batchSize = common.TamanhoLote
 
 func gravarRGMs(ctx context.Context, rgms []string, turmaID string) []RGMFalha {
 	var falhas []RGMFalha
@@ -38,19 +30,19 @@ func gravarRGMs(ctx context.Context, rgms []string, turmaID string) []RGMFalha {
 		for _, rgm := range chunk {
 			writes = append(writes, types.WriteRequest{
 				PutRequest: &types.PutRequest{
-					Item: map[string]types.AttributeValue{
-						"PK":      &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
-						"SK":      &types.AttributeValueMemberS{Value: "PROFILE"},
-						"status":  &types.AttributeValueMemberS{Value: "ACTIVE"},
-						"turmaId": &types.AttributeValueMemberS{Value: turmaID},
+					Item: common.Item{
+						"PK":      common.S("STUDENT#" + rgm),
+						"SK":      common.S("PROFILE"),
+						"GSI1PK":  common.S("MATRICULAS"),
+						"GSI1SK":  common.S("STUDENT#" + rgm),
+						"status":  common.S("ACTIVE"),
+						"turmaId": common.S(turmaID),
 					},
 				},
 			})
 		}
 
-		if _, err := ddb.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
-			RequestItems: map[string][]types.WriteRequest{tableName: writes},
-		}); err != nil {
+		if err := common.GravarLote(ctx, writes); err != nil {
 			for _, rgm := range chunk {
 				falhas = append(falhas, RGMFalha{RGM: rgm, Erro: err.Error()})
 			}
@@ -60,41 +52,27 @@ func gravarRGMs(ctx context.Context, rgms []string, turmaID string) []RGMFalha {
 	return falhas
 }
 
+type item struct {
+	PK      string `dynamodbav:"PK"`
+	Status  string `dynamodbav:"status"`
+	TurmaID string `dynamodbav:"turmaId"`
+}
 
 func listarRGMs(ctx context.Context) ([]Matricula, error) {
-	out, err := ddb.Scan(ctx, &dynamodb.ScanInput{
-		TableName:        aws.String(tableName),
-		FilterExpression: aws.String("begins_with(PK, :prefixo) AND SK = :perfil"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":prefixo": &types.AttributeValueMemberS{Value: "STUDENT#"},
-			":perfil":  &types.AttributeValueMemberS{Value: "PROFILE"},
-		},
-	})
+	itens, err := common.QueryNoIndice[item](ctx, "MATRICULAS")
 	if err != nil {
 		return nil, err
 	}
-
-	matriculas := make([]Matricula, 0, len(out.Items))
-	for _, i := range out.Items {
-		pk, ok := i["PK"].(*types.AttributeValueMemberS)
-		if !ok {
-			continue
-		}
-
+	matriculas := make([]Matricula, 0, len(itens))
+	for _, it := range itens {
 		status := "INATIVO"
-		if s, ok := i["status"].(*types.AttributeValueMemberS); ok && s.Value == "ACTIVE" {
+		if it.Status == "ACTIVE" {
 			status = "ATIVO"
 		}
-
-		turmaID := ""
-		if t, ok := i["turmaId"].(*types.AttributeValueMemberS); ok {
-			turmaID = t.Value
-		}
-
 		matriculas = append(matriculas, Matricula{
-			RGM:     pk.Value[len("STUDENT#"):],
+			RGM:     strings.TrimPrefix(it.PK, "STUDENT#"),
 			Status:  status,
-			TurmaID: turmaID,
+			TurmaID: it.TurmaID,
 		})
 	}
 	return matriculas, nil
@@ -104,46 +82,37 @@ func listarRGMs(ctx context.Context) ([]Matricula, error) {
 // RGM não está na allowlist (ou foi pré-autorizado antes desta turmaId
 // existir). Usado por `auth` e `usuario` pra preencher CursoIds do aluno.
 func TurmaDoRGM(ctx context.Context, rgm string) (string, error) {
-	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
-			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-	if out.Item == nil {
+	if rgm == "" {
 		return "", nil
 	}
-	turma, ok := out.Item["turmaId"].(*types.AttributeValueMemberS)
-	if !ok {
-		return "", nil
-	}
-	return turma.Value, nil
+	it, _, err := common.Buscar[item](ctx, chave(rgm), "turmaId")
+	return it.TurmaID, err
 }
 
-
-func existeRGM(ctx context.Context, rgm string) (bool, error) {
-	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
-			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
-		},
-	})
+// TurmasDosRGMs faz o mesmo que TurmaDoRGM pra vários RGMs numa única ida ao
+// banco (BatchGetItem). RGM fora da allowlist fica fora do mapa.
+func TurmasDosRGMs(ctx context.Context, rgms []string) (map[string]string, error) {
+	chaves := make([]common.Item, 0, len(rgms))
+	for _, rgm := range rgms {
+		chaves = append(chaves, chave(rgm))
+	}
+	itens, err := common.BuscarVarios(ctx, chaves, "PK", "turmaId")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return out.Item != nil, nil
+	turmas := make(map[string]string, len(itens))
+	for _, it := range itens {
+		if t := common.Texto(it, "turmaId"); t != "" {
+			turmas[strings.TrimPrefix(common.Texto(it, "PK"), "STUDENT#")] = t
+		}
+	}
+	return turmas, nil
 }
 
-
+// Existe diz se o RGM está pré-autorizado.
 func Existe(ctx context.Context, rgm string) (bool, error) {
-	return existeRGM(ctx, rgm)
+	return common.Existe(ctx, chave(rgm))
 }
-
 
 func removerRGMs(ctx context.Context, rgms []string) []RGMFalha {
 	var falhas []RGMFalha
@@ -155,17 +124,12 @@ func removerRGMs(ctx context.Context, rgms []string) []RGMFalha {
 		for _, rgm := range chunk {
 			writes = append(writes, types.WriteRequest{
 				DeleteRequest: &types.DeleteRequest{
-					Key: map[string]types.AttributeValue{
-						"PK": &types.AttributeValueMemberS{Value: "STUDENT#" + rgm},
-						"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
-					},
+					Key: chave(rgm),
 				},
 			})
 		}
 
-		if _, err := ddb.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
-			RequestItems: map[string][]types.WriteRequest{tableName: writes},
-		}); err != nil {
+		if err := common.GravarLote(ctx, writes); err != nil {
 			for _, rgm := range chunk {
 				falhas = append(falhas, RGMFalha{RGM: rgm, Erro: err.Error()})
 			}

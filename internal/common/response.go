@@ -1,8 +1,8 @@
-
 package common
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/aws/aws-lambda-go/events"
 )
@@ -14,7 +14,6 @@ var headersPadrao = map[string]string{
 	"Content-Type":                 "application/json",
 	"Cache-Control":                "no-store",
 }
-
 
 func JSON(status int, body any) events.APIGatewayProxyResponse {
 	b, err := json.Marshal(body)
@@ -28,7 +27,18 @@ func JSON(status int, body any) events.APIGatewayProxyResponse {
 	}
 }
 
-
 func Erro(status int, mensagem string) events.APIGatewayProxyResponse {
 	return JSON(status, map[string]string{"erro": mensagem})
+}
+
+// ErroDeEscrita traduz o erro de uma escrita condicionada a
+// attribute_exists(PK): condição falhou = o item não existe (404); qualquer
+// outro erro é falha de infraestrutura (500), logada no CloudWatch — antes
+// todo erro virava 404 e um throttling aparecia como "não encontrado".
+func ErroDeEscrita(err error, naoEncontrado string) events.APIGatewayProxyResponse {
+	if FalhouCondicao(err) {
+		return Erro(404, naoEncontrado)
+	}
+	log.Printf("escrita no DynamoDB: %v", err)
+	return Erro(500, "falha ao salvar — tente novamente em instantes")
 }

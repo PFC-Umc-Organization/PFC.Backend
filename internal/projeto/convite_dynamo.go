@@ -10,7 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 // Modelagem (mesma tabela single-table dos demais domínios):
@@ -38,11 +39,8 @@ type itemConvite struct {
 	CriadoEm     string `dynamodbav:"criadoEm"`
 }
 
-func chaveConvite(projetoID, rgm string) map[string]types.AttributeValue {
-	return map[string]types.AttributeValue{
-		"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
-		"SK": &types.AttributeValueMemberS{Value: "CONVITE#" + rgm},
-	}
+func chaveConvite(projetoID, rgm string) common.Item {
+	return common.Chave("PROJECT#"+projetoID, "CONVITE#"+rgm)
 }
 
 func toConvite(it itemConvite) Convite {
@@ -73,13 +71,12 @@ func salvarConvite(ctx context.Context, projetoID, projetoNome, rgm, convidadoPo
 		return Convite{}, fmt.Errorf("falha ao serializar convite: %w", err)
 	}
 
-	_, err = ddb.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(tableName),
+	_, err = common.DynamoDB().PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           aws.String(common.Tabela),
 		Item:                av,
 		ConditionExpression: aws.String("attribute_not_exists(SK)"),
 	})
-	var condicao *types.ConditionalCheckFailedException
-	if errors.As(err, &condicao) {
+	if common.FalhouCondicao(err) {
 		return Convite{}, errConviteJaExiste
 	}
 	if err != nil {
@@ -91,19 +88,8 @@ func salvarConvite(ctx context.Context, projetoID, projetoNome, rgm, convidadoPo
 // buscarConvite devolve o convite do aluno pra este projeto. ok=false se
 // não houver.
 func buscarConvite(ctx context.Context, projetoID, rgm string) (c Convite, ok bool, err error) {
-	out, err := ddb.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(tableName),
-		Key:       chaveConvite(projetoID, rgm),
-	})
-	if err != nil {
-		return Convite{}, false, err
-	}
-	if out.Item == nil {
-		return Convite{}, false, nil
-	}
-
-	var it itemConvite
-	if err := attributevalue.UnmarshalMap(out.Item, &it); err != nil {
+	it, ok, err := common.Buscar[itemConvite](ctx, chaveConvite(projetoID, rgm))
+	if err != nil || !ok {
 		return Convite{}, false, err
 	}
 	return toConvite(it), true, nil
@@ -111,73 +97,33 @@ func buscarConvite(ctx context.Context, projetoID, rgm string) (c Convite, ok bo
 
 // convitesDoProjeto lista os convites pendentes do grupo.
 func convitesDoProjeto(ctx context.Context, projetoID string) ([]Convite, error) {
-	return queryConvites(ctx, &dynamodb.QueryInput{
-		TableName:              aws.String(tableName),
-		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :c)"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
-			":c":  &types.AttributeValueMemberS{Value: "CONVITE#"},
-		},
-	})
+	return paraConvites(common.QueryNaParticao[itemConvite](ctx, "PROJECT#"+projetoID, "CONVITE#"))
 }
 
 // convitesDoRGM lista os convites que o aluno recebeu (de qualquer grupo).
 func convitesDoRGM(ctx context.Context, rgm string) ([]Convite, error) {
-	return queryConvites(ctx, &dynamodb.QueryInput{
-		TableName:              aws.String(tableName),
-		IndexName:              aws.String(gsiName),
-		KeyConditionExpression: aws.String("GSI1PK = :pk"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "CONVITE#" + rgm},
-		},
-	})
+	return paraConvites(common.QueryNoIndice[itemConvite](ctx, "CONVITE#"+rgm))
 }
 
-// queryConvites pagina até o fim: um Query devolve no máximo 1 MB por vez.
-func queryConvites(ctx context.Context, in *dynamodb.QueryInput) ([]Convite, error) {
-	convites := []Convite{}
-	for {
-		out, err := ddb.Query(ctx, in)
-		if err != nil {
-			return nil, err
-		}
-		for _, i := range out.Items {
-			var it itemConvite
-			if err := attributevalue.UnmarshalMap(i, &it); err != nil {
-				continue
-			}
-			convites = append(convites, toConvite(it))
-		}
-		if out.LastEvaluatedKey == nil {
-			return convites, nil
-		}
-		in.ExclusiveStartKey = out.LastEvaluatedKey
+func paraConvites(itens []itemConvite, err error) ([]Convite, error) {
+	if err != nil {
+		return nil, err
 	}
+	convites := make([]Convite, 0, len(itens))
+	for _, it := range itens {
+		convites = append(convites, toConvite(it))
+	}
+	return convites, nil
 }
 
-// entrarNoGrupo põe o RGM em integrantes ao aceitar o convite. A condição é
-// conferida pelo DynamoDB no mesmo instante da escrita (atômica): um duplo
-// clique não põe o aluno duas vezes no grupo, e dois aceites simultâneos
-// não passam do limite. errNaoPodeEntrar se a condição falhar.
-func entrarNoGrupo(ctx context.Context, projetoID, rgm string) error {
-	_, err := ddb.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: "PROJECT#" + projetoID},
-			"SK": &types.AttributeValueMemberS{Value: "PROFILE"},
-		},
-		UpdateExpression:    aws.String("SET integrantes = list_append(integrantes, :novo)"),
-		ConditionExpression: aws.String("attribute_exists(PK) AND NOT contains(integrantes, :rgm) AND size(integrantes) < :max"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":novo": &types.AttributeValueMemberL{Value: []types.AttributeValue{
-				&types.AttributeValueMemberS{Value: rgm},
-			}},
-			":rgm": &types.AttributeValueMemberS{Value: rgm},
-			":max": &types.AttributeValueMemberN{Value: fmt.Sprint(maxIntegrantes)},
-		},
-	})
-	var condicao *types.ConditionalCheckFailedException
-	if errors.As(err, &condicao) {
+// entrarNoGrupo põe o RGM em integrantes ao aceitar o convite, com as
+// mesmas garantias atômicas de adicionarIntegrante: um duplo clique não põe
+// o aluno duas vezes no grupo e dois aceites simultâneos não passam do
+// limite (errNaoPodeEntrar); aluno que entrou em outro grupo no meio-tempo
+// recebe errAlunoJaTemProjeto.
+func entrarNoGrupo(ctx context.Context, projetoID, rgm string, atual []string) error {
+	err := adicionarIntegrante(ctx, projetoID, rgm, atual)
+	if errors.Is(err, errGrupoMudou) {
 		return errNaoPodeEntrar
 	}
 	return err
@@ -185,13 +131,12 @@ func entrarNoGrupo(ctx context.Context, projetoID, rgm string) error {
 
 // apagarConvite remove o convite. errConviteNaoExiste se ele não existia.
 func apagarConvite(ctx context.Context, projetoID, rgm string) error {
-	_, err := ddb.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(tableName),
+	_, err := common.DynamoDB().DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:           aws.String(common.Tabela),
 		Key:                 chaveConvite(projetoID, rgm),
 		ConditionExpression: aws.String("attribute_exists(SK)"),
 	})
-	var condicao *types.ConditionalCheckFailedException
-	if errors.As(err, &condicao) {
+	if common.FalhouCondicao(err) {
 		return errConviteNaoExiste
 	}
 	return err

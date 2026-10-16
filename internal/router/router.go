@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
+
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 )
 
 type Handler func(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error)
@@ -15,17 +17,18 @@ type registeredRoute struct {
 	handler  Handler
 }
 
+// Router guarda as rotas por método: cada requisição só compara o caminho
+// com as rotas do próprio método.
 type Router struct {
-	routes []registeredRoute
+	routes map[string][]registeredRoute
 }
 
 func New() *Router {
-	return &Router{}
+	return &Router{routes: map[string][]registeredRoute{}}
 }
 
-
 func (r *Router) Handle(method, path string, h Handler) {
-	r.routes = append(r.routes, registeredRoute{
+	r.routes[method] = append(r.routes[method], registeredRoute{
 		method:   method,
 		segments: splitPath(path),
 		handler:  h,
@@ -54,10 +57,7 @@ func (r *Router) Dispatch(ctx context.Context, req events.APIGatewayProxyRequest
 
 	requestSegments := splitPath(req.Path)
 
-	for _, route := range r.routes {
-		if route.method != req.HTTPMethod {
-			continue
-		}
+	for _, route := range r.routes[req.HTTPMethod] {
 		params, ok := match(route.segments, requestSegments)
 		if !ok {
 			continue
@@ -71,12 +71,10 @@ func (r *Router) Dispatch(ctx context.Context, req events.APIGatewayProxyRequest
 		return route.handler(ctx, req)
 	}
 
-	return events.APIGatewayProxyResponse{
-		StatusCode: 404,
-		Body:       `{"erro":"rota não encontrada"}`,
-	}, nil
+	// Com os headers de CORS do common.Erro: sem eles o navegador esconde
+	// o 404 atrás de um "erro de CORS" e o front não lê a mensagem.
+	return common.Erro(404, "rota não encontrada"), nil
 }
-
 
 func match(pattern, actual []string) (map[string]string, bool) {
 	if len(pattern) != len(actual) {
