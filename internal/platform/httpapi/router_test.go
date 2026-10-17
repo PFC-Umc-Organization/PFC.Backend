@@ -72,13 +72,13 @@ func TestPreflight(t *testing.T) {
 }
 
 func TestJWTPayloadClaims(t *testing.T) {
-	a := ActorOf(events.APIGatewayProxyRequest{RequestContext: events.APIGatewayProxyRequestContext{
+	a := actorOf(events.APIGatewayProxyRequest{RequestContext: events.APIGatewayProxyRequestContext{
 		Authorizer: map[string]any{"jwt": map[string]any{"claims": map[string]any{"sub": "s2", "custom:perfil": "ADMIN"}}},
 	}})
 	if a.Sub != "s2" || a.Role != actor.RoleAdmin {
 		t.Fatalf("actor %+v", a)
 	}
-	if (ActorOf(events.APIGatewayProxyRequest{}) != actor.Actor{}) {
+	if (actorOf(events.APIGatewayProxyRequest{}) != actor.Actor{}) {
 		t.Fatal("no authorizer must yield an empty actor")
 	}
 }
@@ -93,6 +93,7 @@ func TestErrors(t *testing.T) {
 		{apperr.Forbidden("acesso restrito a administradores"), 403, "acesso restrito a administradores"},
 		{apperr.NotFound("turma não encontrada"), 404, "turma não encontrada"},
 		{apperr.Conflict("já existe"), 409, "já existe"},
+		{apperr.TooManyRequests("aguarde"), 429, "aguarde"},
 		{apperr.Unavailable("indisponível", errors.New("timeout")), 502, "indisponível"},
 		{apperr.Internal("falha ao listar turmas", errors.New("boom")), 500, "falha ao listar turmas"},
 		{errors.New("unexpected"), 500, msgInternal},
@@ -123,17 +124,6 @@ func TestDecode(t *testing.T) {
 	err := (&Request{Body: "{"}).Decode(&v)
 	if e, ok := apperr.As(err); !ok || e.Kind != apperr.KindInvalid || e.Message != msgInvalidBody {
 		t.Fatalf("invalid body: %v", err)
-	}
-}
-
-func TestLegacy(t *testing.T) {
-	rt := NewRouter()
-	rt.Handle("DELETE", "/turmas/:turmaId", Legacy(func(_ context.Context, ev events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-		return events.APIGatewayProxyResponse{StatusCode: 200, Body: `{"id":"` + ev.PathParameters["turmaId"] + `"}`}, nil
-	}))
-	resp, _ := rt.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: "DELETE", Path: "/turmas/t1"})
-	if resp.StatusCode != 200 || resp.Body != `{"id":"t1"}` || resp.Headers["Content-Type"] != "application/json" {
-		t.Fatalf("legacy %+v", resp)
 	}
 }
 

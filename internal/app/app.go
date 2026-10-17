@@ -10,15 +10,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/deliveries"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/identity"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/config"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/references"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
 type Deps struct {
@@ -44,24 +42,22 @@ func Load(ctx context.Context) (Deps, error) {
 }
 
 func New(d Deps) *httpapi.Router {
-	common.Use(d.Table.Client, d.Cognito)
-
 	groupsStore := groups.NewDynamoStore(d.Table)
 	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), groupsStore)
-	groupsSvc := groups.NewService(groupsStore, academicSvc, usuario.Accounts{})
-	auth.UseAcademic(academicSvc)
-	usuario.UseAcademic(academicSvc)
-
-	r := httpapi.NewRouter()
-	academic.Routes(r, academicSvc)
-	groups.Routes(r, groupsSvc)
-	deliveries.Routes(r, deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc))
-	references.Routes(r, references.NewService(references.NewDynamoStore(d.Table), references.NewCatalog(references.CatalogConfig{
+	identitySvc := identity.NewService(identity.NewCognito(d.Cognito, d.Config.CognitoClientID, d.Config.CognitoUserPoolID), academicSvc)
+	groupsSvc := groups.NewService(groupsStore, academicSvc, identitySvc)
+	catalog := references.NewCatalog(references.CatalogConfig{
 		CrossrefURL:    d.Config.CrossrefURL,
 		OpenAlexURL:    d.Config.OpenAlexURL,
 		ContactEmail:   d.Config.ContactEmail,
 		OpenAlexAPIKey: d.Config.OpenAlexAPIKey,
-	}), groupsSvc))
-	legacyRoutes(r)
+	})
+
+	r := httpapi.NewRouter()
+	identity.Routes(r, identitySvc)
+	academic.Routes(r, academicSvc)
+	groups.Routes(r, groupsSvc)
+	deliveries.Routes(r, deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc))
+	references.Routes(r, references.NewService(references.NewDynamoStore(d.Table), catalog, groupsSvc))
 	return r
 }

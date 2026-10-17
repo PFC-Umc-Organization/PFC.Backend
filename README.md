@@ -9,37 +9,37 @@ uma API Gateway REST API.
 main.go                    # entrypoint do Lambda: app.Load + app.New
 cmd/migrar/                # migração idempotente da tabela pra modelagem atual
 internal/
-├── app/                   # composition root: clientes AWS, config e rotas
+├── app/                   # composition root: clientes AWS, config e ligação dos módulos
 ├── platform/              # infraestrutura compartilhada pelos módulos
-│   ├── config/            # variáveis de ambiente obrigatórias
-│   ├── httpapi/           # router, Request/Response, erro → status, CORS, recover
+│   ├── config/            # variáveis de ambiente
+│   ├── httpapi/           # router, Request/Response, perfil por rota, erro → status, CORS, recover
 │   ├── apperr/            # erros de aplicação (tipo + mensagem pro usuário)
 │   ├── dynamo/            # helpers do DynamoDB (query paginada, lotes, transações)
 │   ├── actor/             # quem chama (claims do Cognito), perfis e RGM
 │   └── audit/             # eventos de auditoria no CloudWatch
-├── common/ auditoria/     # ponte temporária pros pacotes antigos (sai na fase 7)
-├── integracao/            # testes ponta a ponta contra o DynamoDB Local
-├── auth/                  # domínio de autenticação (ponte com o Cognito)
-│   ├── models.go          # espelha os tipos TS do frontend
-│   ├── cognito.go          # chamadas ao Cognito (InitiateAuth, SignUp)
-│   └── handler.go          # handlers HTTP: POST /auth/login, /auth/registrar
+├── identity/              # módulo: login, cadastro, confirmação e contas (Cognito)
 ├── academic/              # módulo: turmas, programa da turma e allowlist de RGMs
-│   ├── domain.go          # tipos, validação, mensagens
-│   ├── ports.go           # interfaces que o serviço usa (Store, Projects)
-│   ├── service.go         # regras de negócio + auditoria
-│   ├── store.go           # DynamoDB: chaves, travas, transações
-│   └── http.go            # rotas /turmas, /programas, /admin/students
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
-│   └── (mesmos arquivos)  # store.go: PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
-├── deliveries/            # módulo: atividades, campos de entrega (formulário) e entregas dos grupos
-└── references/            # módulo: referências bibliográficas
-    ├── catalog.go         # OpenAlex (busca por tema) e Crossref (obra pelo DOI)
-    └── abnt.go            # formatação ABNT NBR 6023 (texto e HTML)
+├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos
+├── references/            # módulo: referências bibliográficas (OpenAlex, Crossref, ABNT)
+└── integracao/            # testes ponta a ponta contra o DynamoDB Local
 ```
 
-Cada novo domínio (atividade, material, usuário, etc.) ganha seu próprio
-pacote em `internal/`, registrado em `internal/app/routes.go` — nenhuma rota existente
-precisa mudar.
+Todo módulo tem o mesmo formato:
+
+| Arquivo      | Conteúdo |
+| ------------ | -------- |
+| `domain.go`  | tipos, validação e mensagens (em português, como a API responde) |
+| `ports.go`   | interfaces que o serviço usa: o store e os outros módulos |
+| `service.go` | regras de negócio e auditoria; não conhece HTTP nem DynamoDB |
+| `store.go`   | DynamoDB: chaves, travas e transações (no `identity`, `cognito.go`; no `references`, também `catalog.go`) |
+| `http.go`    | rotas com o perfil exigido; só decodifica o corpo e chama o serviço |
+| `*_test.go`  | testes do serviço com fakes em memória |
+
+Um módulo usa outro só pelas interfaces do `ports.go`, montadas em
+`internal/app`. Rota nova entra no `http.go` do módulo — o API Gateway
+encaminha tudo pra Lambda.
+
 
 ## Variáveis de ambiente
 
@@ -145,7 +145,7 @@ ver [Migração](#migração).
   que cria o programa confere que a turma existe.
 - **API Gateway usa dois proxies genéricos** (`/auth/{proxy+}` sem
   authorizer, `/{proxy+}` com Cognito Authorizer) — nenhuma rota nova
-  exige mudança de Terraform, só registrar em `internal/app/routes.go`. O router
+  exige mudança de Terraform, só registrar no `http.go` do módulo. O router
   interno (`internal/platform/httpapi`) é quem resolve path parameters (`:programaId` etc.).
 - **Convite de integrante fica no sistema, sem e-mail (por enquanto).**
   Não temos SES; o convite é salvo no DynamoDB (`PK PROJECT#<id>`,

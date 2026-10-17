@@ -10,6 +10,7 @@ const (
 	KindForbidden
 	KindNotFound
 	KindConflict
+	KindTooManyRequests
 	KindUnavailable
 	KindInternal
 )
@@ -31,11 +32,12 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-func Invalid(msg string) error      { return &Error{Kind: KindInvalid, Message: msg} }
-func Unauthorized(msg string) error { return &Error{Kind: KindUnauthorized, Message: msg} }
-func Forbidden(msg string) error    { return &Error{Kind: KindForbidden, Message: msg} }
-func NotFound(msg string) error     { return &Error{Kind: KindNotFound, Message: msg} }
-func Conflict(msg string) error     { return &Error{Kind: KindConflict, Message: msg} }
+func Invalid(msg string) error         { return &Error{Kind: KindInvalid, Message: msg} }
+func Unauthorized(msg string) error    { return &Error{Kind: KindUnauthorized, Message: msg} }
+func Forbidden(msg string) error       { return &Error{Kind: KindForbidden, Message: msg} }
+func NotFound(msg string) error        { return &Error{Kind: KindNotFound, Message: msg} }
+func Conflict(msg string) error        { return &Error{Kind: KindConflict, Message: msg} }
+func TooManyRequests(msg string) error { return &Error{Kind: KindTooManyRequests, Message: msg} }
 
 func Unavailable(msg string, err error) error {
 	return &Error{Kind: KindUnavailable, Message: msg, Err: err}

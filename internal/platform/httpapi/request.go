@@ -21,7 +21,6 @@ type Request struct {
 
 	params map[string]string
 	query  map[string]string
-	event  events.APIGatewayProxyRequest
 }
 
 func newRequest(ev events.APIGatewayProxyRequest) *Request {
@@ -29,12 +28,11 @@ func newRequest(ev events.APIGatewayProxyRequest) *Request {
 		Method:    ev.HTTPMethod,
 		Path:      ev.Path,
 		Body:      ev.Body,
-		Actor:     ActorOf(ev),
+		Actor:     actorOf(ev),
 		SourceIP:  ev.RequestContext.Identity.SourceIP,
 		RequestID: ev.RequestContext.RequestID,
 		params:    ev.PathParameters,
 		query:     ev.QueryStringParameters,
-		event:     ev,
 	}
 }
 
@@ -49,8 +47,8 @@ func (r *Request) Decode(v any) error {
 	return nil
 }
 
-// ActorOf reads the Cognito Authorizer claims, in either payload format.
-func ActorOf(ev events.APIGatewayProxyRequest) actor.Actor {
+// actorOf reads the Cognito Authorizer claims, in either payload format.
+func actorOf(ev events.APIGatewayProxyRequest) actor.Actor {
 	claims := claimsOf(ev.RequestContext.Authorizer)
 	str := func(k string) string { s, _ := claims[k].(string); return s }
 	return actor.Actor{

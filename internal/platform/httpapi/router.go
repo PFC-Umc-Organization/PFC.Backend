@@ -81,13 +81,14 @@ func run(ctx context.Context, h Handler, req *Request) (resp Response) {
 const msgInternal = "erro interno — tente novamente em instantes"
 
 var statusOf = map[apperr.Kind]int{
-	apperr.KindInvalid:      400,
-	apperr.KindUnauthorized: 401,
-	apperr.KindForbidden:    403,
-	apperr.KindNotFound:     404,
-	apperr.KindConflict:     409,
-	apperr.KindUnavailable:  502,
-	apperr.KindInternal:     500,
+	apperr.KindInvalid:         400,
+	apperr.KindUnauthorized:    401,
+	apperr.KindForbidden:       403,
+	apperr.KindNotFound:        404,
+	apperr.KindConflict:        409,
+	apperr.KindTooManyRequests: 429,
+	apperr.KindUnavailable:     502,
+	apperr.KindInternal:        500,
 }
 
 func errorResponse(ctx context.Context, req *Request, err error) Response {
