@@ -84,7 +84,6 @@ func IsMember(a actor.Actor, p Project) bool {
 
 func CanView(a actor.Actor, p Project) bool { return isStaff(a) || IsMember(a, p) }
 
-// group puts the creator first, then the distinct non-blank classmates.
 func group(creator string, classmates []string) []string {
 	seen := map[string]bool{creator: true}
 	out := []string{creator}

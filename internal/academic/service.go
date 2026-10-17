@@ -279,7 +279,6 @@ func (s *Service) IsEnrolled(ctx context.Context, rgm string) (bool, error) {
 	return s.store.EnrollmentExists(ctx, rgm)
 }
 
-// CohortOf returns "" for an RGM outside the allowlist.
 func (s *Service) CohortOf(ctx context.Context, rgm string) (string, error) {
 	if rgm == "" {
 		return "", nil

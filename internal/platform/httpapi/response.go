@@ -50,7 +50,6 @@ func Reply(status int, v any, err error) (Response, error) {
 	return JSON(status, v), nil
 }
 
-// Message replies 200 {"mensagem": msg} unless err is set.
 func Message(msg string, err error) (Response, error) {
 	return Reply(200, map[string]string{"mensagem": msg}, err)
 }

@@ -142,8 +142,6 @@ func normalizedFields(fields []FieldInput) ([]FieldInput, string) {
 	return out, ""
 }
 
-// validAnswers checks answers against the fields: known ids only, required
-// ones filled, size and format per type. Blank answers are dropped.
 func validAnswers(fields []Field, answers map[string]string) (map[string]string, string) {
 	known := make(map[string]bool, len(fields))
 	for _, f := range fields {

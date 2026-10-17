@@ -128,6 +128,14 @@ ver [Migração](#migração).
 
 ## Decisões importantes
 
+- **Monólito modular.** Uma Lambda e um deploy, com fronteiras internas:
+  cada módulo é dono dos seus dados e regras, e os outros só o enxergam pelas
+  interfaces que eles mesmos declaram no `ports.go`. Microsserviços seriam
+  infraestrutura e latência de rede sem ganho pro tamanho do projeto.
+- **O perfil exigido fica na rota.** Cada `http.go` declara quem pode chamar
+  (`admin(...)`, `staff(...)`, `student(...)`, sobre `httpapi.Restrict`), em
+  vez de cada handler conferir à mão. Regras que dependem do recurso (ser
+  integrante do projeto) ficam no serviço, em `groups.IsMember`/`CanView`.
 - **`perfil` nunca vem do cliente em `/auth/registrar`.** Endpoint público;
   se o valor enviado no corpo fosse usado pra decidir o perfil, qualquer
   requisição poderia se autodeclarar ADMIN. Cadastro público sempre
@@ -185,30 +193,34 @@ descompactar a cada cold start.
 ## Testes
 
 ```bash
-go mod tidy        # o repo não versiona go.sum
-go test ./...
-
-# contra as APIs reais do Crossref/OpenAlex (precisa de internet)
-REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
-```
+go test ./...      # unitários: serviços com fakes em memória, sem AWS
 
 # ponta a ponta: precisa do DynamoDB Local rodando (porta 8000 por padrão, ver
 # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html)
 scripts/test-integration.sh
 DYNAMODB_LOCAL=http://localhost:8765 scripts/test-integration.sh   # outra porta
+
+# contra as APIs reais do Crossref/OpenAlex (precisa de internet)
+REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
 ```
+
+- **Unitários** (`*_test.go` de cada módulo): regras de negócio do serviço,
+  com o store e os outros módulos trocados por fakes em memória.
+- **Fronteiras** (`internal/app/boundaries_test.go`): falha se um pacote
+  importar algo fora das regras — a `platform` não conhece os módulos e um
+  módulo só depende de outro quando a dependência está listada ali
+  (hoje: `deliveries` e `references` usam `groups`).
+- **Contrato** (`internal/integracao/contrato_test.go`): percorre as 47 rotas,
+  com casos de sucesso e de erro, e compara status e corpo de cada resposta com
+  `testdata/contrato.golden` (ids e datas normalizados). Qualquer mudança na API
+  quebra o teste; se a mudança for intencional, regrave e revise o diff:
+  `scripts/test-integration.sh -run Contrato -update`.
+- **Regras com banco** (`internal/integracao/integracao_test.go`): unicidades,
+  um projeto por aluno com cinco inclusões simultâneas, cascata ao apagar.
 
 O pacote `internal/integracao` usa o DynamoDB Local de verdade e servidores
 falsos para o Cognito (`cognito_fake_test.go`) e para Crossref/OpenAlex. Sem o
 script, ele é pulado.
-
-- **Contrato** (`contrato_test.go`): percorre as 47 rotas, com casos de sucesso
-  e de erro, e compara status e corpo de cada resposta com
-  `testdata/contrato.golden` (ids e datas normalizados). Qualquer mudança na API
-  quebra o teste; se a mudança for intencional, regrave e revise o diff:
-  `scripts/test-integration.sh -run Contrato -update`.
-- **Regras com banco** (`integracao_test.go`): unicidades, um projeto por aluno
-  com cinco inclusões simultâneas, cascata ao apagar.
 
 ## Migração
 

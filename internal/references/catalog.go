@@ -20,7 +20,6 @@ var (
 	errUnavailable  = errors.New("external service unavailable")
 )
 
-// A search page of 10 results is tens of KB.
 const maxResponseSize = 2 << 20
 
 type CatalogConfig struct {

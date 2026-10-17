@@ -86,8 +86,7 @@ func roleOrStudent(r string) actor.Role {
 	return actor.Role(r)
 }
 
-// userFromAttributes builds a User from Cognito attributes. With the e-mail
-// as username, the Cognito username is the sub.
+// With the e-mail as username, the Cognito username is the sub.
 func userFromAttributes(attrs map[string]string, username string, enabled, confirmed bool) User {
 	id := attrs["sub"]
 	if id == "" {

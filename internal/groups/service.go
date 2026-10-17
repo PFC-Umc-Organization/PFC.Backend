@@ -49,7 +49,6 @@ func success(ctx context.Context, action string, resource *audit.Resource, detai
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: resource, Details: details})
 }
 
-// writeError maps a conditional write on an existing project.
 func writeError(err error) error {
 	if errors.Is(err, errNotFound) {
 		return apperr.NotFound(msgProjectNotFound)
