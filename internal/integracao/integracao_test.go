@@ -93,6 +93,14 @@ func criarTabela(ctx context.Context) error {
 	return err
 }
 
+// criarCursos cadastra os cursos que as turmas do teste usam.
+func criarCursos(t *testing.T, nomes ...string) {
+	t.Helper()
+	for _, n := range nomes {
+		esperar(t, admin, "POST", "/cursos", `{"nome":"`+n+`"}`, 201)
+	}
+}
+
 type quem struct{ perfil, email string }
 
 var (
@@ -147,6 +155,7 @@ func id(t *testing.T, body string) string {
 
 func TestFluxoCompleto(t *testing.T) {
 	resetar(t)
+	criarCursos(t, "Engenharia de Software", "Sistemas de Informação")
 	// --- turmas: unicidade por transação ---
 	turmaEng := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 201))
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 409)
@@ -214,6 +223,7 @@ func TestFluxoCompleto(t *testing.T) {
 
 func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 	resetar(t)
+	criarCursos(t, "Engenharia de Software")
 	turma := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2027.1"}`, 201))
 	prog := id(t, esperar(t, admin, "POST", "/programas", `{"cursoId":"`+turma+`"}`, 201))
 	esperar(t, admin, "POST", "/admin/students", `{"turmaId":"`+turma+`","rgms":["555"]}`, 200)
@@ -245,6 +255,53 @@ func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 	if sucesso != 1 {
 		t.Fatalf("o aluno entrou em %d grupos, queria 1", sucesso)
 	}
+}
+
+func TestCursos(t *testing.T) {
+	resetar(t)
+	eng := id(t, esperar(t, admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201))
+	si := id(t, esperar(t, admin, "POST", "/cursos", `{"nome":"Sistemas de Informação"}`, 201))
+	// nome repetido, inclusive com outra caixa
+	esperar(t, admin, "POST", "/cursos", `{"nome":"engenharia de software"}`, 409)
+
+	// a turma só aceita curso cadastrado e grava o nome como ele foi cadastrado
+	esperar(t, admin, "POST", "/turmas", `{"nome":"Medicina","turno":"NOITE","periodo":"2026.2"}`, 400)
+	t1 := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"ENGENHARIA DE SOFTWARE","turno":"NOITE","periodo":"2026.2"}`, 201))
+	t2 := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2026.2"}`, 201))
+	if body := esperar(t, admin, "GET", "/turmas", "", 200); strings.Contains(body, "ENGENHARIA") {
+		t.Fatalf("a turma devia guardar o nome do curso cadastrado: %s", body)
+	}
+
+	// curso com turmas não sai
+	esperar(t, admin, "DELETE", "/cursos/"+eng, "", 409)
+
+	// renomear leva as turmas junto, nome e trava
+	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"Sistemas de Informação"}`, 409)
+	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"Engenharia de Computação"}`, 200)
+	body := esperar(t, admin, "GET", "/turmas", "", 200)
+	if strings.Count(body, `"nome":"Engenharia de Computação"`) != 2 || strings.Contains(body, "de Software") {
+		t.Fatalf("as turmas deviam ter o novo nome do curso: %s", body)
+	}
+	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2027.1"}`, 400)
+	// a trava de turma acompanhou o nome: repetir a turma renomeada é conflito
+	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Computação","turno":"NOITE","periodo":"2026.2"}`, 409)
+	// o nome antigo ficou livre para outro curso
+	esperar(t, admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201)
+
+	// só a caixa muda: o nome continua o mesmo para a trava
+	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"engenharia de computação"}`, 200)
+	if body := esperar(t, admin, "GET", "/cursos", "", 200); !strings.Contains(body, `"nome":"engenharia de computação"`) {
+		t.Fatalf("o curso devia ter o novo nome: %s", body)
+	}
+	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Computação","turno":"NOITE","periodo":"2026.2"}`, 409)
+
+	// sem turmas o curso sai, e o nome volta a ser inválido
+	esperar(t, admin, "DELETE", "/turmas/"+t1, "", 200)
+	esperar(t, admin, "DELETE", "/turmas/"+t2, "", 200)
+	esperar(t, admin, "DELETE", "/cursos/"+eng, "", 200)
+	esperar(t, admin, "DELETE", "/cursos/"+eng, "", 404)
+	esperar(t, admin, "POST", "/turmas", `{"nome":"engenharia de computação","turno":"NOITE","periodo":"2026.2"}`, 400)
+	esperar(t, admin, "DELETE", "/cursos/"+si, "", 200)
 }
 
 func TestAtividade(t *testing.T) {

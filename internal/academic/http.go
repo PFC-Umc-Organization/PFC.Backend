@@ -12,6 +12,11 @@ type handlers struct{ svc *Service }
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
+	r.Handle("POST", "/cursos", admin("curso.criado", h.createCourse))
+	r.Handle("GET", "/cursos", h.listCourses)
+	r.Handle("PUT", "/cursos/:cursoId", admin("curso.atualizado", h.updateCourse))
+	r.Handle("DELETE", "/cursos/:cursoId", admin("curso.removido", h.deleteCourse))
+
 	r.Handle("POST", "/turmas", admin("turma.criada", h.createCohort))
 	r.Handle("GET", "/turmas", h.listCohorts)
 	r.Handle("PUT", "/turmas/:turmaId", admin("turma.atualizada", h.updateCohort))
@@ -33,6 +38,32 @@ func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
 		Message:     msgAdminOnly,
 		AuditAction: auditAction,
 	}, h)
+}
+
+func (h handlers) createCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in CourseInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	c, err := h.svc.CreateCourse(ctx, in)
+	return httpapi.Reply(201, c, err)
+}
+
+func (h handlers) listCourses(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
+	courses, err := h.svc.ListCourses(ctx)
+	return httpapi.Reply(200, courses, err)
+}
+
+func (h handlers) updateCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in CourseInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	return httpapi.Message("curso atualizado", h.svc.UpdateCourse(ctx, r.Param("cursoId"), in))
+}
+
+func (h handlers) deleteCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	return httpapi.Message("curso removido", h.svc.DeleteCourse(ctx, r.Param("cursoId")))
 }
 
 func (h handlers) createCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

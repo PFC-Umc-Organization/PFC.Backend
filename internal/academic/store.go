@@ -2,6 +2,7 @@ package academic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,22 +14,32 @@ import (
 
 // Items (single table):
 //
+//	course          PK=COURSE#<id>                        SK=PROFILE      GSI1PK=COURSES     GSI1SK=COURSE#<id>  nome
+//	course name     PK=CURSO_NOME#<name, lower case>      SK=CURSO_NOME   cursoId, nome
 //	cohort          PK=CURSO#<id>                         SK=PROFILE      GSI1PK=TURMAS      GSI1SK=CURSO#<id>
 //	cohort lock     PK=TURMA_UNICA#<course>#<shift>#<term> SK=TURMA_UNICA  cursoId
 //	cohort program  PK=CURSO#<id>                         SK=PROGRAMA     programaId
 //	program         PK=PROGRAM#<id>                       SK=PROFILE      GSI1PK=PROGRAMAS   GSI1SK=PROGRAM#<id>  cursoId
 //	enrollment      PK=STUDENT#<rgm>                      SK=PROFILE      GSI1PK=MATRICULAS  GSI1SK=STUDENT#<rgm> status, turmaId
 //
+// A cohort keeps its course's name (nome); creating or moving a cohort checks,
+// in the same transaction, that the course name lock exists. The course name
+// lock rejects a second course with the same name.
+//
 // The lock and the cohort-program link exist so that a transaction rejects
 // a second cohort with the same course/shift/term and a second program per
 // cohort. The Pre Sign-up Lambda reads the enrollment item by key, so its
 // PK and SK cannot change.
 const (
+	coursePrefix     = "COURSE#"
+	courseNamePrefix = "CURSO_NOME#"
+	courseNameSK     = "CURSO_NOME"
 	cohortPrefix     = "CURSO#"
 	programPrefix    = "PROGRAM#"
 	enrollmentPrefix = "STUDENT#"
 	profileSK        = "PROFILE"
 
+	coursesPartition     = "COURSES"
 	cohortsPartition     = "TURMAS"
 	programsPartition    = "PROGRAMAS"
 	enrollmentsPartition = "MATRICULAS"
@@ -41,6 +52,17 @@ type DynamoStore struct {
 }
 
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
+
+// maxTransactionItems is DynamoDB's TransactWriteItems limit.
+const maxTransactionItems = 100
+
+type courseItem struct {
+	PK     string `dynamodbav:"PK"`
+	SK     string `dynamodbav:"SK"`
+	GSI1PK string `dynamodbav:"GSI1PK"`
+	GSI1SK string `dynamodbav:"GSI1SK"`
+	Name   string `dynamodbav:"nome"`
+}
 
 type cohortItem struct {
 	PK     string `dynamodbav:"PK"`
@@ -104,6 +126,124 @@ const (
 	ownedByProgram = "attribute_not_exists(PK) OR programaId = :id"
 )
 
+func (it courseItem) course() Course {
+	return Course{ID: strings.TrimPrefix(it.PK, coursePrefix), Name: it.Name}
+}
+
+func courseKey(id string) dynamo.Item { return dynamo.Key(coursePrefix+id, profileSK) }
+
+// courseNameKey is the uniqueness lock of a course name, ignoring case.
+func courseNameKey(name string) dynamo.Item {
+	return dynamo.Key(courseNamePrefix+strings.ToLower(name), courseNameSK)
+}
+
+func ownedCourseName(c Course) dynamo.Item {
+	lock := courseNameKey(c.Name)
+	lock["cursoId"] = dynamo.S(c.ID)
+	lock["nome"] = dynamo.S(c.Name)
+	return lock
+}
+
+func (s *DynamoStore) CreateCourse(ctx context.Context, c Course) error {
+	item, err := attributevalue.MarshalMap(courseItem{
+		PK: coursePrefix + c.ID, SK: profileSK, GSI1PK: coursesPartition, GSI1SK: coursePrefix + c.ID, Name: c.Name,
+	})
+	if err != nil {
+		return err
+	}
+	err = s.table.Transact(ctx,
+		s.table.Put(item, absent, nil),
+		s.table.Put(ownedCourseName(c), absent, nil),
+	)
+	if dynamo.FailedAt(err, 1) {
+		return errDuplicate
+	}
+	return err
+}
+
+func (s *DynamoStore) GetCourse(ctx context.Context, id string) (Course, bool, error) {
+	it, found, err := dynamo.Get[courseItem](ctx, s.table, courseKey(id))
+	return it.course(), found, err
+}
+
+func (s *DynamoStore) ListCourses(ctx context.Context) ([]Course, error) {
+	items, err := dynamo.QueryIndex[courseItem](ctx, s.table, coursesPartition)
+	return mapItems(items, courseItem.course), err
+}
+
+func (s *DynamoStore) CourseByName(ctx context.Context, name string) (Course, bool, error) {
+	lock, found, err := dynamo.Get[struct {
+		ID   string `dynamodbav:"cursoId"`
+		Name string `dynamodbav:"nome"`
+	}](ctx, s.table, courseNameKey(name), "cursoId", "nome")
+	return Course{ID: lock.ID, Name: lock.Name}, found, err
+}
+
+// UpdateCourse renames the course, its name lock and every cohort that carries
+// the name (with their locks) in one transaction, so the course and its
+// cohorts never disagree. A transaction holds 100 items at most; each cohort
+// takes three.
+func (s *DynamoStore) UpdateCourse(ctx context.Context, current, next Course, cohorts []Cohort) error {
+	if 3+3*len(cohorts) > maxTransactionItems {
+		return errTooMany
+	}
+	owner := dynamo.Item{":id": dynamo.S(current.ID)}
+	ops := []types.TransactWriteItem{
+		s.table.Update(courseKey(current.ID), "SET nome = :n", "nome = :old",
+			dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(current.Name)}),
+	}
+	// Only the case changed: the lock key is the same, so it is updated in
+	// place (a transaction cannot delete and put one item).
+	sameLock := strings.EqualFold(current.Name, next.Name)
+	if sameLock {
+		ops = append(ops, s.table.Update(courseNameKey(current.Name), "SET nome = :n", "cursoId = :id",
+			dynamo.Item{":n": dynamo.S(next.Name), ":id": dynamo.S(current.ID)}))
+	} else {
+		ops = append(ops,
+			s.table.Delete(courseNameKey(current.Name), "cursoId = :id", owner),
+			s.table.Put(ownedCourseName(next), absent, nil))
+	}
+	cohortsStart := len(ops)
+	for _, c := range cohorts {
+		moved := c
+		moved.Course = next.Name
+		ops = append(ops,
+			s.table.Update(cohortKey(c.ID), "SET nome = :n", "nome = :old",
+				dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(c.Course)}),
+			s.table.Delete(cohortLock(c), ownedByCohort, dynamo.Item{":id": dynamo.S(c.ID)}),
+			s.table.Put(ownedLock(moved), absent, nil),
+		)
+	}
+
+	err := s.table.Transact(ctx, ops...)
+	var rejected *dynamo.ConditionError
+	if !errors.As(err, &rejected) {
+		return err
+	}
+	for _, i := range rejected.Failed {
+		newCourseLock := !sameLock && i == 2
+		newCohortLock := i >= cohortsStart && (i-cohortsStart)%3 == 2
+		if newCourseLock || newCohortLock {
+			return errDuplicate
+		}
+	}
+	return errStale
+}
+
+func (s *DynamoStore) DeleteCourse(ctx context.Context, c Course) error {
+	err := s.table.Transact(ctx,
+		s.table.Delete(courseKey(c.ID), present, nil),
+		s.table.Delete(courseNameKey(c.Name), "cursoId = :id", dynamo.Item{":id": dynamo.S(c.ID)}),
+	)
+	switch {
+	case dynamo.FailedAt(err, 0):
+		return errNotFound
+	case dynamo.FailedAt(err, 1):
+		return errStale
+	}
+	return err
+}
+
 func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	item, err := attributevalue.MarshalMap(cohortItem{
 		PK: cohortPrefix + c.ID, SK: profileSK, GSI1PK: cohortsPartition, GSI1SK: cohortPrefix + c.ID,
@@ -115,8 +255,12 @@ func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	err = s.table.Transact(ctx,
 		s.table.Put(item, absent, nil),
 		s.table.Put(ownedLock(c), absent, nil),
+		s.table.Check(courseNameKey(c.Course), present, nil),
 	)
-	if dynamo.FailedAt(err, 1) {
+	switch {
+	case dynamo.FailedAt(err, 2):
+		return errNoCourse
+	case dynamo.FailedAt(err, 1):
 		return errDuplicate
 	}
 	return err
@@ -149,8 +293,11 @@ func (s *DynamoStore) UpdateCohort(ctx context.Context, current, next Cohort) er
 			}),
 		s.table.Delete(cohortLock(current), ownedByCohort, dynamo.Item{":id": dynamo.S(current.ID)}),
 		s.table.Put(ownedLock(next), absent, nil),
+		s.table.Check(courseNameKey(next.Course), present, nil),
 	)
 	switch {
+	case dynamo.FailedAt(err, 3):
+		return errNoCourse
 	case dynamo.FailedAt(err, 2):
 		return errDuplicate
 	case dynamo.FailedAt(err, 0), dynamo.FailedAt(err, 1):

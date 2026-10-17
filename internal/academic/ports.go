@@ -12,9 +12,21 @@ var (
 	errStale     = errors.New("item changed since it was read")
 	errInUse     = errors.New("item still referenced")
 	errNoCohort  = errors.New("cohort does not exist")
+	errNoCourse  = errors.New("course does not exist")
+	errTooMany   = errors.New("too many cohorts for one transaction")
 )
 
 type Store interface {
+	CreateCourse(ctx context.Context, c Course) error
+	GetCourse(ctx context.Context, id string) (Course, bool, error)
+	ListCourses(ctx context.Context) ([]Course, error)
+	// CourseByName ignores case and returns the course with its stored name.
+	CourseByName(ctx context.Context, name string) (Course, bool, error)
+	// UpdateCourse renames the course and, in the same transaction, the
+	// cohorts that carry its name (errTooMany when they do not fit).
+	UpdateCourse(ctx context.Context, current, next Course, cohorts []Cohort) error
+	DeleteCourse(ctx context.Context, c Course) error
+
 	CreateCohort(ctx context.Context, c Cohort) error
 	GetCohort(ctx context.Context, id string) (Cohort, bool, error)
 	ListCohorts(ctx context.Context) ([]Cohort, error)

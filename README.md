@@ -18,7 +18,7 @@ internal/
 │   ├── actor/             # quem chama (claims do Cognito), perfis e RGM
 │   └── audit/             # eventos de auditoria no CloudWatch
 ├── identity/              # módulo: login, cadastro, confirmação e contas (Cognito)
-├── academic/              # módulo: turmas, programa da turma e allowlist de RGMs
+├── academic/              # módulo: cursos, turmas, programa da turma e allowlist de RGMs
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
 ├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos
 ├── references/            # módulo: referências bibliográficas (OpenAlex, Crossref, ABNT)
@@ -63,6 +63,8 @@ em rota nenhuma.
 
 | Item | PK | SK | GSI1PK | GSI1SK |
 | ---- | -- | -- | ------ | ------ |
+| Curso | `COURSE#<id>` | `PROFILE` | `COURSES` | `COURSE#<id>` |
+| Trava do nome do curso | `CURSO_NOME#<nome em minúsculas>` | `CURSO_NOME` | — | — |
 | Turma | `CURSO#<id>` | `PROFILE` | `TURMAS` | `CURSO#<id>` |
 | Trava de turma | `TURMA_UNICA#<curso>#<turno>#<período>` | `TURMA_UNICA` | — | — |
 | Programa da turma | `CURSO#<id>` | `PROGRAMA` | — | — |
@@ -79,6 +81,8 @@ As regras de unicidade são garantidas pelo próprio DynamoDB, numa
 `TransactWriteItems` com `attribute_not_exists`, e não por "ler e depois
 gravar":
 
+- **um curso por nome** (sem diferenciar maiúsculas) — a trava do nome é gravada junto com o curso;
+  renomear troca a trava e as turmas do curso (nome e trava delas) na mesma transação (máx. 32 turmas);
 - **uma turma por curso+turno+período** — a trava é gravada junto com a turma;
 - **um programa por turma** — o item "programa da turma" é gravado junto com o
   programa (e responde "qual o programa desta turma?" com um `GetItem`);
@@ -96,6 +100,10 @@ ver [Migração](#migração).
 | POST   | `/auth/login`                            | Autentica via Cognito, devolve `{ usuario, token }`                | pública |
 | POST   | `/auth/registrar`                        | Cadastro self-service de aluno. `perfil` do corpo é ignorado — sempre ALUNO | pública |
 | GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra ORIENTADOR/ADMIN |
+| GET    | `/cursos`                                | Lista os cursos cadastrados                                         | qualquer autenticado |
+| POST   | `/cursos`                                | Cadastra curso (`{ nome }`); 409 se o nome já existe                | ADMIN |
+| PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas do curso passam a ter o nome novo               | ADMIN |
+| DELETE | `/cursos/:cursoId`                       | Remove; 409 se o curso tem turmas                                   | ADMIN |
 | POST   | `/admin/students`                        | Grava RGMs na allowlist (`STUDENT#<rgm>` ACTIVE). RGM com algo além de dígitos volta em `falhas` | ADMIN |
 | DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | ADMIN |
 | POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | ADMIN |

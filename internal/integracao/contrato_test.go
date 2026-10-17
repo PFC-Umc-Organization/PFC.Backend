@@ -152,6 +152,20 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"Nova@UMC.br","perfil":"ORIENTADOR"}`, 201)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"nova@umc.br","perfil":"ADMIN"}`, 409)
 
+	// cursos
+	tr.expect(aluno("111"), "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 403)
+	tr.expect(admin, "POST", "/cursos", `{"nome":"  "}`, 400)
+	tr.expect(admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201)
+	tr.expect(admin, "POST", "/cursos", `{"nome":" engenharia  de software "}`, 409)
+	tr.expect(admin, "POST", "/cursos", `{"nome":"Sistemas de Informação"}`, 201)
+	direito := id(t, tr.expect(admin, "POST", "/cursos", `{"nome":"Direito"}`, 201))
+	tr.expect(aluno("111"), "GET", "/cursos", "", 200)
+	tr.expect(admin, "PUT", "/cursos/"+direito, `{"nome":"Engenharia de Software"}`, 409)
+	tr.expect(admin, "PUT", "/cursos/inexistente", `{"nome":"Direito Civil"}`, 404)
+	tr.expect(aluno("111"), "PUT", "/cursos/"+direito, `{"nome":"Direito Civil"}`, 403)
+	tr.expect(admin, "PUT", "/cursos/"+direito, `{"nome":"Direito Civil"}`, 200)
+	tr.expect(aluno("111"), "DELETE", "/cursos/"+direito, "", 403)
+
 	// turmas
 	tr.expect(aluno("111"), "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 403)
 	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software"}`, 400)
@@ -168,6 +182,15 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("111"), "DELETE", "/turmas/"+extra, "", 403)
 	tr.expect(admin, "DELETE", "/turmas/"+extra, "", 200)
 	tr.expect(admin, "DELETE", "/turmas/"+extra, "", 404)
+
+	// curso com turma não sai; depois que a turma sai, sai
+	direitoTurma := id(t, tr.expect(admin, "POST", "/turmas", `{"nome":"Direito Civil","turno":"NOITE","periodo":"2026.2"}`, 201))
+	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 409)
+	tr.expect(admin, "PUT", "/cursos/"+direito, `{"nome":"Direito Penal"}`, 200)
+	tr.expect(admin, "GET", "/turmas", "", 200)
+	tr.expect(admin, "DELETE", "/turmas/"+direitoTurma, "", 200)
+	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 200)
+	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 404)
 
 	// matrículas
 	tr.expect(aluno("111"), "POST", "/admin/students", `{"turmaId":"`+eng+`","rgms":["111"]}`, 403)

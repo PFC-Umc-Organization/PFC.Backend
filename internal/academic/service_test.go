@@ -15,10 +15,46 @@ import (
 
 type fakeStore struct {
 	Store
+	courses  map[string]Course
 	cohorts  map[string]Cohort
 	programs map[string]Program
 	err      error
 	written  [][]string
+	// cohorts handed to UpdateCourse, to check they follow the rename
+	renamed []Cohort
+}
+
+func (f *fakeStore) CourseByName(_ context.Context, name string) (Course, bool, error) {
+	for _, c := range f.courses {
+		if strings.EqualFold(c.Name, name) {
+			return c, true, nil
+		}
+	}
+	return Course{}, false, nil
+}
+func (f *fakeStore) GetCourse(_ context.Context, id string) (Course, bool, error) {
+	c, ok := f.courses[id]
+	return c, ok, nil
+}
+func (f *fakeStore) ListCourses(context.Context) ([]Course, error) {
+	var out []Course
+	for _, c := range f.courses {
+		out = append(out, c)
+	}
+	return out, nil
+}
+func (f *fakeStore) CreateCourse(context.Context, Course) error { return f.err }
+func (f *fakeStore) UpdateCourse(_ context.Context, _, _ Course, cohorts []Cohort) error {
+	f.renamed = cohorts
+	return f.err
+}
+func (f *fakeStore) DeleteCourse(context.Context, Course) error { return f.err }
+func (f *fakeStore) ListCohorts(context.Context) ([]Cohort, error) {
+	var out []Cohort
+	for _, c := range f.cohorts {
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func (f *fakeStore) GetCohort(_ context.Context, id string) (Cohort, bool, error) {
@@ -65,7 +101,10 @@ func wantErr(t *testing.T, err error, kind apperr.Kind, msg string) {
 	}
 }
 
-var engNight = Cohort{ID: "c1", Course: "Engenharia de Software", Shift: "NOITE", Term: "2026.2"}
+var (
+	engNight  = Cohort{ID: "c1", Course: "Engenharia de Software", Shift: "NOITE", Term: "2026.2"}
+	engCourse = map[string]Course{"k1": {ID: "k1", Name: "Engenharia de Software"}}
+)
 
 func TestCreateCohortValidation(t *testing.T) {
 	svc, _, restore := newTestService(&fakeStore{}, false)
@@ -82,14 +121,129 @@ func TestCreateCohortValidation(t *testing.T) {
 }
 
 func TestCreateCohort(t *testing.T) {
-	svc, buf, restore := newTestService(&fakeStore{}, false)
+	svc, buf, restore := newTestService(&fakeStore{courses: engCourse}, false)
 	defer restore()
-	c, err := svc.CreateCohort(context.Background(), CohortInput{Course: " Engenharia de Software ", Shift: "NOITE", Term: " 2026.2 "})
+	// the cohort takes the registered spelling of the course, whatever was typed
+	c, err := svc.CreateCohort(context.Background(), CohortInput{Course: " engenharia de software ", Shift: "NOITE", Term: " 2026.2 "})
 	if err != nil || c != (Cohort{ID: "id-1", Course: "Engenharia de Software", Shift: "NOITE", Term: "2026.2"}) {
 		t.Fatalf("CreateCohort = %+v, %v", c, err)
 	}
 	if !strings.Contains(buf.String(), `"acao":"turma.criada","resultado":"sucesso"`) {
 		t.Fatalf("audit = %s", buf)
+	}
+}
+
+func TestCreateCohortCourseGone(t *testing.T) {
+	svc, _, restore := newTestService(&fakeStore{courses: engCourse, err: errNoCourse}, false)
+	defer restore()
+	_, err := svc.CreateCohort(context.Background(), CohortInput{Course: "Engenharia de Software", Shift: "NOITE", Term: "2026.2"})
+	wantErr(t, err, apperr.KindInvalid, msgInvalidCourse)
+}
+
+func TestCourseValidation(t *testing.T) {
+	svc, _, restore := newTestService(&fakeStore{}, false)
+	defer restore()
+	_, err := svc.CreateCourse(context.Background(), CourseInput{Name: "  "})
+	wantErr(t, err, apperr.KindInvalid, msgCourseNameRequired)
+	_, err = svc.CreateCourse(context.Background(), CourseInput{Name: strings.Repeat("a", maxCourseNameLen+1)})
+	wantErr(t, err, apperr.KindInvalid, msgCourseNameTooLong)
+}
+
+func TestCreateCourse(t *testing.T) {
+	svc, buf, restore := newTestService(&fakeStore{}, false)
+	defer restore()
+	c, err := svc.CreateCourse(context.Background(), CourseInput{Name: "  Ciência   da Computação "})
+	if err != nil || c != (Course{ID: "id-1", Name: "Ciência da Computação"}) {
+		t.Fatalf("CreateCourse = %+v, %v", c, err)
+	}
+	if !strings.Contains(buf.String(), `"acao":"curso.criado","resultado":"sucesso"`) {
+		t.Fatalf("audit = %s", buf)
+	}
+
+	svc, _, restore = newTestService(&fakeStore{err: errDuplicate}, false)
+	defer restore()
+	_, err = svc.CreateCourse(context.Background(), CourseInput{Name: "X"})
+	wantErr(t, err, apperr.KindConflict, msgCourseDuplicate)
+}
+
+func TestUpdateCourseCarriesCohorts(t *testing.T) {
+	store := &fakeStore{courses: engCourse, cohorts: map[string]Cohort{
+		"c1": engNight,
+		"c2": {ID: "c2", Course: "Outro", Shift: "NOITE", Term: "2026.2"},
+	}}
+	svc, _, restore := newTestService(store, false)
+	defer restore()
+
+	if err := svc.UpdateCourse(context.Background(), "k1", CourseInput{Name: "Engenharia de Software e IA"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.renamed) != 1 || store.renamed[0].ID != "c1" {
+		t.Fatalf("cohorts handed to the store = %+v, want only c1", store.renamed)
+	}
+}
+
+func TestUpdateCourseErrors(t *testing.T) {
+	ctx := context.Background()
+	in := CourseInput{Name: "Novo nome"}
+	cases := []struct {
+		storeErr error
+		kind     apperr.Kind
+		msg      string
+	}{
+		{errDuplicate, apperr.KindConflict, msgCourseDuplicate},
+		{errStale, apperr.KindConflict, msgCourseChanged},
+		{errTooMany, apperr.KindConflict, msgCourseTooManyCohorts},
+		{errors.New("boom"), apperr.KindInternal, "falha ao atualizar curso"},
+	}
+	for _, c := range cases {
+		svc, _, restore := newTestService(&fakeStore{courses: engCourse, err: c.storeErr}, false)
+		wantErr(t, svc.UpdateCourse(ctx, "k1", in), c.kind, c.msg)
+		restore()
+	}
+
+	svc, _, restore := newTestService(&fakeStore{courses: engCourse}, false)
+	defer restore()
+	wantErr(t, svc.UpdateCourse(ctx, "x", in), apperr.KindNotFound, msgCourseUnknown)
+	wantErr(t, svc.UpdateCourse(ctx, "k1", CourseInput{}), apperr.KindInvalid, msgCourseNameRequired)
+}
+
+func TestUpdateCourseUnchangedSkipsStore(t *testing.T) {
+	store := &fakeStore{courses: engCourse, err: errors.New("must not be called")}
+	svc, _, restore := newTestService(store, false)
+	defer restore()
+	if err := svc.UpdateCourse(context.Background(), "k1", CourseInput{Name: " Engenharia de Software "}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteCourse(t *testing.T) {
+	ctx := context.Background()
+
+	svc, buf, restore := newTestService(&fakeStore{courses: engCourse, cohorts: map[string]Cohort{"c1": engNight}, err: errors.New("must not be called")}, false)
+	wantErr(t, svc.DeleteCourse(ctx, "k1"), apperr.KindConflict, msgCourseHasCohorts)
+	if !strings.Contains(buf.String(), `"motivo":"curso possui turmas"`) {
+		t.Fatalf("audit = %s", buf)
+	}
+	restore()
+
+	svc, _, restore = newTestService(&fakeStore{courses: engCourse}, false)
+	if err := svc.DeleteCourse(ctx, "k1"); err != nil {
+		t.Fatal(err)
+	}
+	wantErr(t, svc.DeleteCourse(ctx, "x"), apperr.KindNotFound, msgCourseUnknown)
+	restore()
+}
+
+func TestListCoursesSorted(t *testing.T) {
+	store := &fakeStore{courses: map[string]Course{
+		"a": {ID: "a", Name: "sistemas de Informação"},
+		"b": {ID: "b", Name: "Engenharia de Software"},
+	}}
+	svc, _, restore := newTestService(store, false)
+	defer restore()
+	courses, err := svc.ListCourses(context.Background())
+	if err != nil || len(courses) != 2 || courses[0].ID != "b" {
+		t.Fatalf("ListCourses = %+v, %v", courses, err)
 	}
 }
 
@@ -105,7 +259,7 @@ func TestCohortStoreErrors(t *testing.T) {
 		{errors.New("boom"), apperr.KindInternal, "falha ao atualizar turma"},
 	}
 	for _, c := range cases {
-		svc, _, restore := newTestService(&fakeStore{cohorts: map[string]Cohort{"c1": engNight}, err: c.storeErr}, false)
+		svc, _, restore := newTestService(&fakeStore{courses: engCourse, cohorts: map[string]Cohort{"c1": engNight}, err: c.storeErr}, false)
 		wantErr(t, svc.UpdateCohort(context.Background(), "c1", in), c.kind, c.msg)
 		restore()
 	}

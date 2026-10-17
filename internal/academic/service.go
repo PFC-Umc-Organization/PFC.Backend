@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -26,16 +27,147 @@ func NewService(store Store, projects Projects) *Service {
 	return &Service{store: store, projects: projects, newID: uuid.NewString}
 }
 
+func courseResource(id string) *audit.Resource  { return &audit.Resource{Type: "curso", ID: id} }
 func cohortResource(id string) *audit.Resource  { return &audit.Resource{Type: "turma", ID: id} }
 func programResource(id string) *audit.Resource { return &audit.Resource{Type: "programa", ID: id} }
+
+// registeredCourse resolves the course a cohort names, ignoring case; a name
+// that is not a registered course is a validation error.
+func (s *Service) registeredCourse(ctx context.Context, name string) (Course, error) {
+	course, found, err := s.store.CourseByName(ctx, name)
+	if err != nil {
+		return Course{}, apperr.Internal("falha ao validar curso", err)
+	}
+	if !found {
+		return Course{}, apperr.Invalid(msgInvalidCourse)
+	}
+	return course, nil
+}
+
+// cohortsOfCourse lists the cohorts that carry the course's name.
+func (s *Service) cohortsOfCourse(ctx context.Context, name string) ([]Cohort, error) {
+	all, err := s.store.ListCohorts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var own []Cohort
+	for _, c := range all {
+		if c.Course == name {
+			own = append(own, c)
+		}
+	}
+	return own, nil
+}
+
+func (s *Service) CreateCourse(ctx context.Context, in CourseInput) (Course, error) {
+	in = in.normalized()
+	if msg := in.validate(); msg != "" {
+		return Course{}, apperr.Invalid(msg)
+	}
+	c := Course{ID: s.newID(), Name: in.Name}
+	err := s.store.CreateCourse(ctx, c)
+	if errors.Is(err, errDuplicate) {
+		audit.Record(ctx, audit.Event{Action: "curso.criado", Result: audit.Failure, Reason: "curso já existe", Details: map[string]any{"nome": c.Name}})
+		return Course{}, apperr.Conflict(msgCourseDuplicate)
+	}
+	if err != nil {
+		return Course{}, apperr.Internal("falha ao criar curso", err)
+	}
+	audit.Record(ctx, audit.Event{Action: "curso.criado", Result: audit.Success, Resource: courseResource(c.ID), Details: map[string]any{"nome": c.Name}})
+	return c, nil
+}
+
+func (s *Service) ListCourses(ctx context.Context) ([]Course, error) {
+	courses, err := s.store.ListCourses(ctx)
+	if err != nil {
+		return nil, apperr.Internal("falha ao listar cursos", err)
+	}
+	slices.SortStableFunc(courses, func(a, b Course) int {
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+	return courses, nil
+}
+
+// UpdateCourse renames the course; its cohorts follow, since they carry the
+// course name.
+func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) error {
+	in = in.normalized()
+	if msg := in.validate(); msg != "" {
+		return apperr.Invalid(msg)
+	}
+	current, found, err := s.store.GetCourse(ctx, id)
+	if err != nil {
+		return apperr.Internal("falha ao atualizar curso", err)
+	}
+	if !found {
+		return apperr.NotFound(msgCourseUnknown)
+	}
+	next := Course{ID: id, Name: in.Name}
+	if current.Name != next.Name {
+		cohorts, err := s.cohortsOfCourse(ctx, current.Name)
+		if err != nil {
+			return apperr.Internal("falha ao atualizar curso", err)
+		}
+		switch err := s.store.UpdateCourse(ctx, current, next, cohorts); {
+		case errors.Is(err, errDuplicate):
+			audit.Record(ctx, audit.Event{Action: "curso.atualizado", Result: audit.Failure, Reason: "curso já existe",
+				Resource: courseResource(id), Details: map[string]any{"nome": next.Name}})
+			return apperr.Conflict(msgCourseDuplicate)
+		case errors.Is(err, errStale):
+			return apperr.Conflict(msgCourseChanged)
+		case errors.Is(err, errTooMany):
+			return apperr.Conflict(msgCourseTooManyCohorts)
+		case err != nil:
+			return apperr.Internal("falha ao atualizar curso", err)
+		}
+	}
+	audit.Record(ctx, audit.Event{Action: "curso.atualizado", Result: audit.Success, Resource: courseResource(id),
+		Details: map[string]any{"nome": next.Name, "nomeAnterior": current.Name}})
+	return nil
+}
+
+func (s *Service) DeleteCourse(ctx context.Context, id string) error {
+	c, found, err := s.store.GetCourse(ctx, id)
+	if err != nil {
+		return apperr.Internal("falha ao remover curso", err)
+	}
+	if !found {
+		return apperr.NotFound(msgCourseUnknown)
+	}
+	cohorts, err := s.cohortsOfCourse(ctx, c.Name)
+	if err != nil {
+		return apperr.Internal("falha ao remover curso", err)
+	}
+	if len(cohorts) > 0 {
+		audit.Record(ctx, audit.Event{Action: "curso.removido", Result: audit.Failure, Reason: "curso possui turmas", Resource: courseResource(id)})
+		return apperr.Conflict(msgCourseHasCohorts)
+	}
+	switch err := s.store.DeleteCourse(ctx, c); {
+	case errors.Is(err, errNotFound):
+		return apperr.NotFound(msgCourseUnknown)
+	case errors.Is(err, errStale):
+		return apperr.Conflict(msgCourseChanged)
+	case err != nil:
+		return apperr.Internal("falha ao remover curso", err)
+	}
+	audit.Record(ctx, audit.Event{Action: "curso.removido", Result: audit.Success, Resource: courseResource(id)})
+	return nil
+}
 
 func (s *Service) CreateCohort(ctx context.Context, in CohortInput) (Cohort, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
 		return Cohort{}, apperr.Invalid(msg)
 	}
-	c := Cohort{ID: s.newID(), Course: in.Course, Shift: in.Shift, Term: in.Term}
-	err := s.store.CreateCohort(ctx, c)
+	course, err := s.registeredCourse(ctx, in.Course)
+	if err != nil {
+		return Cohort{}, err
+	}
+	c := Cohort{ID: s.newID(), Course: course.Name, Shift: in.Shift, Term: in.Term}
+	err = s.store.CreateCohort(ctx, c)
+	if errors.Is(err, errNoCourse) {
+		return Cohort{}, apperr.Invalid(msgInvalidCourse)
+	}
 	if errors.Is(err, errDuplicate) {
 		audit.Record(ctx, audit.Event{Action: "turma.criada", Result: audit.Failure, Reason: "turma já existe", Details: c.details()})
 		return Cohort{}, apperr.Conflict(msgCohortDuplicate)
@@ -67,9 +199,18 @@ func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) e
 	if !found {
 		return apperr.NotFound(msgCohortNotFound)
 	}
+	if !current.sameAs(in) {
+		course, err := s.registeredCourse(ctx, in.Course)
+		if err != nil {
+			return err
+		}
+		in.Course = course.Name
+	}
 	next := Cohort{ID: id, Course: in.Course, Shift: in.Shift, Term: in.Term}
 	if !current.sameAs(in) {
 		switch err := s.store.UpdateCohort(ctx, current, next); {
+		case errors.Is(err, errNoCourse):
+			return apperr.Invalid(msgInvalidCourse)
 		case errors.Is(err, errDuplicate):
 			audit.Record(ctx, audit.Event{Action: "turma.atualizada", Result: audit.Failure, Reason: "turma já existe",
 				Resource: cohortResource(id), Details: next.details()})
