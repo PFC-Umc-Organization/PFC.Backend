@@ -31,8 +31,7 @@ internal/
 │   └── http.go            # rotas /turmas, /programas, /admin/students
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
 │   └── (mesmos arquivos)  # store.go: PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
-├── atividade/              # atividades, campos de entrega (formulário) e entregas dos grupos
-│   ├── models.go / validacao.go / dynamo.go / handler.go
+├── deliveries/            # módulo: atividades, campos de entrega (formulário) e entregas dos grupos
 └── referencia/             # referências bibliográficas (APIs externas OpenAlex + Crossref)
     ├── openalex.go          # busca de artigos por tema
     ├── crossref.go          # metadados completos de uma obra pelo DOI

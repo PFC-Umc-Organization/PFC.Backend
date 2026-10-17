@@ -162,4 +162,11 @@ func TestRestrict(t *testing.T) {
 	if status, _, _ := call(t, rt, as("ALUNO", "/audited")); status != 403 || !strings.Contains(buf.String(), `"acao":"turma.criada"`) {
 		t.Fatalf("audited denial: %d, audit %q", status, buf.String())
 	}
+
+	buf.Reset()
+	policy.AuditResource = func(r *Request) *audit.Resource { return &audit.Resource{Type: "turma", ID: r.Param("id")} }
+	rt.Handle("GET", "/turmas/:id", Restrict(policy, ok))
+	if status, _, _ := call(t, rt, as("ALUNO", "/turmas/t9")); status != 403 || !strings.Contains(buf.String(), `"recurso":{"tipo":"turma","id":"t9"}`) {
+		t.Fatalf("resource denial: %d, audit %q", status, buf.String())
+	}
 }

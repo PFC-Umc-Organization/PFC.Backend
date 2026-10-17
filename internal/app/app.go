@@ -10,9 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/atividade"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/common"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/deliveries"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/config"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
@@ -51,12 +51,12 @@ func New(d Deps) *httpapi.Router {
 	groupsSvc := groups.NewService(groupsStore, academicSvc, usuario.Accounts{})
 	auth.UseAcademic(academicSvc)
 	usuario.UseAcademic(academicSvc)
-	atividade.UseGroups(groupsSvc)
 	referencia.UseGroups(groupsSvc)
 
 	r := httpapi.NewRouter()
 	academic.Routes(r, academicSvc)
 	groups.Routes(r, groupsSvc)
+	deliveries.Routes(r, deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc))
 	legacyRoutes(r)
 	return r
 }
