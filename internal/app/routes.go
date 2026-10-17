@@ -3,7 +3,6 @@ package app
 import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/auth"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
@@ -19,11 +18,4 @@ func legacyRoutes(r *httpapi.Router) {
 	// Usuários (contas do Cognito)
 	r.Handle("GET", "/usuarios", l(usuario.HandleListar))
 	r.Handle("POST", "/admin/usuarios", l(usuario.HandleCriarConta))
-
-	// Referências bibliográficas (OpenAlex + Crossref)
-	r.Handle("GET", "/referencias/busca", l(referencia.HandleBuscar))
-	r.Handle("GET", "/referencias/doi", l(referencia.HandleConsultarDOI))
-	r.Handle("GET", "/projetos/:projetoId/referencias", l(referencia.HandleListar))
-	r.Handle("POST", "/projetos/:projetoId/referencias", l(referencia.HandleAdicionar))
-	r.Handle("DELETE", "/projetos/:projetoId/referencias/:referenciaId", l(referencia.HandleRemover))
 }

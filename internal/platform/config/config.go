@@ -11,6 +11,13 @@ type Config struct {
 	IndexName         string
 	CognitoClientID   string
 	CognitoUserPoolID string
+
+	CrossrefURL string
+	OpenAlexURL string
+	// ContactEmail identifies us to Crossref and OpenAlex, which serve
+	// identified clients first. Optional, like OpenAlexAPIKey.
+	ContactEmail   string
+	OpenAlexAPIKey string
 }
 
 func FromEnv() (Config, error) {
@@ -19,6 +26,10 @@ func FromEnv() (Config, error) {
 		IndexName:         os.Getenv("GSI_NAME"),
 		CognitoClientID:   os.Getenv("COGNITO_CLIENT_ID"),
 		CognitoUserPoolID: os.Getenv("COGNITO_USER_POOL_ID"),
+		CrossrefURL:       envOr("REFERENCIAS_CROSSREF_URL", "https://api.crossref.org"),
+		OpenAlexURL:       envOr("REFERENCIAS_OPENALEX_URL", "https://api.openalex.org"),
+		ContactEmail:      os.Getenv("REFERENCIAS_CONTATO_EMAIL"),
+		OpenAlexAPIKey:    os.Getenv("OPENALEX_API_KEY"),
 	}
 	var missing []string
 	for name, value := range map[string]string{
@@ -36,4 +47,11 @@ func FromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("missing required environment variables: %v", missing)
 	}
 	return c, nil
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
 }

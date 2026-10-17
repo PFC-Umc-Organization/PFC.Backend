@@ -17,7 +17,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/config"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/referencia"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/references"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/usuario"
 )
 
@@ -51,12 +51,17 @@ func New(d Deps) *httpapi.Router {
 	groupsSvc := groups.NewService(groupsStore, academicSvc, usuario.Accounts{})
 	auth.UseAcademic(academicSvc)
 	usuario.UseAcademic(academicSvc)
-	referencia.UseGroups(groupsSvc)
 
 	r := httpapi.NewRouter()
 	academic.Routes(r, academicSvc)
 	groups.Routes(r, groupsSvc)
 	deliveries.Routes(r, deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc))
+	references.Routes(r, references.NewService(references.NewDynamoStore(d.Table), references.NewCatalog(references.CatalogConfig{
+		CrossrefURL:    d.Config.CrossrefURL,
+		OpenAlexURL:    d.Config.OpenAlexURL,
+		ContactEmail:   d.Config.ContactEmail,
+		OpenAlexAPIKey: d.Config.OpenAlexAPIKey,
+	}), groupsSvc))
 	legacyRoutes(r)
 	return r
 }

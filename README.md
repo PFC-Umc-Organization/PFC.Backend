@@ -32,12 +32,9 @@ internal/
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
 │   └── (mesmos arquivos)  # store.go: PK PROJECT#id, GSI1 por programa, vínculo MEMBRO#rgm
 ├── deliveries/            # módulo: atividades, campos de entrega (formulário) e entregas dos grupos
-└── referencia/             # referências bibliográficas (APIs externas OpenAlex + Crossref)
-    ├── openalex.go          # busca de artigos por tema
-    ├── crossref.go          # metadados completos de uma obra pelo DOI
-    ├── abnt.go              # formatação ABNT NBR 6023 (texto e HTML)
-    ├── dynamo.go            # PK PROJECT#id, SK REF#<hash do DOI>
-    └── handler.go           # handlers HTTP: /referencias/*, /projetos/:id/referencias
+└── references/            # módulo: referências bibliográficas
+    ├── catalog.go         # OpenAlex (busca por tema) e Crossref (obra pelo DOI)
+    └── abnt.go            # formatação ABNT NBR 6023 (texto e HTML)
 ```
 
 Cada novo domínio (atividade, material, usuário, etc.) ganha seu próprio
@@ -192,7 +189,7 @@ go mod tidy        # o repo não versiona go.sum
 go test ./...
 
 # contra as APIs reais do Crossref/OpenAlex (precisa de internet)
-REFERENCIAS_INTEGRACAO=1 go test ./internal/referencia -run Integracao -v
+REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
 ```
 
 # ponta a ponta: precisa do DynamoDB Local rodando (porta 8000 por padrão, ver

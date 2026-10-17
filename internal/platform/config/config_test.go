@@ -18,8 +18,14 @@ func TestFromEnv(t *testing.T) {
 
 	t.Setenv("GSI_NAME", "GSI1")
 	t.Setenv("COGNITO_USER_POOL_ID", "pool")
+	t.Setenv("REFERENCIAS_CROSSREF_URL", "")
+	t.Setenv("REFERENCIAS_OPENALEX_URL", "http://openalex.local")
 	c, err := FromEnv()
-	if err != nil || c != (Config{"table", "GSI1", "client", "pool"}) {
+	want := Config{
+		TableName: "table", IndexName: "GSI1", CognitoClientID: "client", CognitoUserPoolID: "pool",
+		CrossrefURL: "https://api.crossref.org", OpenAlexURL: "http://openalex.local",
+	}
+	if err != nil || c != want {
 		t.Fatalf("FromEnv() = %+v, %v", c, err)
 	}
 }
