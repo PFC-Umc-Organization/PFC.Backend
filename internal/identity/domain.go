@@ -46,6 +46,34 @@ type Session struct {
 	Token string      `json:"token"`
 }
 
+// LoginResult is a Session, or — for an account created by an admin, whose
+// temporary password must be replaced on the first login — the challenge the
+// frontend answers through POST /auth/nova-senha.
+type LoginResult struct {
+	User      *SessionUser `json:"usuario,omitempty"`
+	Token     string       `json:"token,omitempty"`
+	Challenge string       `json:"desafio,omitempty"`
+	Session   string       `json:"sessao,omitempty"`
+}
+
+const ChallengeNewPassword = "NOVA_SENHA"
+
+type NewPasswordInput struct {
+	Email    string `json:"email"`
+	Session  string `json:"sessao"`
+	Password string `json:"senha"`
+}
+
+type ForgotPasswordInput struct {
+	Email string `json:"email"`
+}
+
+type ResetPasswordInput struct {
+	Email    string `json:"email"`
+	Code     string `json:"codigo"`
+	Password string `json:"senha"`
+}
+
 type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"senha"`
@@ -165,4 +193,11 @@ const (
 	msgInstitutionalEmail  = "use um e-mail institucional (@umc.br)"
 	msgStaffRole           = "perfil deve ser ORIENTADOR ou ADMIN"
 	msgThrottled           = "muitas tentativas seguidas — aguarde alguns minutos e tente de novo"
+	msgNewPasswordRequired = "informe o e-mail, a sessão e a nova senha"
+	msgResetRequired       = "informe o e-mail, o código e a nova senha"
+	msgWeakPassword        = "a senha precisa ter ao menos 8 caracteres, com letra maiúscula, letra minúscula, número e símbolo"
+	msgSessionExpired      = "a troca de senha expirou — entre de novo com a senha temporária do e-mail"
+	msgWrongCode           = "código incorreto — confira o e-mail e tente de novo"
+	msgExpiredCode         = "código expirado — peça um código novo"
+	msgNoSession           = "sessão inválida — entre de novo"
 )

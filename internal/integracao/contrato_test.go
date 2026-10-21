@@ -152,6 +152,37 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"Nova@UMC.br","perfil":"ORIENTADOR"}`, 201)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"nova@umc.br","perfil":"ADMIN"}`, 409)
 
+	// primeiro acesso de conta criada pelo admin: a senha temporária pede uma nova
+	novaSessao := tr.expect(pub, "POST", "/auth/login", `{"email":"nova@umc.br","senha":"temporaria"}`, 200)
+	var desafio struct {
+		Sessao string `json:"sessao"`
+	}
+	if err := json.Unmarshal([]byte(novaSessao), &desafio); err != nil || desafio.Sessao == "" {
+		t.Fatalf("login com senha temporária devia devolver o desafio: %s", novaSessao)
+	}
+	tr.expect(pub, "POST", "/auth/nova-senha", `{"email":"nova@umc.br","senha":"Nova#1234"}`, 400)
+	tr.expect(pub, "POST", "/auth/nova-senha", `{"email":"nova@umc.br","sessao":"outra","senha":"Nova#1234"}`, 401)
+	tr.expect(pub, "POST", "/auth/nova-senha", `{"email":"nova@umc.br","sessao":"`+desafio.Sessao+`","senha":"curta"}`, 400)
+	tr.expect(pub, "POST", "/auth/nova-senha", `{"email":"nova@umc.br","sessao":"`+desafio.Sessao+`","senha":"Nova#1234"}`, 200)
+	tr.expect(pub, "POST", "/auth/login", `{"email":"nova@umc.br","senha":"Nova#1234"}`, 200)
+
+	// esqueci a senha: a resposta não diz se a conta existe
+	tr.expect(pub, "POST", "/auth/esqueci-senha", `{}`, 400)
+	tr.expect(pub, "POST", "/auth/esqueci-senha", `{"email":"ninguem@umc.br"}`, 200)
+	tr.expect(pub, "POST", "/auth/esqueci-senha", `{"email":"444@alunos.umc.br"}`, 200)
+	tr.expect(pub, "POST", "/auth/esqueci-senha", `{"email":" Prof@UMC.br "}`, 200)
+	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"prof@umc.br","codigo":"123456"}`, 400)
+	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"prof@umc.br","codigo":"000000","senha":"Outra#1234"}`, 400)
+	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"ninguem@umc.br","codigo":"123456","senha":"Outra#1234"}`, 400)
+	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"prof@umc.br","codigo":"123456","senha":"curta"}`, 400)
+	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"prof@umc.br","codigo":"123456","senha":"Outra#1234"}`, 200)
+	tr.expect(pub, "POST", "/auth/login", `{"email":"prof@umc.br","senha":"Outra#1234"}`, 200)
+
+	// quem está logado
+	tr.expect(pub, "GET", "/me", "", 401)
+	tr.expect(admin, "GET", "/me", "", 200)
+	tr.expect(prof, "GET", "/me", "", 200)
+
 	// cursos
 	tr.expect(aluno("111"), "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 403)
 	tr.expect(admin, "POST", "/cursos", `{"nome":"  "}`, 400)
@@ -173,6 +204,9 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"TARDE","periodo":"2026.2"}`, 400)
 	eng := id(t, tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 201))
 	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":" 2026.2 "}`, 409)
+	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026/2"}`, 409)
+	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.3"}`, 400)
+	tr.expect(admin, "POST", "/turmas", `{"nome":" engenharia  de  software ","turno":"MANHA","periodo":"2026-2"}`, 201)
 	si := id(t, tr.expect(admin, "POST", "/turmas", `{"nome":"Sistemas de Informação","turno":"MANHA","periodo":"2026.2"}`, 201))
 	extra := id(t, tr.expect(admin, "POST", "/turmas", `{"nome":"Sistemas de Informação","turno":"NOITE","periodo":"2027.1"}`, 201))
 	tr.expect(aluno("111"), "GET", "/turmas", "", 200)

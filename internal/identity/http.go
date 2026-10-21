@@ -16,6 +16,10 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/auth/registrar", h.signUp)
 	r.Handle("POST", "/auth/confirmar", h.confirm)
 	r.Handle("POST", "/auth/reenviar-codigo", h.resendCode)
+	r.Handle("POST", "/auth/nova-senha", h.completeNewPassword)
+	r.Handle("POST", "/auth/esqueci-senha", h.forgotPassword)
+	r.Handle("POST", "/auth/redefinir-senha", h.resetPassword)
+	r.Handle("GET", "/me", h.me)
 	r.Handle("GET", "/usuarios", h.listUsers)
 	r.Handle("POST", "/admin/usuarios", httpapi.Restrict(httpapi.Policy{
 		Roles:       []actor.Role{actor.RoleAdmin},
@@ -59,6 +63,36 @@ func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.R
 		return httpapi.Response{}, err
 	}
 	return httpapi.Message("enviamos um código novo — confira o e-mail (e a caixa de spam)", h.svc.ResendCode(ctx, in))
+}
+
+func (h handlers) completeNewPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in NewPasswordInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	session, err := h.svc.CompleteNewPassword(ctx, in)
+	return httpapi.Reply(200, session, err)
+}
+
+func (h handlers) forgotPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in ForgotPasswordInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	return httpapi.Message("se houver uma conta com esse e-mail, enviamos um código para redefinir a senha", h.svc.ForgotPassword(ctx, in))
+}
+
+func (h handlers) resetPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in ResetPasswordInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	return httpapi.Message("senha alterada — você já pode entrar", h.svc.ResetPassword(ctx, in))
+}
+
+func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	u, err := h.svc.Me(ctx, r.Actor)
+	return httpapi.Reply(200, u, err)
 }
 
 func (h handlers) listUsers(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

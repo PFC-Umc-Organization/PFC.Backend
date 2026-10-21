@@ -102,6 +102,12 @@ func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.listUsers(w, in)
 	case "AdminCreateUser":
 		f.adminCreate(w, in)
+	case "RespondToAuthChallenge":
+		f.respondChallenge(w, in)
+	case "ForgotPassword":
+		f.forgotPassword(w, in)
+	case "ConfirmForgotPassword":
+		f.confirmForgotPassword(w, in)
 	default:
 		f.fail(w, "InvalidParameterException", "unsupported operation "+op)
 	}
@@ -133,7 +139,7 @@ func (f *fakeCognito) initiateAuth(w http.ResponseWriter, in map[string]any) {
 	case !u.confirmed:
 		f.fail(w, "UserNotConfirmedException", "User is not confirmed.")
 	case u.forced:
-		f.ok(w, map[string]any{"ChallengeName": "NEW_PASSWORD_REQUIRED", "Session": "s"})
+		f.ok(w, map[string]any{"ChallengeName": "NEW_PASSWORD_REQUIRED", "Session": "sessao-" + u.sub})
 	default:
 		f.ok(w, map[string]any{"AuthenticationResult": map[string]any{"IdToken": idToken(u.attrs)}})
 	}
@@ -250,4 +256,45 @@ func (f *fakeCognito) adminCreate(w http.ResponseWriter, in map[string]any) {
 	}
 	sub := f.addLocked(email, "temporaria", attrs, true, true)
 	f.ok(w, map[string]any{"User": map[string]any{"Username": sub, "Enabled": true, "UserStatus": "FORCE_CHANGE_PASSWORD"}})
+}
+
+func (f *fakeCognito) respondChallenge(w http.ResponseWriter, in map[string]any) {
+	answers, _ := in["ChallengeResponses"].(map[string]any)
+	u := f.users[str(answers, "USERNAME")]
+	switch {
+	case u == nil || !u.forced || str(in, "Session") != "sessao-"+u.sub:
+		f.fail(w, "NotAuthorizedException", "Invalid session for the user, session is expired.")
+	case len(str(answers, "NEW_PASSWORD")) < 8:
+		f.fail(w, "InvalidPasswordException", "Password does not conform to policy")
+	default:
+		u.password, u.forced = str(answers, "NEW_PASSWORD"), false
+		f.ok(w, map[string]any{"AuthenticationResult": map[string]any{"IdToken": idToken(u.attrs)}})
+	}
+}
+
+func (f *fakeCognito) forgotPassword(w http.ResponseWriter, in map[string]any) {
+	u := f.users[str(in, "Username")]
+	switch {
+	case u == nil:
+		f.fail(w, "UserNotFoundException", "Username/client id combination not found.")
+	case !u.confirmed:
+		f.fail(w, "InvalidParameterException", "Cannot reset password for the user as there is no registered/verified email or phone_number")
+	default:
+		f.ok(w, map[string]any{"CodeDeliveryDetails": map[string]any{"DeliveryMedium": "EMAIL"}})
+	}
+}
+
+func (f *fakeCognito) confirmForgotPassword(w http.ResponseWriter, in map[string]any) {
+	u := f.users[str(in, "Username")]
+	switch {
+	case u == nil:
+		f.fail(w, "UserNotFoundException", "Username/client id combination not found.")
+	case str(in, "ConfirmationCode") != confirmationCode:
+		f.fail(w, "CodeMismatchException", "Invalid verification code provided, please try again.")
+	case len(str(in, "Password")) < 8:
+		f.fail(w, "InvalidPasswordException", "Password does not conform to policy")
+	default:
+		u.password = str(in, "Password")
+		f.ok(w, map[string]any{})
+	}
 }

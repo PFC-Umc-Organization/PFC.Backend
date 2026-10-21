@@ -20,10 +20,23 @@ var (
 	errExpiredCode      = errors.New("expired confirmation code")
 	errAlreadyConfirmed = errors.New("account already confirmed")
 	errNoAccount        = errors.New("no such account")
+	errSessionExpired   = errors.New("challenge session expired")
 )
 
+// SignInResult carries the ID token or, when Cognito asks for a new
+// password, the session to answer it with.
+type SignInResult struct {
+	IDToken            string
+	NewPasswordSession string
+}
+
 type Directory interface {
-	SignIn(ctx context.Context, email, password string) (idToken string, err error)
+	SignIn(ctx context.Context, email, password string) (SignInResult, error)
+	CompleteNewPassword(ctx context.Context, email, session, password string) (idToken string, err error)
+	// ForgotPassword e-mails a reset code; ConfirmForgotPassword sets the new
+	// password with it.
+	ForgotPassword(ctx context.Context, email string) error
+	ConfirmForgotPassword(ctx context.Context, email, code, password string) error
 	// SignUp always creates a student; the Pre Sign-up Lambda checks the
 	// RGM against the allowlist.
 	SignUp(ctx context.Context, name, email, password string) error

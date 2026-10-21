@@ -63,10 +63,10 @@ em rota nenhuma.
 
 | Item | PK | SK | GSI1PK | GSI1SK |
 | ---- | -- | -- | ------ | ------ |
-| Curso | `COURSE#<id>` | `PROFILE` | `COURSES` | `COURSE#<id>` |
+| Curso (`nome`, `turmas` = quantas turmas tem) | `COURSE#<id>` | `PROFILE` | `COURSES` | `COURSE#<id>` |
 | Trava do nome do curso | `CURSO_NOME#<nome em minúsculas>` | `CURSO_NOME` | — | — |
-| Turma | `CURSO#<id>` | `PROFILE` | `TURMAS` | `CURSO#<id>` |
-| Trava de turma | `TURMA_UNICA#<curso>#<turno>#<período>` | `TURMA_UNICA` | — | — |
+| Turma (`graduacaoId` = id do curso, `turno`, `periodo`) | `CURSO#<id>` | `PROFILE` | `TURMAS` | `CURSO#<id>` |
+| Trava de turma | `TURMA_UNICA#<id do curso>#<turno>#<período>` | `TURMA_UNICA` | — | — |
 | Programa da turma | `CURSO#<id>` | `PROGRAMA` | — | — |
 | Programa | `PROGRAM#<id>` | `PROFILE` | `PROGRAMAS` | `PROGRAM#<id>` |
 | Matrícula | `STUDENT#<rgm>` | `PROFILE` | `MATRICULAS` | `STUDENT#<rgm>` |
@@ -81,9 +81,18 @@ As regras de unicidade são garantidas pelo próprio DynamoDB, numa
 `TransactWriteItems` com `attribute_not_exists`, e não por "ler e depois
 gravar":
 
-- **um curso por nome** (sem diferenciar maiúsculas) — a trava do nome é gravada junto com o curso;
-  renomear troca a trava e as turmas do curso (nome e trava delas) na mesma transação (máx. 32 turmas);
-- **uma turma por curso+turno+período** — a trava é gravada junto com a turma;
+- **um curso por nome** (sem diferenciar maiúsculas nem espaços repetidos) — a
+  trava do nome é gravada junto com o curso;
+- **curso com turma não sai** — a turma aponta para o curso pelo id e o curso
+  conta as turmas (`turmas`) nas mesmas transações que criam, mudam e apagam
+  turma; apagar exige `turmas = 0`. Renomear o curso mexe só nele: as turmas
+  mostram o nome novo na próxima listagem;
+- **uma turma por curso+turno+período** — a trava é gravada junto com a turma.
+  O período tem uma grafia só, `AAAA.1` ou `AAAA.2` (`2026/2` e `2026-2` viram
+  `2026.2`), senão a mesma turma passaria com outra escrita;
+
+`CURSO#` é a **turma** e `COURSE#` o **curso**: o prefixo das turmas é anterior
+ao cadastro de cursos e não pode mudar sem migrar a tabela inteira.
 - **um programa por turma** — o item "programa da turma" é gravado junto com o
   programa (e responde "qual o programa desta turma?" com um `GetItem`);
 - **um projeto por aluno** — o item "projeto do aluno" é gravado junto com a
@@ -99,10 +108,16 @@ ver [Migração](#migração).
 | ------ | ---------------------------------------- | ------------------------------------------------------------------ | ----------- |
 | POST   | `/auth/login`                            | Autentica via Cognito, devolve `{ usuario, token }`                | pública |
 | POST   | `/auth/registrar`                        | Cadastro self-service de aluno. `perfil` do corpo é ignorado — sempre ALUNO | pública |
+| POST   | `/auth/confirmar`                        | Confirma a conta com o código do e-mail (`{ email, codigo }`)       | pública |
+| POST   | `/auth/reenviar-codigo`                  | Manda outro código de confirmação (`{ email }`)                     | pública |
+| POST   | `/auth/nova-senha`                       | Primeiro acesso de conta criada pelo admin: o login devolve `{ desafio: "NOVA_SENHA", sessao }` e esta rota troca a senha temporária (`{ email, sessao, senha }`), devolvendo `{ usuario, token }` | pública |
+| POST   | `/auth/esqueci-senha`                    | Manda o código de redefinição (`{ email }`); responde igual exista ou não a conta | pública |
+| POST   | `/auth/redefinir-senha`                  | Define a senha nova com o código (`{ email, codigo, senha }`)       | pública |
+| GET    | `/me`                                    | O usuário logado, com a turma lida agora (o front relê ao abrir)    | qualquer autenticado |
 | GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra ORIENTADOR/ADMIN |
 | GET    | `/cursos`                                | Lista os cursos cadastrados                                         | qualquer autenticado |
 | POST   | `/cursos`                                | Cadastra curso (`{ nome }`); 409 se o nome já existe                | ADMIN |
-| PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas do curso passam a ter o nome novo               | ADMIN |
+| PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas mostram o nome novo                             | ADMIN |
 | DELETE | `/cursos/:cursoId`                       | Remove; 409 se o curso tem turmas                                   | ADMIN |
 | POST   | `/admin/students`                        | Grava RGMs na allowlist (`STUDENT#<rgm>` ACTIVE). RGM com algo além de dígitos volta em `falhas` | ADMIN |
 | DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | ADMIN |
@@ -225,6 +240,12 @@ REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
   `scripts/test-integration.sh -run Contrato -update`.
 - **Regras com banco** (`internal/integracao/integracao_test.go`): unicidades,
   um projeto por aluno com cinco inclusões simultâneas, cascata ao apagar.
+- **Permissões da Lambda** (`internal/integracao/iam_test.go`): registra cada
+  operação que o backend faz no DynamoDB e no Cognito durante os testes e falha
+  se alguma não estiver na política da Lambda (cópia da lista de
+  `PFC.Infra/modules/backend-lambda/data.tf`). O DynamoDB Local não confere
+  permissão: foi assim que `ConditionCheckItem` e `BatchGetItem` chegaram à AWS
+  sem permissão e viraram 500. Ação nova entra nos dois lugares.
 
 O pacote `internal/integracao` usa o DynamoDB Local de verdade e servidores
 falsos para o Cognito (`cognito_fake_test.go`) e para Crossref/OpenAlex. Sem o
@@ -241,6 +262,13 @@ TABLE_NAME=<tabela> go run ./cmd/migrar            # mostra o que faria
 TABLE_NAME=<tabela> go run ./cmd/migrar -aplicar
 ```
 
+A migração também cria os **cursos** a partir das turmas que vieram antes do
+cadastro de cursos (com a grafia mais usada entre elas), liga cada turma ao
+curso pelo id, conta as turmas no curso e troca a trava da turma pela do
+formato novo. Até ela rodar, as turmas antigas continuam funcionando: editar
+uma delas já a liga ao curso.
+
 Conflitos (duas turmas iguais, dois programas na mesma turma, um aluno em
 dois projetos) aparecem como `CONFLITO:` e precisam de correção manual —
-a migração não escolhe qual lado fica.
+a migração não escolhe qual lado fica. Programa de turma que não existe mais
+e período fora do formato aparecem como `AVISO:`.

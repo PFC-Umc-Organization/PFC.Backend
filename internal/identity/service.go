@@ -39,21 +39,33 @@ func record(ctx context.Context, action, result, reason string, who *audit.Actor
 	audit.Record(ctx, audit.Event{Action: action, Result: result, Reason: reason, Actor: who})
 }
 
-func (s *Service) Login(ctx context.Context, in Credentials) (Session, error) {
+func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error) {
 	email := normalizeEmail(in.Email)
 	if email == "" || in.Password == "" {
-		return Session{}, apperr.Invalid(msgCredentialsRequired)
+		return LoginResult{}, apperr.Invalid(msgCredentialsRequired)
 	}
-	token, err := s.directory.SignIn(ctx, email, in.Password)
+	result, err := s.directory.SignIn(ctx, email, in.Password)
 	if errors.Is(err, errNotConfirmed) {
 		// The frontend sends the student to the confirmation screen on 403.
 		record(ctx, "auth.login", audit.Failure, "conta ainda não confirmada", &audit.Actor{Email: email})
-		return Session{}, apperr.Forbidden(msgNotConfirmed)
+		return LoginResult{}, apperr.Forbidden(msgNotConfirmed)
 	}
 	if err != nil {
 		record(ctx, "auth.login", audit.Failure, "credenciais inválidas", &audit.Actor{Email: email})
-		return Session{}, apperr.Unauthorized(msgBadCredentials)
+		return LoginResult{}, apperr.Unauthorized(msgBadCredentials)
 	}
+	if result.NewPasswordSession != "" {
+		record(ctx, "auth.login", audit.Failure, "troca da senha temporária pendente", &audit.Actor{Email: email})
+		return LoginResult{Challenge: ChallengeNewPassword, Session: result.NewPasswordSession}, nil
+	}
+	session, err := s.session(ctx, result.IDToken)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	return LoginResult{User: &session.User, Token: session.Token}, nil
+}
+
+func (s *Service) session(ctx context.Context, token string) (Session, error) {
 	claims, err := claimsOf(token)
 	if err != nil {
 		return Session{}, apperr.Internal("falha ao processar autenticação", err)
@@ -66,10 +78,103 @@ func (s *Service) Login(ctx context.Context, in Credentials) (Session, error) {
 	return Session{User: u, Token: token}, nil
 }
 
+// CompleteNewPassword replaces the temporary password of an account created
+// by an admin and signs the person in.
+func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) (Session, error) {
+	email := normalizeEmail(in.Email)
+	if email == "" || in.Session == "" || in.Password == "" {
+		return Session{}, apperr.Invalid(msgNewPasswordRequired)
+	}
+	token, err := s.directory.CompleteNewPassword(ctx, email, in.Session, in.Password)
+	if err != nil {
+		var appErr error
+		switch {
+		case errors.Is(err, errWeakPassword):
+			appErr = apperr.Invalid(msgWeakPassword)
+		case errors.Is(err, errSessionExpired):
+			appErr = apperr.Unauthorized(msgSessionExpired)
+		case errors.Is(err, errThrottled):
+			appErr = apperr.TooManyRequests(msgThrottled)
+		default:
+			return Session{}, apperr.Internal("falha ao definir a senha", err)
+		}
+		record(ctx, "auth.senha_definida", audit.Failure, message(appErr), &audit.Actor{Email: email})
+		return Session{}, appErr
+	}
+	record(ctx, "auth.senha_definida", audit.Success, "", &audit.Actor{Email: email})
+	return s.session(ctx, token)
+}
+
+// ForgotPassword answers the same whether or not the account exists, so the
+// endpoint does not reveal who is registered.
+func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) error {
+	email := normalizeEmail(in.Email)
+	if email == "" {
+		return apperr.Invalid(msgEmailRequired)
+	}
+	err := s.directory.ForgotPassword(ctx, email)
+	switch {
+	case err == nil:
+		record(ctx, "auth.senha_esquecida", audit.Success, "", &audit.Actor{Email: email})
+	case errors.Is(err, errNoAccount), errors.Is(err, errInvalidInput):
+		record(ctx, "auth.senha_esquecida", audit.Failure, "conta inexistente ou sem e-mail confirmado", &audit.Actor{Email: email})
+	case errors.Is(err, errThrottled):
+		return apperr.TooManyRequests(msgThrottled)
+	default:
+		return apperr.Internal("falha ao enviar o código", err)
+	}
+	return nil
+}
+
+func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) error {
+	email := normalizeEmail(in.Email)
+	code := strings.TrimSpace(in.Code)
+	if email == "" || code == "" || in.Password == "" {
+		return apperr.Invalid(msgResetRequired)
+	}
+	err := s.directory.ConfirmForgotPassword(ctx, email, code, in.Password)
+	if err == nil {
+		record(ctx, "auth.senha_redefinida", audit.Success, "", &audit.Actor{Email: email})
+		return nil
+	}
+	var appErr error
+	switch {
+	case errors.Is(err, errWrongCode), errors.Is(err, errNoAccount):
+		appErr = apperr.Invalid(msgWrongCode)
+	case errors.Is(err, errExpiredCode):
+		appErr = apperr.Invalid(msgExpiredCode)
+	case errors.Is(err, errWeakPassword):
+		appErr = apperr.Invalid(msgWeakPassword)
+	case errors.Is(err, errThrottled):
+		appErr = apperr.TooManyRequests(msgThrottled)
+	default:
+		return apperr.Internal("falha ao redefinir a senha", err)
+	}
+	record(ctx, "auth.senha_redefinida", audit.Failure, message(appErr), &audit.Actor{Email: email})
+	return appErr
+}
+
+// Me returns the signed-in user as the login does, with the cohort read now:
+// a student pre-authorized after logging in sees it without logging in again.
+func (s *Service) Me(ctx context.Context, who actor.Actor) (SessionUser, error) {
+	if who.Sub == "" {
+		return SessionUser{}, apperr.Unauthorized(msgNoSession)
+	}
+	u := SessionUser{
+		ID: who.Sub, Name: who.Name, Email: who.Email, Role: roleOrStudent(string(who.Role)),
+		Status: StatusActive, CohortIDs: []string{},
+	}
+	if u.Role == actor.RoleStudent {
+		u.RGM = who.RGM()
+		u.CohortIDs = s.cohortsOf(ctx, u.RGM)
+	}
+	return u, nil
+}
+
 func signUpError(err error) error {
 	switch {
 	case errors.Is(err, errWeakPassword):
-		return apperr.Invalid("a senha precisa ter ao menos 8 caracteres, com letra maiúscula, letra minúscula, número e símbolo")
+		return apperr.Invalid(msgWeakPassword)
 	case errors.Is(err, errEmailTaken):
 		return apperr.Conflict("já existe uma conta com esse e-mail — use \"Entrar\" ou recupere a senha")
 	case errors.Is(err, errSignUpRejected):
@@ -85,9 +190,9 @@ func signUpError(err error) error {
 func confirmationError(err error) error {
 	switch {
 	case errors.Is(err, errWrongCode):
-		return apperr.Invalid("código incorreto — confira o e-mail e tente de novo")
+		return apperr.Invalid(msgWrongCode)
 	case errors.Is(err, errExpiredCode):
-		return apperr.Invalid("código expirado — peça um código novo")
+		return apperr.Invalid(msgExpiredCode)
 	case errors.Is(err, errAlreadyConfirmed):
 		return apperr.Conflict("esta conta já está confirmada — é só entrar")
 	case errors.Is(err, errNoAccount):

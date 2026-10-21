@@ -1,6 +1,6 @@
 // Package academic owns courses (cursos), cohorts (turmas), their PFC program
-// and the RGM allowlist (matrículas). A cohort is a course + shift + term and
-// keeps the course name, which must belong to a registered course.
+// and the RGM allowlist (matrículas). A cohort is a registered course + shift
+// + term.
 package academic
 
 import (
@@ -23,9 +23,9 @@ type CourseInput struct {
 	Name string `json:"nome"`
 }
 
-func (in CourseInput) normalized() CourseInput {
-	return CourseInput{Name: strings.Join(strings.Fields(in.Name), " ")}
-}
+func courseName(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func (in CourseInput) normalized() CourseInput { return CourseInput{Name: courseName(in.Name)} }
 
 func (in CourseInput) validate() string {
 	switch {
@@ -37,11 +37,14 @@ func (in CourseInput) validate() string {
 	return ""
 }
 
+// Cohort.Course is the course name, read from the course on every listing so
+// a rename never leaves cohorts behind.
 type Cohort struct {
-	ID     string `json:"id"`
-	Course string `json:"nome"`
-	Shift  string `json:"turno"`
-	Term   string `json:"periodo"`
+	ID       string `json:"id"`
+	CourseID string `json:"graduacaoId,omitempty"`
+	Course   string `json:"nome"`
+	Shift    string `json:"turno"`
+	Term     string `json:"periodo"`
 }
 
 type CohortInput struct {
@@ -52,10 +55,22 @@ type CohortInput struct {
 
 func (in CohortInput) normalized() CohortInput {
 	return CohortInput{
-		Course: strings.TrimSpace(in.Course),
+		Course: courseName(in.Course),
 		Shift:  strings.TrimSpace(in.Shift),
-		Term:   strings.TrimSpace(in.Term),
+		Term:   normalizeTerm(in.Term),
 	}
+}
+
+// The term is part of the cohort's uniqueness lock, so it has one spelling:
+// "2026/2" and "2026-2" become "2026.2" and anything else is refused.
+var termFormat = regexp.MustCompile(`^(\d{4})\s*[./-]\s*([12])$`)
+
+func normalizeTerm(s string) string {
+	s = strings.TrimSpace(s)
+	if m := termFormat.FindStringSubmatch(s); m != nil {
+		return m[1] + "." + m[2]
+	}
+	return s
 }
 
 func (in CohortInput) validate() string {
@@ -64,12 +79,14 @@ func (in CohortInput) validate() string {
 		return msgCohortFieldsRequired
 	case !shifts[in.Shift]:
 		return msgInvalidShift
+	case !termFormat.MatchString(in.Term):
+		return msgInvalidTerm
 	}
 	return ""
 }
 
-func (c Cohort) sameAs(in CohortInput) bool {
-	return c.Course == in.Course && c.Shift == in.Shift && c.Term == in.Term
+func (c Cohort) sameAs(courseID string, in CohortInput) bool {
+	return c.CourseID == courseID && c.Shift == in.Shift && c.Term == in.Term
 }
 
 func (c Cohort) details() map[string]any {
@@ -152,8 +169,8 @@ const (
 	msgCourseChanged        = "o curso mudou enquanto você editava — atualize a página e tente de novo"
 	msgCourseUnknown        = "curso não encontrado"
 	msgCourseHasCohorts     = "curso possui turmas, não pode ser removido"
-	msgCourseTooManyCohorts = "o curso tem turmas demais para ser renomeado de uma vez — remova turmas antigas primeiro"
 	msgInvalidShift         = "turno inválido — escolha manhã ou noite"
+	msgInvalidTerm          = "período inválido — use ano e semestre, como 2026.2"
 	msgCohortDuplicate      = "já existe uma turma com esse curso, turno e período"
 	msgCohortChanged        = "a turma mudou enquanto você editava — atualize a página e tente de novo"
 	msgCohortNotFound       = "turma não encontrada"

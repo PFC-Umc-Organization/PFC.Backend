@@ -14,6 +14,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
@@ -52,8 +54,27 @@ func TestMain(m *testing.M) {
 		fmt.Println("integracao:", err)
 		os.Exit(1)
 	}
-	table, r = deps.Table, app.New(deps)
-	os.Exit(m.Run())
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		fmt.Println("integracao:", err)
+		os.Exit(1)
+	}
+	table = deps.Table
+	recorded := deps
+	recorded.Table = &dynamo.Table{
+		Client: dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) { o.APIOptions = append(o.APIOptions, recorder.middleware("dynamodb")) }),
+		Name:   deps.Table.Name, Index: deps.Table.Index,
+	}
+	recorded.Cognito = cognitoidentityprovider.NewFromConfig(awsCfg, func(o *cognitoidentityprovider.Options) {
+		o.APIOptions = append(o.APIOptions, recorder.middleware("cognito-idp"))
+	})
+	r = app.New(recorded)
+	code := m.Run()
+	if err := checkIAMActions(); code == 0 && err != nil {
+		fmt.Println(err)
+		code = 1
+	}
+	os.Exit(code)
 }
 
 // resetar deixa tabela e Cognito vazios: cada teste começa do zero.
@@ -123,8 +144,11 @@ func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 			req.QueryStringParameters[k] = valores.Get(k)
 		}
 	}
-	req.RequestContext.Authorizer = map[string]interface{}{
-		"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": "sub-" + q.email, "name": q.email},
+	// Public routes have no authorizer, as in the API Gateway.
+	if q.email != "" {
+		req.RequestContext.Authorizer = map[string]interface{}{
+			"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": "sub-" + q.email, "name": q.email},
+		}
 	}
 	resp, err := r.Lambda(context.Background(), req)
 	if err != nil {
@@ -318,4 +342,36 @@ func TestAtividade(t *testing.T) {
 		esperar(t, admin, "POST", "/atividades/"+a+"/campos", fmt.Sprintf(`{"rotulo":"Campo %d","tipo":"TEXTO"}`, i), 201)
 	}
 	esperar(t, admin, "POST", "/atividades/"+a+"/campos", `{"rotulo":"Demais","tipo":"TEXTO"}`, 409)
+}
+
+// TestTurmaAntiga covers a cohort written before courses existed: it carries
+// only the course name and the lock keyed by it, until cmd/migrar runs.
+func TestTurmaAntiga(t *testing.T) {
+	resetar(t)
+	ctx := context.Background()
+	put := func(item map[string]types.AttributeValue) {
+		if _, err := table.Client.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(table.Name), Item: item}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := func(v string) types.AttributeValue { return &types.AttributeValueMemberS{Value: v} }
+	put(map[string]types.AttributeValue{"PK": s("CURSO#antiga"), "SK": s("PROFILE"), "GSI1PK": s("TURMAS"), "GSI1SK": s("CURSO#antiga"),
+		"nome": s("Engenharia de Software"), "turno": s("NOITE"), "periodo": s("2026.2")})
+	put(map[string]types.AttributeValue{"PK": s("TURMA_UNICA#Engenharia de Software#NOITE#2026.2"), "SK": s("TURMA_UNICA"), "cursoId": s("antiga")})
+	curso := id(t, esperar(t, admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201))
+
+	if body := esperar(t, admin, "GET", "/turmas", "", 200); !strings.Contains(body, `"nome":"Engenharia de Software"`) {
+		t.Fatalf("a turma antiga devia aparecer com o nome gravado: %s", body)
+	}
+	// editar liga a turma ao curso, troca a trava velha pela nova e conta a turma
+	esperar(t, admin, "PUT", "/turmas/antiga", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2026.2"}`, 200)
+	velha, err := table.Client.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(table.Name),
+		Key: map[string]types.AttributeValue{"PK": s("TURMA_UNICA#Engenharia de Software#NOITE#2026.2"), "SK": s("TURMA_UNICA")}})
+	if err != nil || velha.Item != nil {
+		t.Fatalf("a trava antiga devia sair: %v %v", velha, err)
+	}
+	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2026.2"}`, 409)
+	esperar(t, admin, "DELETE", "/cursos/"+curso, "", 409)
+	esperar(t, admin, "DELETE", "/turmas/antiga", "", 200)
+	esperar(t, admin, "DELETE", "/cursos/"+curso, "", 200)
 }

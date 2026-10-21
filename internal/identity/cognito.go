@@ -29,7 +29,7 @@ func NewCognito(client *cip.Client, clientID, userPoolID string) *Cognito {
 
 func classify(err error, target error) error { return fmt.Errorf("%w: %v", target, err) }
 
-func (c *Cognito) SignIn(ctx context.Context, email, password string) (string, error) {
+func (c *Cognito) SignIn(ctx context.Context, email, password string) (SignInResult, error) {
 	out, err := c.client.InitiateAuth(ctx, &cip.InitiateAuthInput{
 		AuthFlow:       types.AuthFlowTypeUserPasswordAuth,
 		ClientId:       aws.String(c.clientID),
@@ -37,20 +37,71 @@ func (c *Cognito) SignIn(ctx context.Context, email, password string) (string, e
 	})
 	var notConfirmed *types.UserNotConfirmedException
 	if errors.As(err, &notConfirmed) {
-		return "", classify(err, errNotConfirmed)
+		return SignInResult{}, classify(err, errNotConfirmed)
 	}
 	if err != nil {
+		return SignInResult{}, err
+	}
+	switch out.ChallengeName {
+	case "":
+	case types.ChallengeNameTypeNewPasswordRequired:
+		return SignInResult{NewPasswordSession: aws.ToString(out.Session)}, nil
+	default:
+		return SignInResult{}, fmt.Errorf("unsupported challenge %s", out.ChallengeName)
+	}
+	return tokenOf(out.AuthenticationResult)
+}
+
+func tokenOf(r *types.AuthenticationResultType) (SignInResult, error) {
+	if r == nil || r.IdToken == nil {
+		return SignInResult{}, errors.New("Cognito returned no token")
+	}
+	return SignInResult{IDToken: *r.IdToken}, nil
+}
+
+func (c *Cognito) CompleteNewPassword(ctx context.Context, email, session, password string) (string, error) {
+	out, err := c.client.RespondToAuthChallenge(ctx, &cip.RespondToAuthChallengeInput{
+		ClientId:           aws.String(c.clientID),
+		ChallengeName:      types.ChallengeNameTypeNewPasswordRequired,
+		Session:            aws.String(session),
+		ChallengeResponses: map[string]string{"USERNAME": email, "NEW_PASSWORD": password},
+	})
+	var (
+		weak      *types.InvalidPasswordException
+		expired   *types.NotAuthorizedException
+		throttled *types.TooManyRequestsException
+	)
+	switch {
+	case errors.As(err, &weak):
+		return "", classify(err, errWeakPassword)
+	case errors.As(err, &expired):
+		return "", classify(err, errSessionExpired)
+	case errors.As(err, &throttled):
+		return "", classify(err, errThrottled)
+	case err != nil:
 		return "", err
 	}
-	// A challenge (NEW_PASSWORD_REQUIRED for an account created by an admin
-	// that never set a password) must not hand the frontend an empty token.
-	if out.ChallengeName != "" {
-		return "", fmt.Errorf("pending challenge %s", out.ChallengeName)
+	r, err := tokenOf(out.AuthenticationResult)
+	return r.IDToken, err
+}
+
+func (c *Cognito) ForgotPassword(ctx context.Context, email string) error {
+	_, err := c.client.ForgotPassword(ctx, &cip.ForgotPasswordInput{ClientId: aws.String(c.clientID), Username: aws.String(email)})
+	return classifyConfirmation(err)
+}
+
+func (c *Cognito) ConfirmForgotPassword(ctx context.Context, email, code, password string) error {
+	_, err := c.client.ConfirmForgotPassword(ctx, &cip.ConfirmForgotPasswordInput{
+		ClientId:         aws.String(c.clientID),
+		Username:         aws.String(email),
+		ConfirmationCode: aws.String(code),
+		Password:         aws.String(password),
+	})
+	var weak *types.InvalidPasswordException
+	if errors.As(err, &weak) {
+		return classify(err, errWeakPassword)
 	}
-	if out.AuthenticationResult == nil || out.AuthenticationResult.IdToken == nil {
-		return "", errors.New("InitiateAuth returned no token")
-	}
-	return *out.AuthenticationResult.IdToken, nil
+	return classifyConfirmation(err)
 }
 
 func signUpAttributes(name, email string) []types.AttributeType {
@@ -122,6 +173,7 @@ func classifyConfirmation(err error) error {
 		limit     *types.LimitExceededException
 		throttled *types.TooManyRequestsException
 		attempts  *types.TooManyFailedAttemptsException
+		invalid   *types.InvalidParameterException
 	)
 	switch {
 	case err == nil:
@@ -137,6 +189,8 @@ func classifyConfirmation(err error) error {
 		return classify(err, errNoAccount)
 	case errors.As(err, &limit), errors.As(err, &throttled), errors.As(err, &attempts):
 		return classify(err, errThrottled)
+	case errors.As(err, &invalid):
+		return classify(err, errInvalidInput)
 	}
 	return err
 }

@@ -14,17 +14,20 @@ import (
 
 // Items (single table):
 //
-//	course          PK=COURSE#<id>                        SK=PROFILE      GSI1PK=COURSES     GSI1SK=COURSE#<id>  nome
-//	course name     PK=CURSO_NOME#<name, lower case>      SK=CURSO_NOME   cursoId, nome
-//	cohort          PK=CURSO#<id>                         SK=PROFILE      GSI1PK=TURMAS      GSI1SK=CURSO#<id>
-//	cohort lock     PK=TURMA_UNICA#<course>#<shift>#<term> SK=TURMA_UNICA  cursoId
+//	course          PK=COURSE#<id>                          SK=PROFILE      GSI1PK=COURSES     GSI1SK=COURSE#<id>  nome, turmas
+//	course name     PK=CURSO_NOME#<name, lower case>        SK=CURSO_NOME   cursoId, nome
+//	cohort          PK=CURSO#<id>                           SK=PROFILE      GSI1PK=TURMAS      GSI1SK=CURSO#<id>   graduacaoId, turno, periodo
+//	cohort lock     PK=TURMA_UNICA#<course id>#<shift>#<term> SK=TURMA_UNICA  cursoId
 //	cohort program  PK=CURSO#<id>                         SK=PROGRAMA     programaId
 //	program         PK=PROGRAM#<id>                       SK=PROFILE      GSI1PK=PROGRAMAS   GSI1SK=PROGRAM#<id>  cursoId
 //	enrollment      PK=STUDENT#<rgm>                      SK=PROFILE      GSI1PK=MATRICULAS  GSI1SK=STUDENT#<rgm> status, turmaId
 //
-// A cohort keeps its course's name (nome); creating or moving a cohort checks,
-// in the same transaction, that the course name lock exists. The course name
-// lock rejects a second course with the same name.
+// Despite the prefix, CURSO# is a cohort and COURSE# a course: CURSO# predates
+// courses and its keys cannot change. A cohort points to its course by id
+// (graduacaoId) and the course counts its cohorts (turmas) in the same
+// transactions that create, move and delete cohorts, so a course with cohorts
+// cannot be deleted. Cohorts written before courses existed carry only the
+// course name (nome) and the lock keyed by it; cmd/migrar moves them over.
 //
 // The lock and the cohort-program link exist so that a transaction rejects
 // a second cohort with the same course/shift/term and a second program per
@@ -53,29 +56,28 @@ type DynamoStore struct {
 
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
-// maxTransactionItems is DynamoDB's TransactWriteItems limit.
-const maxTransactionItems = 100
-
 type courseItem struct {
-	PK     string `dynamodbav:"PK"`
-	SK     string `dynamodbav:"SK"`
-	GSI1PK string `dynamodbav:"GSI1PK"`
-	GSI1SK string `dynamodbav:"GSI1SK"`
-	Name   string `dynamodbav:"nome"`
+	PK      string `dynamodbav:"PK"`
+	SK      string `dynamodbav:"SK"`
+	GSI1PK  string `dynamodbav:"GSI1PK"`
+	GSI1SK  string `dynamodbav:"GSI1SK"`
+	Name    string `dynamodbav:"nome"`
+	Cohorts int    `dynamodbav:"turmas"`
 }
 
 type cohortItem struct {
-	PK     string `dynamodbav:"PK"`
-	SK     string `dynamodbav:"SK"`
-	GSI1PK string `dynamodbav:"GSI1PK"`
-	GSI1SK string `dynamodbav:"GSI1SK"`
-	Course string `dynamodbav:"nome"`
-	Shift  string `dynamodbav:"turno"`
-	Term   string `dynamodbav:"periodo"`
+	PK       string `dynamodbav:"PK"`
+	SK       string `dynamodbav:"SK"`
+	GSI1PK   string `dynamodbav:"GSI1PK"`
+	GSI1SK   string `dynamodbav:"GSI1SK"`
+	CourseID string `dynamodbav:"graduacaoId,omitempty"`
+	Course   string `dynamodbav:"nome,omitempty"`
+	Shift    string `dynamodbav:"turno"`
+	Term     string `dynamodbav:"periodo"`
 }
 
 func (it cohortItem) cohort() Cohort {
-	return Cohort{ID: strings.TrimPrefix(it.PK, cohortPrefix), Course: it.Course, Shift: it.Shift, Term: it.Term}
+	return Cohort{ID: strings.TrimPrefix(it.PK, cohortPrefix), CourseID: it.CourseID, Course: it.Course, Shift: it.Shift, Term: it.Term}
 }
 
 type programItem struct {
@@ -104,7 +106,26 @@ func cohortProgramKey(cohortID string) dynamo.Item {
 }
 
 func cohortLock(c Cohort) dynamo.Item {
-	return dynamo.Key(fmt.Sprintf("TURMA_UNICA#%s#%s#%s", c.Course, c.Shift, c.Term), "TURMA_UNICA")
+	return dynamo.Key(CohortLockPK(c.CourseID, c.Shift, c.Term), "TURMA_UNICA")
+}
+
+// CohortLockPK is shared with cmd/migrar.
+func CohortLockPK(courseID, shift, term string) string {
+	return fmt.Sprintf("TURMA_UNICA#%s#%s#%s", courseID, shift, term)
+}
+
+// currentLock is the lock a stored cohort holds: keyed by course name when
+// the cohort predates courses.
+func currentLock(c Cohort) dynamo.Item {
+	if c.CourseID == "" {
+		return dynamo.Key(fmt.Sprintf("TURMA_UNICA#%s#%s#%s", c.Course, c.Shift, c.Term), "TURMA_UNICA")
+	}
+	return cohortLock(c)
+}
+
+func (s *DynamoStore) countCohort(courseID string, delta int) types.TransactWriteItem {
+	return s.table.Update(courseKey(courseID), "SET turmas = if_not_exists(turmas, :zero) + :delta", present,
+		dynamo.Item{":zero": dynamo.N(0), ":delta": dynamo.N(delta)})
 }
 
 func ownedLock(c Cohort) dynamo.Item {
@@ -179,65 +200,47 @@ func (s *DynamoStore) CourseByName(ctx context.Context, name string) (Course, bo
 	return Course{ID: lock.ID, Name: lock.Name}, found, err
 }
 
-// UpdateCourse renames the course, its name lock and every cohort that carries
-// the name (with their locks) in one transaction, so the course and its
-// cohorts never disagree. A transaction holds 100 items at most; each cohort
-// takes three.
-func (s *DynamoStore) UpdateCourse(ctx context.Context, current, next Course, cohorts []Cohort) error {
-	if 3+3*len(cohorts) > maxTransactionItems {
-		return errTooMany
+// UpdateCourse renames the course and swaps its name lock.
+func (s *DynamoStore) UpdateCourse(ctx context.Context, current, next Course) error {
+	rename := s.table.Update(courseKey(current.ID), "SET nome = :n", "nome = :old",
+		dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(current.Name)})
+	// A case-only change keeps the lock key, and a transaction cannot delete
+	// and put the same item: the lock is updated in place.
+	if strings.EqualFold(current.Name, next.Name) {
+		return s.staleOnFailure(s.table.Transact(ctx, rename,
+			s.table.Update(courseNameKey(current.Name), "SET nome = :n", "cursoId = :id",
+				dynamo.Item{":n": dynamo.S(next.Name), ":id": dynamo.S(current.ID)})))
 	}
-	owner := dynamo.Item{":id": dynamo.S(current.ID)}
-	ops := []types.TransactWriteItem{
-		s.table.Update(courseKey(current.ID), "SET nome = :n", "nome = :old",
-			dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(current.Name)}),
+	err := s.table.Transact(ctx, rename,
+		s.table.Delete(courseNameKey(current.Name), "cursoId = :id", dynamo.Item{":id": dynamo.S(current.ID)}),
+		s.table.Put(ownedCourseName(next), absent, nil),
+	)
+	if dynamo.FailedAt(err, 2) {
+		return errDuplicate
 	}
-	// Only the case changed: the lock key is the same, so it is updated in
-	// place (a transaction cannot delete and put one item).
-	sameLock := strings.EqualFold(current.Name, next.Name)
-	if sameLock {
-		ops = append(ops, s.table.Update(courseNameKey(current.Name), "SET nome = :n", "cursoId = :id",
-			dynamo.Item{":n": dynamo.S(next.Name), ":id": dynamo.S(current.ID)}))
-	} else {
-		ops = append(ops,
-			s.table.Delete(courseNameKey(current.Name), "cursoId = :id", owner),
-			s.table.Put(ownedCourseName(next), absent, nil))
-	}
-	cohortsStart := len(ops)
-	for _, c := range cohorts {
-		moved := c
-		moved.Course = next.Name
-		ops = append(ops,
-			s.table.Update(cohortKey(c.ID), "SET nome = :n", "nome = :old",
-				dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(c.Course)}),
-			s.table.Delete(cohortLock(c), ownedByCohort, dynamo.Item{":id": dynamo.S(c.ID)}),
-			s.table.Put(ownedLock(moved), absent, nil),
-		)
-	}
+	return s.staleOnFailure(err)
+}
 
-	err := s.table.Transact(ctx, ops...)
+func (s *DynamoStore) staleOnFailure(err error) error {
 	var rejected *dynamo.ConditionError
-	if !errors.As(err, &rejected) {
-		return err
+	if errors.As(err, &rejected) {
+		return errStale
 	}
-	for _, i := range rejected.Failed {
-		newCourseLock := !sameLock && i == 2
-		newCohortLock := i >= cohortsStart && (i-cohortsStart)%3 == 2
-		if newCourseLock || newCohortLock {
-			return errDuplicate
-		}
-	}
-	return errStale
+	return err
 }
 
 func (s *DynamoStore) DeleteCourse(ctx context.Context, c Course) error {
 	err := s.table.Transact(ctx,
-		s.table.Delete(courseKey(c.ID), present, nil),
+		s.table.Delete(courseKey(c.ID), "attribute_exists(PK) AND (attribute_not_exists(turmas) OR turmas = :zero)",
+			dynamo.Item{":zero": dynamo.N(0)}),
 		s.table.Delete(courseNameKey(c.Name), "cursoId = :id", dynamo.Item{":id": dynamo.S(c.ID)}),
 	)
 	switch {
 	case dynamo.FailedAt(err, 0):
-		return errNotFound
+		if exists, _ := s.table.Exists(ctx, courseKey(c.ID)); !exists {
+			return errNotFound
+		}
+		return errInUse
 	case dynamo.FailedAt(err, 1):
 		return errStale
 	}
@@ -247,7 +250,7 @@ func (s *DynamoStore) DeleteCourse(ctx context.Context, c Course) error {
 func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	item, err := attributevalue.MarshalMap(cohortItem{
 		PK: cohortPrefix + c.ID, SK: profileSK, GSI1PK: cohortsPartition, GSI1SK: cohortPrefix + c.ID,
-		Course: c.Course, Shift: c.Shift, Term: c.Term,
+		CourseID: c.CourseID, Shift: c.Shift, Term: c.Term,
 	})
 	if err != nil {
 		return err
@@ -255,7 +258,7 @@ func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	err = s.table.Transact(ctx,
 		s.table.Put(item, absent, nil),
 		s.table.Put(ownedLock(c), absent, nil),
-		s.table.Check(courseNameKey(c.Course), present, nil),
+		s.countCohort(c.CourseID, 1),
 	)
 	switch {
 	case dynamo.FailedAt(err, 2):
@@ -280,44 +283,57 @@ func (s *DynamoStore) CohortExists(ctx context.Context, id string) (bool, error)
 	return s.table.Exists(ctx, cohortKey(id))
 }
 
-// UpdateCohort swaps the lock when the combination changes; the condition
-// on the cohort rejects a concurrent edit.
+// UpdateCohort swaps the lock and, when the course changes, moves the count
+// to the new course; the condition on the cohort rejects a concurrent edit.
 func (s *DynamoStore) UpdateCohort(ctx context.Context, current, next Cohort) error {
-	err := s.table.Transact(ctx,
-		s.table.Update(cohortKey(current.ID),
-			"SET nome = :n, turno = :t, periodo = :p",
-			"nome = :vn AND turno = :vt AND periodo = :vp",
-			dynamo.Item{
-				":n": dynamo.S(next.Course), ":t": dynamo.S(next.Shift), ":p": dynamo.S(next.Term),
-				":vn": dynamo.S(current.Course), ":vt": dynamo.S(current.Shift), ":vp": dynamo.S(current.Term),
-			}),
-		s.table.Delete(cohortLock(current), ownedByCohort, dynamo.Item{":id": dynamo.S(current.ID)}),
+	cond := "graduacaoId = :vc AND turno = :vt AND periodo = :vp"
+	values := dynamo.Item{
+		":c": dynamo.S(next.CourseID), ":t": dynamo.S(next.Shift), ":p": dynamo.S(next.Term),
+		":vc": dynamo.S(current.CourseID), ":vt": dynamo.S(current.Shift), ":vp": dynamo.S(current.Term),
+	}
+	if current.CourseID == "" {
+		cond = "attribute_not_exists(graduacaoId) AND turno = :vt AND periodo = :vp"
+		delete(values, ":vc")
+	}
+	ops := []types.TransactWriteItem{
+		s.table.Update(cohortKey(current.ID), "SET graduacaoId = :c, turno = :t, periodo = :p REMOVE nome", cond, values),
+		s.table.Delete(currentLock(current), ownedByCohort, dynamo.Item{":id": dynamo.S(current.ID)}),
 		s.table.Put(ownedLock(next), absent, nil),
-		s.table.Check(courseNameKey(next.Course), present, nil),
-	)
+	}
+	if current.CourseID != next.CourseID {
+		ops = append(ops, s.countCohort(next.CourseID, 1))
+		if current.CourseID != "" {
+			ops = append(ops, s.countCohort(current.CourseID, -1))
+		}
+	}
+	err := s.table.Transact(ctx, ops...)
 	switch {
 	case dynamo.FailedAt(err, 3):
 		return errNoCourse
 	case dynamo.FailedAt(err, 2):
 		return errDuplicate
-	case dynamo.FailedAt(err, 0), dynamo.FailedAt(err, 1):
+	case dynamo.FailedAt(err, 0), dynamo.FailedAt(err, 1), dynamo.FailedAt(err, 4):
 		return errStale
 	}
 	return err
 }
 
 func (s *DynamoStore) DeleteCohort(ctx context.Context, c Cohort) error {
-	err := s.table.Transact(ctx,
+	ops := []types.TransactWriteItem{
 		s.table.Delete(cohortKey(c.ID), present, nil),
-		s.table.Delete(cohortLock(c), ownedByCohort, dynamo.Item{":id": dynamo.S(c.ID)}),
+		s.table.Delete(currentLock(c), ownedByCohort, dynamo.Item{":id": dynamo.S(c.ID)}),
 		s.table.Check(cohortProgramKey(c.ID), absent, nil),
-	)
+	}
+	if c.CourseID != "" {
+		ops = append(ops, s.countCohort(c.CourseID, -1))
+	}
+	err := s.table.Transact(ctx, ops...)
 	switch {
 	case dynamo.FailedAt(err, 2):
 		return errInUse
 	case dynamo.FailedAt(err, 0):
 		return errNotFound
-	case dynamo.FailedAt(err, 1):
+	case dynamo.FailedAt(err, 1), dynamo.FailedAt(err, 3):
 		return errStale
 	}
 	return err

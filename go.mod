@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.13.21
 	github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider v1.41.3
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.34.3
+	github.com/aws/smithy-go v1.20.3
 	github.com/google/uuid v1.6.0
 )
 
@@ -25,6 +26,5 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.22.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3 // indirect
-	github.com/aws/smithy-go v1.20.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 )

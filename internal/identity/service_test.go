@@ -17,15 +17,23 @@ import (
 
 type fakeDirectory struct {
 	Directory
-	err     error
-	token   string
-	users   []User
-	queried int
-	created []NewAccount
+	err       error
+	token     string
+	challenge string
+	users     []User
+	queried   int
+	created   []NewAccount
 }
 
-func (f *fakeDirectory) SignIn(context.Context, string, string) (string, error) {
+func (f *fakeDirectory) SignIn(context.Context, string, string) (SignInResult, error) {
+	return SignInResult{IDToken: f.token, NewPasswordSession: f.challenge}, f.err
+}
+func (f *fakeDirectory) CompleteNewPassword(context.Context, string, string, string) (string, error) {
 	return f.token, f.err
+}
+func (f *fakeDirectory) ForgotPassword(context.Context, string) error { return f.err }
+func (f *fakeDirectory) ConfirmForgotPassword(context.Context, string, string, string) error {
+	return f.err
 }
 func (f *fakeDirectory) SignUp(context.Context, string, string, string) error { return f.err }
 func (f *fakeDirectory) ConfirmSignUp(context.Context, string, string) error  { return f.err }
@@ -77,7 +85,7 @@ func TestLogin(t *testing.T) {
 	s, err := newTestService(t, d).Login(context.Background(), Credentials{Email: " 12345678901@ALUNOS.umc.br ", Password: "x"})
 	want := SessionUser{ID: "s1", Name: "Ana", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, Status: StatusActive,
 		CohortIDs: []string{"turma-1"}, RGM: "12345678901"}
-	if err != nil || !reflect.DeepEqual(s.User, want) || s.Token != d.token {
+	if err != nil || s.User == nil || !reflect.DeepEqual(*s.User, want) || s.Token != d.token {
 		t.Fatalf("session = %+v, err = %v", s, err)
 	}
 
@@ -214,5 +222,68 @@ func TestAdvisorExists(t *testing.T) {
 	d.queried = 0
 	if ok, _ := svc.AdvisorExists(context.Background(), `x" or email ^= "`); ok || d.queried != 0 {
 		t.Errorf("an id outside the sub format reached Cognito (%d queries)", d.queried)
+	}
+}
+
+func TestLoginWithTemporaryPassword(t *testing.T) {
+	res, err := newTestService(t, &fakeDirectory{challenge: "sess"}).Login(context.Background(), Credentials{Email: "prof@umc.br", Password: "Temp#123"})
+	if err != nil || res.Challenge != ChallengeNewPassword || res.Session != "sess" || res.User != nil || res.Token != "" {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+}
+
+func TestCompleteNewPassword(t *testing.T) {
+	tok := token(map[string]any{"sub": "s9", "email": "prof@umc.br", "name": "Prof", "custom:perfil": "ORIENTADOR"})
+	s, err := newTestService(t, &fakeDirectory{token: tok}).CompleteNewPassword(context.Background(), NewPasswordInput{Email: " Prof@UMC.br", Session: "sess", Password: "Nova#1234"})
+	if err != nil || s.User.ID != "s9" || s.User.Role != actor.RoleAdvisor || s.Token != tok {
+		t.Fatalf("session = %+v, err = %v", s, err)
+	}
+	for cause, want := range map[error]apperr.Kind{errWeakPassword: apperr.KindInvalid, errSessionExpired: apperr.KindUnauthorized, errThrottled: apperr.KindTooManyRequests} {
+		_, err := newTestService(t, &fakeDirectory{err: cause}).CompleteNewPassword(context.Background(), NewPasswordInput{Email: "a@umc.br", Session: "s", Password: "x"})
+		if k, _ := status(err); k != want {
+			t.Errorf("%v: kind %d", cause, k)
+		}
+	}
+	if _, err := newTestService(t, &fakeDirectory{}).CompleteNewPassword(context.Background(), NewPasswordInput{Email: "a@umc.br"}); err == nil {
+		t.Error("missing session must be refused")
+	}
+}
+
+func TestForgotPasswordDoesNotRevealAccounts(t *testing.T) {
+	for _, cause := range []error{nil, errNoAccount, errInvalidInput} {
+		if err := newTestService(t, &fakeDirectory{err: cause}).ForgotPassword(context.Background(), ForgotPasswordInput{Email: "x@umc.br"}); err != nil {
+			t.Errorf("%v: %v", cause, err)
+		}
+	}
+	if k, _ := status(newTestService(t, &fakeDirectory{err: errThrottled}).ForgotPassword(context.Background(), ForgotPasswordInput{Email: "x@umc.br"})); k != apperr.KindTooManyRequests {
+		t.Error("throttling must surface")
+	}
+}
+
+func TestResetPassword(t *testing.T) {
+	ctx := context.Background()
+	in := ResetPasswordInput{Email: "a@umc.br", Code: "123456", Password: "Nova#1234"}
+	if err := newTestService(t, &fakeDirectory{}).ResetPassword(ctx, in); err != nil {
+		t.Fatal(err)
+	}
+	for cause, msg := range map[error]string{errWrongCode: msgWrongCode, errNoAccount: msgWrongCode, errExpiredCode: msgExpiredCode, errWeakPassword: msgWeakPassword} {
+		if _, got := status(newTestService(t, &fakeDirectory{err: cause}).ResetPassword(ctx, in)); got != msg {
+			t.Errorf("%v: %q", cause, got)
+		}
+	}
+	if _, msg := status(newTestService(t, &fakeDirectory{}).ResetPassword(ctx, ResetPasswordInput{Email: "a@umc.br"})); msg != msgResetRequired {
+		t.Errorf("missing fields: %q", msg)
+	}
+}
+
+func TestMe(t *testing.T) {
+	svc := newTestService(t, &fakeDirectory{})
+	u, err := svc.Me(context.Background(), actor.Actor{Sub: "s1", Name: "Ana", Email: "12345678901@alunos.umc.br"})
+	want := SessionUser{ID: "s1", Name: "Ana", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, Status: StatusActive, CohortIDs: []string{"turma-1"}, RGM: "12345678901"}
+	if err != nil || !reflect.DeepEqual(u, want) {
+		t.Fatalf("me = %+v, err = %v", u, err)
+	}
+	if _, err := svc.Me(context.Background(), actor.Actor{}); err == nil {
+		t.Error("no sub must be refused")
 	}
 }
