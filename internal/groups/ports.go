@@ -35,6 +35,8 @@ type Store interface {
 
 type Academic interface {
 	ProgramExists(ctx context.Context, id string) (bool, error)
+	CohortOfProgram(ctx context.Context, programID string) (string, bool, error)
+	Cohort(ctx context.Context, id string) (Cohort, bool, error)
 	ProgramOfCohort(ctx context.Context, cohortID string) (string, bool, error)
 	IsEnrolled(ctx context.Context, rgm string) (bool, error)
 	CohortOf(ctx context.Context, rgm string) (string, error)
@@ -44,4 +46,6 @@ type Academic interface {
 type Accounts interface {
 	StudentExists(ctx context.Context, rgm string) (bool, error)
 	AdvisorExists(ctx context.Context, sub string) (bool, error)
+	StudentNames(ctx context.Context, rgms []string) (map[string]string, error)
+	AdvisorName(ctx context.Context, sub string) (string, bool, error)
 }

@@ -20,7 +20,10 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/auth/esqueci-senha", h.forgotPassword)
 	r.Handle("POST", "/auth/redefinir-senha", h.resetPassword)
 	r.Handle("GET", "/me", h.me)
-	r.Handle("GET", "/usuarios", h.listUsers)
+	r.Handle("GET", "/usuarios", httpapi.Restrict(httpapi.Policy{
+		Roles:   []actor.Role{actor.RoleAdmin, actor.RoleAdvisor},
+		Message: msgStaffOnly,
+	}, h.listUsers))
 	r.Handle("POST", "/admin/usuarios", httpapi.Restrict(httpapi.Policy{
 		Roles:       []actor.Role{actor.RoleAdmin},
 		Message:     msgAdminOnly,
@@ -95,8 +98,8 @@ func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response,
 	return httpapi.Reply(200, u, err)
 }
 
-func (h handlers) listUsers(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	users, err := h.svc.ListUsers(ctx, r.Actor)
+func (h handlers) listUsers(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
+	users, err := h.svc.ListUsers(ctx)
 	return httpapi.Reply(200, users, err)
 }
 

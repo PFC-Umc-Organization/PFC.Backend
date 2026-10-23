@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,12 +94,117 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 	return p, nil
 }
 
-func (s *Service) ProjectsOfProgram(ctx context.Context, programID string) ([]Project, error) {
+// ProjectsOfProgram gives an advisor only the projects they advise.
+func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
 		return nil, apperr.Internal("falha ao listar projetos", err)
 	}
-	return projects, nil
+	if viewer.HasRole(actor.RoleAdmin) {
+		return projects, nil
+	}
+	return slices.DeleteFunc(projects, func(p Project) bool { return !Advises(viewer, p) }), nil
+}
+
+func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (Detail, error) {
+	p, err := s.load(ctx, id)
+	if err != nil {
+		return Detail{}, err
+	}
+	if !CanView(viewer, p) {
+		return Detail{}, apperr.Forbidden(msgMembersAndStaffOnly)
+	}
+	return s.detail(ctx, p), nil
+}
+
+// detail fills in names and cohort. They only decorate the project: a failed
+// lookup is logged and leaves the field empty instead of failing the page.
+func (s *Service) detail(ctx context.Context, p Project) Detail {
+	d := Detail{Project: p, Members: make([]Member, 0, len(p.Members))}
+	var names map[string]string
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		var err error
+		if names, err = s.accounts.StudentNames(ctx, p.Members); err != nil {
+			slog.WarnContext(ctx, "member names not loaded", "project", p.ID, "error", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if p.AdvisorID == "" {
+			return
+		}
+		d.Advisor = &Advisor{ID: p.AdvisorID}
+		name, _, err := s.accounts.AdvisorName(ctx, p.AdvisorID)
+		if err != nil {
+			slog.WarnContext(ctx, "advisor name not loaded", "project", p.ID, "error", err)
+		}
+		d.Advisor.Name = name
+	}()
+	go func() {
+		defer wg.Done()
+		var err error
+		if d.Cohort, err = s.cohortOfProgram(ctx, p.ProgramID); err != nil {
+			slog.WarnContext(ctx, "cohort not loaded", "project", p.ID, "error", err)
+		}
+	}()
+	wg.Wait()
+	for _, rgm := range p.Members {
+		m := Member{RGM: rgm}
+		if name, ok := names[rgm]; ok {
+			m.Name = &name
+		}
+		d.Members = append(d.Members, m)
+	}
+	return d
+}
+
+func (s *Service) cohortOfProgram(ctx context.Context, programID string) (*Cohort, error) {
+	cohortID, found, err := s.academic.CohortOfProgram(ctx, programID)
+	if err != nil || !found {
+		return nil, err
+	}
+	return s.cohort(ctx, cohortID)
+}
+
+func (s *Service) cohort(ctx context.Context, id string) (*Cohort, error) {
+	c, found, err := s.academic.Cohort(ctx, id)
+	if err != nil || !found {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// MyPFC reads the cohort from the allowlist, not from the session: a student
+// pre-authorized after signing in sees it without signing in again.
+func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error) {
+	rgm := student.RGM()
+	p, found, err := s.store.ProjectOfMember(ctx, rgm)
+	if err != nil {
+		return MyPFC{}, apperr.Internal("falha ao carregar o seu projeto", err)
+	}
+	if found {
+		d := s.detail(ctx, p)
+		return MyPFC{Cohort: d.Cohort, ProgramID: p.ProgramID, Group: &d}, nil
+	}
+	cohortID, err := s.academic.CohortOf(ctx, rgm)
+	if err != nil {
+		return MyPFC{}, apperr.Internal("falha ao validar a sua matrícula", err)
+	}
+	if cohortID == "" {
+		return MyPFC{}, nil
+	}
+	cohort, err := s.cohort(ctx, cohortID)
+	if err != nil {
+		return MyPFC{}, apperr.Internal("falha ao carregar a sua turma", err)
+	}
+	programID, _, err := s.academic.ProgramOfCohort(ctx, cohortID)
+	if err != nil {
+		return MyPFC{}, apperr.Internal("falha ao carregar a sua turma", err)
+	}
+	return MyPFC{Cohort: cohort, ProgramID: programID}, nil
 }
 
 func (s *Service) UpdateProject(ctx context.Context, id string, in ProjectInput) error {

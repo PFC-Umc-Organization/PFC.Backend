@@ -16,11 +16,14 @@ internal/
 │   ├── apperr/            # erros de aplicação (tipo + mensagem pro usuário)
 │   ├── dynamo/            # helpers do DynamoDB (query paginada, lotes, transações)
 │   ├── actor/             # quem chama (claims do Cognito), perfis e RGM
-│   └── audit/             # eventos de auditoria no CloudWatch
+│   ├── audit/             # eventos de auditoria no CloudWatch
+│   ├── parallel/          # consultas em paralelo dentro de um request (no máximo 8)
+│   └── storage/           # arquivos no S3: POST/GET assinados, tipos aceitos, 50 MB
 ├── identity/              # módulo: login, cadastro, confirmação e contas (Cognito)
 ├── academic/              # módulo: cursos, turmas, programa da turma e allowlist de RGMs
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
-├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos
+├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos (com arquivo)
+├── materials/             # módulo: materiais de apoio (link ou arquivo), por turma ou gerais
 ├── references/            # módulo: referências bibliográficas (OpenAlex, Crossref, ABNT)
 └── integracao/            # testes ponta a ponta contra o DynamoDB Local
 ```
@@ -51,6 +54,7 @@ encaminha tudo pra Lambda.
 | `GSI_NAME`          | Nome do índice secundário GSI1 (ex: `GSI1`), com projeção ALL |
 | `REFERENCIAS_CONTATO_EMAIL` | Opcional. E-mail de contato enviado ao Crossref/OpenAlex (dá prioridade no "polite pool") |
 | `OPENALEX_API_KEY`  | Opcional. Chave da OpenAlex pra limites maiores — funciona sem |
+| `UPLOADS_BUCKET`    | Opcional. Bucket privado dos arquivos (entregas e materiais). Sem ele, campo de arquivo guarda só o nome e material é só link |
 
 As quatro primeiras são obrigatórias: sem elas a Lambda falha no init, com
 a lista do que falta no log (`platform/config`).
@@ -76,6 +80,11 @@ em rota nenhuma.
 | Entrega | `PROJECT#<id>` | `ENTREGA#<aid>` | `ENTREGAS#<aid>` | `PROJECT#<id>` |
 | Referência | `PROJECT#<id>` | `REF#<hash do DOI>` | — | — |
 | Atividade | `ACTIVITY#<id>` | `PROFILE` | `ACTIVITIES` | `ACTIVITY#<id>` |
+| Material | `MATERIAL#<id>` | `PROFILE` | `MATERIAIS` | `MATERIAL#<id>` |
+
+Arquivos ficam no bucket `UPLOADS_BUCKET`, nunca no DynamoDB:
+`entregas/<projeto>/<atividade>/<campo>/<id>/<nome>` (a resposta do campo é a
+chave) e `materiais/<id>/<nome>`.
 
 As regras de unicidade são garantidas pelo próprio DynamoDB, numa
 `TransactWriteItems` com `attribute_not_exists`, e não por "ler e depois
@@ -114,7 +123,7 @@ ver [Migração](#migração).
 | POST   | `/auth/esqueci-senha`                    | Manda o código de redefinição (`{ email }`); responde igual exista ou não a conta | pública |
 | POST   | `/auth/redefinir-senha`                  | Define a senha nova com o código (`{ email, codigo, senha }`)       | pública |
 | GET    | `/me`                                    | O usuário logado, com a turma lida agora (o front relê ao abrir)    | qualquer autenticado |
-| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, perfil, status, `confirmado` e `rgm` (aluno) | qualquer autenticado — e-mail só pra ORIENTADOR/ADMIN |
+| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, e-mail, perfil, status, `confirmado`, `rgm` (aluno) e a turma (um `BatchGetItem` para todos) | ADMIN, ORIENTADOR |
 | GET    | `/cursos`                                | Lista os cursos cadastrados                                         | qualquer autenticado |
 | POST   | `/cursos`                                | Cadastra curso (`{ nome }`); 409 se o nome já existe                | ADMIN |
 | PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas mostram o nome novo                             | ADMIN |
@@ -123,14 +132,16 @@ ver [Migração](#migração).
 | DELETE | `/admin/students`                        | Remove RGMs da allowlist                                            | ADMIN |
 | POST   | `/programas`                             | Cria Programa (`{ cursoId }`)                                       | ADMIN |
 | GET    | `/programas`                             | Lista programas                                                     | qualquer autenticado |
+| GET    | `/meu-pfc`                               | O grupo do aluno logado no formato de `GET /projetos/:id` (`grupo`), ou `grupo: null` com a turma em que está pré-autorizado (`turma`, lida agora) e o programa dela (`programaId`, ausente se a turma não tem PFC) | ALUNO |
 | POST   | `/meu-pfc`                               | Aluno pré-autorizado cria o projeto do grupo (`{ nome, descricao, integrantes: RGMs }`) no programa da própria turma; só ele entra como integrante, os colegas recebem **convite** (ver `/meus-convites`). 403 sem turma, 409 sem programa na turma ou integrante já em projeto, 400 colega fora da turma | ALUNO |
 | POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa (`{ nome, descricao }`; `integrantes` do corpo é ignorado — entram por `PUT /projetos/:id/integrantes`) | ADMIN |
-| GET    | `/programas/:programaId/projetos`        | Lista projetos do programa                                          | qualquer autenticado |
+| GET    | `/programas/:programaId/projetos`        | Lista projetos do programa; o orientador recebe só os que orienta   | ADMIN, ORIENTADOR |
+| GET    | `/projetos/:projetoId`                   | Projeto com os nomes: `{ projeto, integrantes: [{ rgm, nome }], orientador: { id, nome }, turma }` (`nome` null = RGM sem conta). Nomes e turma que falharem ficam vazios em vez de derrubar a tela | integrantes, orientador do projeto, ADMIN |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | ADMIN |
 | GET    | `/meus-convites`                         | Convites pendentes recebidos pelo aluno logado                      | ALUNO |
 | POST   | `/meus-convites/:projetoId/aceitar`      | Aceita: entra no grupo (revalida turma, se está livre e o limite de 10) e apaga os outros convites dele. 404 sem convite ou grupo apagado, 409 já em projeto/fora da turma/grupo cheio | ALUNO |
 | POST   | `/meus-convites/:projetoId/recusar`      | Recusa (apaga o convite)                                            | ALUNO |
-| GET    | `/projetos/:projetoId/convites`          | Convites pendentes do grupo                                         | integrantes, ADMIN, ORIENTADOR |
+| GET    | `/projetos/:projetoId/convites`          | Convites pendentes do grupo                                         | integrantes, orientador do projeto, ADMIN |
 | POST   | `/projetos/:projetoId/convites`          | Convida mais um colega (`{ rgm }`), com as regras do `/meu-pfc`; convite pendente conta no limite de 10 | integrantes do projeto |
 | DELETE | `/projetos/:projetoId/convites/:rgm`     | Cancela um convite                                                  | integrantes do projeto |
 | GET    | `/atividades`                            | Lista atividades (com `campos`), ordenadas por prazo               | qualquer autenticado |
@@ -139,15 +150,23 @@ ver [Migração](#migração).
 | DELETE | `/atividades/:atividadeId`               | Remove a atividade e as entregas dela                               | ADMIN, ORIENTADOR |
 | POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20) | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId/campos/:campoId` | Remove campo; 409 se for o último                                | ADMIN, ORIENTADOR |
-| GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN, ORIENTADOR |
-| GET    | `/projetos/:projetoId/entregas`          | Entregas do grupo                                                   | integrantes, ADMIN, ORIENTADOR |
+| GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN |
+| GET    | `/programas/:programaId/entregas`        | Entregas (com respostas) de todos os projetos do programa, numa chamada — a matriz do painel; o orientador recebe só as dos projetos que orienta | ADMIN, ORIENTADOR |
+| GET    | `/projetos/:projetoId/entregas`          | Entregas do grupo                                                   | integrantes, orientador do projeto, ADMIN |
 | PUT    | `/projetos/:projetoId/entregas/:atividadeId` | Entrega/reenvia (`{ respostas: { <campoId>: valor } }`), validada contra os campos | integrantes do projeto |
-| DELETE | `/projetos/:projetoId/entregas/:atividadeId` | Remove a entrega do grupo (devolve pra refazer)                  | ADMIN, ORIENTADOR |
+| DELETE | `/projetos/:projetoId/entregas/:atividadeId` | Remove a entrega do grupo (devolve pra refazer) e apaga os arquivos dela | ADMIN, orientador do projeto |
+| POST   | `/projetos/:projetoId/entregas/:atividadeId/arquivos` | Pede o envio de um arquivo para um campo ARQUIVO (`{ campoId, nome, tamanho }`) → `{ url, campos, chave, expiraEm, tamanhoMaximo }`: o navegador manda `campos` + o arquivo (campo `file`) em multipart para `url`, e a `chave` vira a resposta do campo no `PUT` da entrega. 400 tipo não aceito ou acima de 50 MB; 503 sem `UPLOADS_BUCKET` | integrantes do projeto |
+| GET    | `/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId` | `{ url, nome }`: link de download de 5 minutos. 404 se a resposta é só um nome (entrega de antes do upload) | integrantes, orientador do projeto, ADMIN |
 | GET    | `/referencias/busca?q=&pagina=`          | Busca artigos por tema na **OpenAlex** (10 por página, até 50 páginas) | qualquer autenticado |
 | GET    | `/referencias/doi?doi=`                  | Consulta o DOI no **Crossref** e devolve a referência em ABNT (`abnt`, `abntHtml`) | qualquer autenticado |
-| GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, ORIENTADOR, ADMIN |
+| GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, orientador do projeto, ADMIN |
 | POST   | `/projetos/:projetoId/referencias`       | Adiciona pelo DOI (`{ doi }`); 409 se já estiver na lista           | integrantes do projeto |
 | DELETE | `/projetos/:projetoId/referencias/:referenciaId` | Remove da lista                                             | integrantes do projeto |
+| GET    | `/materiais`                             | Materiais, do mais novo ao mais antigo; o aluno recebe os gerais (`cursoId` null) e os da turma em que está pré-autorizado | qualquer autenticado |
+| POST   | `/materiais`                             | Publica (`{ titulo, descricao, tipo, url \| arquivo, cursoId }`); `tipo` DOCUMENTO/MODELO/VIDEO/LINK; um link http(s) **ou** a `chave` de `POST /materiais/arquivos` | ADMIN, ORIENTADOR |
+| DELETE | `/materiais/:materialId`                 | Remove e apaga o arquivo; o orientador só remove os que publicou   | ADMIN, ORIENTADOR (autor) |
+| POST   | `/materiais/arquivos`                    | Pede o envio de um arquivo (`{ nome, tamanho }`), como nas entregas | ADMIN, ORIENTADOR |
+| GET    | `/materiais/:materialId/arquivo`         | `{ url, nome }`: link de download de 5 minutos (404 para material de outra turma) | qualquer autenticado |
 
 ## Decisões importantes
 
@@ -159,6 +178,14 @@ ver [Migração](#migração).
   (`admin(...)`, `staff(...)`, `student(...)`, sobre `httpapi.Restrict`), em
   vez de cada handler conferir à mão. Regras que dependem do recurso (ser
   integrante do projeto) ficam no serviço, em `groups.IsMember`/`CanView`.
+- **Arquivo vai direto do navegador ao S3.** O back só assina: um POST cuja
+  policy fixa a chave, o Content-Type (decidido pela extensão) e o tamanho
+  (até 50 MB) — o próprio S3 recusa o resto — e GETs de 5 minutos para baixar.
+  Nada passa pela Lambda (limite de 6 MB, e cada MB seria tempo cobrado). A
+  entrega só aceita uma chave do próprio grupo/atividade/campo que exista no
+  bucket; trocar o arquivo ou devolver a entrega apaga o anterior. Ficam para
+  trás (custo baixo) arquivos enviados e nunca entregues e os de projeto ou
+  atividade apagados.
 - **`perfil` nunca vem do cliente em `/auth/registrar`.** Endpoint público;
   se o valor enviado no corpo fosse usado pra decidir o perfil, qualquer
   requisição poderia se autodeclarar ADMIN. Cadastro público sempre
@@ -233,22 +260,26 @@ REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
   importar algo fora das regras — a `platform` não conhece os módulos e um
   módulo só depende de outro quando a dependência está listada ali
   (hoje: `deliveries` e `references` usam `groups`).
-- **Contrato** (`internal/integracao/contrato_test.go`): percorre as 47 rotas,
+- **Contrato** (`internal/integracao/contrato_test.go`): percorre as 65 rotas,
   com casos de sucesso e de erro, e compara status e corpo de cada resposta com
   `testdata/contrato.golden` (ids e datas normalizados). Qualquer mudança na API
   quebra o teste; se a mudança for intencional, regrave e revise o diff:
   `scripts/test-integration.sh -run Contrato -update`.
 - **Regras com banco** (`internal/integracao/integracao_test.go`): unicidades,
   um projeto por aluno com cinco inclusões simultâneas, cascata ao apagar.
+- **Arquivos** (`internal/integracao/arquivos_test.go`): upload pelo formulário
+  assinado num S3 falso que confere a policy, entrega, download, troca e
+  limpeza; material de turma invisível para outra turma.
 - **Permissões da Lambda** (`internal/integracao/iam_test.go`): registra cada
-  operação que o backend faz no DynamoDB e no Cognito durante os testes e falha
+  operação que o backend faz no DynamoDB, no Cognito e no S3 durante os testes e falha
   se alguma não estiver na política da Lambda (cópia da lista de
   `PFC.Infra/modules/backend-lambda/data.tf`). O DynamoDB Local não confere
   permissão: foi assim que `ConditionCheckItem` e `BatchGetItem` chegaram à AWS
   sem permissão e viraram 500. Ação nova entra nos dois lugares.
 
 O pacote `internal/integracao` usa o DynamoDB Local de verdade e servidores
-falsos para o Cognito (`cognito_fake_test.go`) e para Crossref/OpenAlex. Sem o
+falsos para o Cognito (`cognito_fake_test.go`), o S3 (`s3_fake_test.go`) e
+Crossref/OpenAlex. Sem o
 script, ele é pulado.
 
 ## Migração

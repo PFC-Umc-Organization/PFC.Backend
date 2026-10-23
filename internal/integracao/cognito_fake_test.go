@@ -46,6 +46,17 @@ func (f *fakeCognito) reset() {
 	f.next = 0
 }
 
+// subOf is the sub Cognito puts in the token of the account, as the
+// authorizer would.
+func (f *fakeCognito) subOf(email string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if u, ok := f.users[email]; ok {
+		return u.sub
+	}
+	return "sub-" + email
+}
+
 func (f *fakeCognito) add(email, name, role string, confirmed bool) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

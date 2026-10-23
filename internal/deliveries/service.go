@@ -3,6 +3,8 @@ package deliveries
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -13,17 +15,25 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
 type Service struct {
 	store    Store
 	projects Projects
+	files    Files
 	newID    func() string
 	now      func() time.Time
 }
 
-func NewService(store Store, projects Projects) *Service {
-	return &Service{store: store, projects: projects, newID: uuid.NewString, now: time.Now}
+const (
+	uploadTTL   = 15 * time.Minute
+	downloadTTL = 5 * time.Minute
+)
+
+func NewService(store Store, projects Projects, files Files) *Service {
+	return &Service{store: store, projects: projects, files: files, newID: uuid.NewString, now: time.Now}
 }
 
 func activityResource(id string) *audit.Resource { return &audit.Resource{Type: "atividade", ID: id} }
@@ -176,6 +186,22 @@ func (s *Service) SubmissionsOfProject(ctx context.Context, viewer actor.Actor, 
 	return submissions, nil
 }
 
+// SubmissionsOfProgram feeds the staff panel's status grid in one call; an
+// advisor gets only the projects they advise.
+func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Submission, error) {
+	projects, err := s.projects.ProjectsOfProgram(ctx, viewer, programID)
+	if err != nil {
+		return nil, err
+	}
+	perProject, err := parallel.Map(projects, func(p groups.Project) ([]Submission, error) {
+		return s.store.SubmissionsOfProject(ctx, p.ID)
+	})
+	if err != nil {
+		return nil, apperr.Internal("falha ao listar entregas", err)
+	}
+	return slices.Concat(perProject...), nil
+}
+
 // Submit overwrites the group's previous submission for the activity.
 func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, activityID string, in SubmissionInput) (Submission, error) {
 	p, err := s.project(ctx, projectID)
@@ -198,10 +224,18 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	if msg != "" {
 		return Submission{}, apperr.Invalid(msg)
 	}
+	previous, _, err := s.store.GetSubmission(ctx, p.ID, a.ID)
+	if err != nil {
+		return Submission{}, apperr.Internal("falha ao carregar a entrega anterior", err)
+	}
+	if err := s.checkFiles(ctx, p.ID, a, answers, previous.Answers); err != nil {
+		return Submission{}, err
+	}
 	sub := Submission{ActivityID: a.ID, ProjectID: p.ID, SubmittedAt: s.timestamp(), SubmittedBy: member.Name, Answers: answers}
 	if err := s.store.PutSubmission(ctx, sub); err != nil {
 		return Submission{}, apperr.Internal("falha ao salvar entrega", err)
 	}
+	s.deleteFiles(ctx, replaced(previous.Answers, answers))
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Success, Resource: activityResource(a.ID),
 		Details: map[string]any{"projetoId": p.ID}})
 	return sub, nil
@@ -209,15 +243,146 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 
 // RemoveSubmission is how the academic team hands an activity back to the
 // group; nobody else edits a submission's content.
-func (s *Service) RemoveSubmission(ctx context.Context, projectID, activityID string) error {
-	err := s.store.DeleteSubmission(ctx, projectID, activityID)
+func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, projectID, activityID string) error {
+	p, err := s.project(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if !groups.CanReview(reviewer, p) {
+		audit.Record(ctx, audit.Event{Action: "entrega.removida", Result: audit.Failure, Reason: msgReviewersOnly,
+			Resource: activityResource(activityID), Details: map[string]any{"projetoId": projectID}})
+		return apperr.Forbidden(msgReviewersOnly)
+	}
+	removed, err := s.store.DeleteSubmission(ctx, projectID, activityID)
 	if errors.Is(err, errNotFound) {
 		return apperr.NotFound(msgSubmissionNotFound)
 	}
 	if err != nil {
 		return apperr.Internal("falha ao remover entrega", err)
 	}
+	s.deleteFiles(ctx, replaced(removed.Answers, nil))
 	audit.Record(ctx, audit.Event{Action: "entrega.removida", Result: audit.Success, Resource: activityResource(activityID),
 		Details: map[string]any{"projetoId": projectID}})
 	return nil
+}
+
+// RequestUpload lets a member send one file for a file field. The answer
+// only changes when the group submits the form with the returned key.
+func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, projectID, activityID string, in UploadRequest) (UploadTicket, error) {
+	if s.files == nil {
+		return UploadTicket{}, apperr.Unavailable(msgNoStorage, nil)
+	}
+	p, err := s.project(ctx, projectID)
+	if err != nil {
+		return UploadTicket{}, err
+	}
+	if !groups.IsMember(member, p) {
+		return UploadTicket{}, apperr.Forbidden(msgMembersOnly)
+	}
+	a, found, err := s.store.GetActivity(ctx, activityID)
+	if err != nil {
+		return UploadTicket{}, apperr.Internal("falha ao carregar atividade", err)
+	}
+	if !found {
+		return UploadTicket{}, apperr.NotFound(msgActivityNotFound)
+	}
+	i := slices.IndexFunc(a.Fields, func(f Field) bool { return f.ID == in.FieldID })
+	switch {
+	case i < 0:
+		return UploadTicket{}, apperr.NotFound(msgFieldNotFound)
+	case a.Fields[i].Type != FieldFile:
+		return UploadTicket{}, apperr.Invalid(msgNotAFile)
+	case in.Size <= 0:
+		return UploadTicket{}, apperr.Invalid(msgFileEmpty)
+	case in.Size > storage.MaxBytes:
+		return UploadTicket{}, apperr.Invalid(msgFileSize)
+	}
+	name := storage.SafeName(in.Name)
+	kind, ok := storage.ContentType(name)
+	if !ok {
+		return UploadTicket{}, apperr.Invalid(msgFileType)
+	}
+	key := fieldPrefix(p.ID, a.ID, in.FieldID) + s.newID() + "/" + name
+	up, err := s.files.PresignUpload(ctx, key, kind, storage.MaxBytes, uploadTTL)
+	if err != nil {
+		return UploadTicket{}, apperr.Internal("falha ao preparar o envio do arquivo", err)
+	}
+	return UploadTicket{URL: up.URL, Fields: up.Fields, Key: key, ExpiresAt: up.ExpiresAt.UTC().Format(time.RFC3339), MaxBytes: storage.MaxBytes}, nil
+}
+
+// checkFiles accepts, in a file field, the answer already submitted or a
+// file this group uploaded for this field. Without storage, any name goes,
+// as before.
+func (s *Service) checkFiles(ctx context.Context, projectID string, a Activity, answers, previous map[string]string) error {
+	if s.files == nil {
+		return nil
+	}
+	for _, f := range a.Fields {
+		v, ok := answers[f.ID]
+		if f.Type != FieldFile || !ok || v == previous[f.ID] {
+			continue
+		}
+		if !strings.HasPrefix(v, fieldPrefix(projectID, a.ID, f.ID)) {
+			return apperr.Invalid(fmt.Sprintf("envie o arquivo do campo %q pelo botão de envio", f.Label))
+		}
+		size, found, err := s.files.Size(ctx, v)
+		if err != nil {
+			return apperr.Internal("falha ao conferir o arquivo enviado", err)
+		}
+		if !found || size > storage.MaxBytes {
+			return apperr.Invalid(fmt.Sprintf("o arquivo do campo %q não chegou — envie de novo", f.Label))
+		}
+	}
+	return nil
+}
+
+// replaced lists the stored files that before had and after no longer has.
+func replaced(before, after map[string]string) []string {
+	var keys []string
+	for id, v := range before {
+		if isStoredFile(v) && after[id] != v {
+			keys = append(keys, v)
+		}
+	}
+	return keys
+}
+
+// deleteFiles is best effort: a file left behind costs little and must not
+// undo the submission.
+func (s *Service) deleteFiles(ctx context.Context, keys []string) {
+	if s.files == nil {
+		return
+	}
+	for _, k := range keys {
+		if err := s.files.Delete(ctx, k); err != nil {
+			slog.WarnContext(ctx, "file not deleted", "key", k, "error", err)
+		}
+	}
+}
+
+func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectID, activityID, fieldID string) (Download, error) {
+	if s.files == nil {
+		return Download{}, apperr.Unavailable(msgNoStorage, nil)
+	}
+	p, err := s.project(ctx, projectID)
+	if err != nil {
+		return Download{}, err
+	}
+	if !groups.CanView(viewer, p) {
+		return Download{}, apperr.Forbidden(msgMembersAndStaff)
+	}
+	sub, found, err := s.store.GetSubmission(ctx, p.ID, activityID)
+	if err != nil {
+		return Download{}, apperr.Internal("falha ao carregar a entrega", err)
+	}
+	key := sub.Answers[fieldID]
+	if !found || !isStoredFile(key) {
+		return Download{}, apperr.NotFound(msgNoFileHere)
+	}
+	name := fileNameOf(key)
+	url, err := s.files.PresignDownload(ctx, key, name, downloadTTL)
+	if err != nil {
+		return Download{}, apperr.Internal("falha ao preparar o download", err)
+	}
+	return Download{URL: url, Name: name}, nil
 }

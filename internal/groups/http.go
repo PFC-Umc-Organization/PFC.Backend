@@ -14,9 +14,11 @@ type handlers struct{ svc *Service }
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
+	r.Handle("GET", "/meu-pfc", student(msgStudentsOnly, "", h.myPFC))
 	r.Handle("POST", "/meu-pfc", student(msgStudentsOnlyCreate, "projeto.criado_pelo_aluno", h.createOwnProject))
 	r.Handle("POST", "/programas/:programaId/projetos", admin("projeto.criado", h.createProject))
-	r.Handle("GET", "/programas/:programaId/projetos", h.projectsOfProgram)
+	r.Handle("GET", "/programas/:programaId/projetos", staff(h.projectsOfProgram))
+	r.Handle("GET", "/projetos/:projetoId", h.projectDetail)
 	r.Handle("PUT", "/projetos/:projetoId", admin("projeto.atualizado", h.updateProject))
 	r.Handle("DELETE", "/projetos/:projetoId", admin("projeto.removido", h.deleteProject))
 	r.Handle("PUT", "/projetos/:projetoId/orientador", admin("projeto.orientador_associado", h.assignAdvisor))
@@ -38,6 +40,10 @@ func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
 		Message:     msgAdminOnly,
 		AuditAction: auditAction,
 	}, h)
+}
+
+func staff(h httpapi.Handler) httpapi.Handler {
+	return httpapi.Restrict(httpapi.Policy{Roles: []actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, Message: msgStaffOnly}, h)
 }
 
 // student admits anyone who is not academic staff and has an RGM; students
@@ -78,9 +84,19 @@ func (h handlers) createProject(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Reply(201, p, err)
 }
 
+func (h handlers) myPFC(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	mine, err := h.svc.MyPFC(ctx, r.Actor)
+	return httpapi.Reply(200, mine, err)
+}
+
 func (h handlers) projectsOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	projects, err := h.svc.ProjectsOfProgram(ctx, r.Param("programaId"))
+	projects, err := h.svc.ProjectsOfProgram(ctx, r.Actor, r.Param("programaId"))
 	return httpapi.Reply(200, projects, err)
+}
+
+func (h handlers) projectDetail(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	d, err := h.svc.Detail(ctx, r.Actor, r.Param("projetoId"))
+	return httpapi.Reply(200, d, err)
 }
 
 func (h handlers) updateProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

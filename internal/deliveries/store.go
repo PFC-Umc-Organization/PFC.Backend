@@ -244,16 +244,32 @@ func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission) error {
 	})
 }
 
-func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityID string) error {
-	_, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error) {
+	it, found, err := dynamo.Get[submissionItem](ctx, s.table, submissionKey(projectID, activityID))
+	if err != nil || !found {
+		return Submission{}, found, err
+	}
+	return it.submission(), true, nil
+}
+
+func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error) {
+	out, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName:           aws.String(s.table.Name),
 		Key:                 submissionKey(projectID, activityID),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
+		ReturnValues:        types.ReturnValueAllOld,
 	})
 	if dynamo.ConditionFailed(err) {
-		return errNotFound
+		return Submission{}, errNotFound
 	}
-	return err
+	if err != nil {
+		return Submission{}, err
+	}
+	var it submissionItem
+	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+		return Submission{}, err
+	}
+	return it.submission(), nil
 }
 
 func (s *DynamoStore) SubmissionsOfProject(ctx context.Context, projectID string) ([]Submission, error) {

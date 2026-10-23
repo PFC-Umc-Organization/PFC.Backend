@@ -157,7 +157,7 @@ const (
 	msgInvalidDOI        = "DOI inválido — use o formato 10.xxxx/xxxxx"
 	msgDOINotFound       = "DOI não encontrado"
 	msgDOIUnavailable    = "o serviço de consulta de DOI está indisponível, tente novamente em instantes"
-	msgMembersAndStaff   = "acesso restrito aos integrantes do projeto e à equipe acadêmica"
+	msgMembersAndStaff   = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
 	msgMembersOnly       = "apenas integrantes do projeto podem alterar as referências"
 	msgProjectNotFound   = "projeto não encontrado"
 	msgDuplicate         = "essa referência já está na lista do projeto"

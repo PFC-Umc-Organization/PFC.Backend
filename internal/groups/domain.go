@@ -82,7 +82,51 @@ func IsMember(a actor.Actor, p Project) bool {
 	return rgm != "" && slices.Contains(p.Members, rgm)
 }
 
-func CanView(a actor.Actor, p Project) bool { return isStaff(a) || IsMember(a, p) }
+// Advises holds for the advisor assigned to the project; advisors only follow
+// their own groups.
+func Advises(a actor.Actor, p Project) bool {
+	return a.HasRole(actor.RoleAdvisor) && a.Sub != "" && p.AdvisorID == a.Sub
+}
+
+// CanReview is who may hand a submission back: the coordination and the
+// project's advisor.
+func CanReview(a actor.Actor, p Project) bool { return a.HasRole(actor.RoleAdmin) || Advises(a, p) }
+
+func CanView(a actor.Actor, p Project) bool { return CanReview(a, p) || IsMember(a, p) }
+
+// Member.Name is null when the RGM has no account yet.
+type Member struct {
+	RGM  string  `json:"rgm"`
+	Name *string `json:"nome"`
+}
+
+type Advisor struct {
+	ID   string `json:"id"`
+	Name string `json:"nome"`
+}
+
+type Cohort struct {
+	ID     string `json:"id"`
+	Course string `json:"nome"`
+	Shift  string `json:"turno"`
+	Term   string `json:"periodo"`
+}
+
+// Detail is the project as the screens show it, names included.
+type Detail struct {
+	Project Project  `json:"projeto"`
+	Members []Member `json:"integrantes"`
+	Advisor *Advisor `json:"orientador"`
+	Cohort  *Cohort  `json:"turma"`
+}
+
+// MyPFC is GET /meu-pfc: the student's group or, without one, what decides
+// whether they can create it.
+type MyPFC struct {
+	Cohort    *Cohort `json:"turma"`
+	ProgramID string  `json:"programaId,omitempty"`
+	Group     *Detail `json:"grupo"`
+}
 
 func group(creator string, classmates []string) []string {
 	seen := map[string]bool{creator: true}
@@ -103,7 +147,8 @@ const (
 	msgStudentsOnly         = "esta rota é para alunos"
 	msgStudentsOnlyCreate   = "esta rota é para alunos — a coordenação cria projetos pela gestão de PFC"
 	msgNoRGM                = "não foi possível identificar o seu RGM"
-	msgMembersAndStaffOnly  = "acesso restrito aos integrantes do projeto e à equipe acadêmica"
+	msgMembersAndStaffOnly  = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
+	msgStaffOnly            = "acesso restrito à equipe acadêmica"
 	msgMembersOnlyInvite    = "apenas integrantes do projeto podem convidar"
 	msgMembersOnlyCancel    = "apenas integrantes do projeto podem cancelar convites"
 	msgNameRequired         = "nome é obrigatório"

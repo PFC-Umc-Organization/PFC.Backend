@@ -52,4 +52,5 @@ type Directory interface {
 
 type Academic interface {
 	CohortOf(ctx context.Context, rgm string) (string, error)
+	CohortsOf(ctx context.Context, rgms []string) (map[string]string, error)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/app"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
@@ -28,12 +29,13 @@ var (
 	r       *httpapi.Router
 	table   *dynamo.Table
 	cognito = newFakeCognito()
+	bucket  = newFakeS3()
 )
 
 func TestMain(m *testing.M) {
 	required := []string{
 		"AWS_ENDPOINT_URL_DYNAMODB", "AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER",
-		"REFERENCIAS_CROSSREF_URL", "REFERENCIAS_OPENALEX_URL",
+		"REFERENCIAS_CROSSREF_URL", "REFERENCIAS_OPENALEX_URL", "AWS_ENDPOINT_URL_S3", "UPLOADS_BUCKET",
 	}
 	for _, v := range required {
 		if os.Getenv(v) == "" {
@@ -43,6 +45,10 @@ func TestMain(m *testing.M) {
 	}
 	if err := cognito.serve(os.Getenv("AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER")); err != nil {
 		fmt.Println("integracao: cognito falso:", err)
+		os.Exit(1)
+	}
+	if err := bucket.serve(os.Getenv("AWS_ENDPOINT_URL_S3")); err != nil {
+		fmt.Println("integracao: s3 falso:", err)
 		os.Exit(1)
 	}
 	if err := serveExternalAPIs(os.Getenv("REFERENCIAS_CROSSREF_URL"), os.Getenv("REFERENCIAS_OPENALEX_URL")); err != nil {
@@ -67,6 +73,10 @@ func TestMain(m *testing.M) {
 	}
 	recorded.Cognito = cognitoidentityprovider.NewFromConfig(awsCfg, func(o *cognitoidentityprovider.Options) {
 		o.APIOptions = append(o.APIOptions, recorder.middleware("cognito-idp"))
+	})
+	recorded.S3 = s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.APIOptions = append(o.APIOptions, recorder.middleware("s3"))
 	})
 	r = app.New(recorded)
 	code := m.Run()
@@ -147,7 +157,7 @@ func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 	// Public routes have no authorizer, as in the API Gateway.
 	if q.email != "" {
 		req.RequestContext.Authorizer = map[string]interface{}{
-			"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": "sub-" + q.email, "name": q.email},
+			"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": cognito.subOf(q.email), "name": q.email},
 		}
 	}
 	resp, err := r.Lambda(context.Background(), req)

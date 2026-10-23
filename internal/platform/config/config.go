@@ -18,6 +18,11 @@ type Config struct {
 	// identified clients first. Optional, like OpenAlexAPIKey.
 	ContactEmail   string
 	OpenAlexAPIKey string
+
+	// UploadsBucket is optional: without it, file fields keep only the name.
+	UploadsBucket string
+	// S3PathStyle is for a local S3 (tests), which has no per-bucket host.
+	S3PathStyle bool
 }
 
 func FromEnv() (Config, error) {
@@ -30,6 +35,8 @@ func FromEnv() (Config, error) {
 		OpenAlexURL:       envOr("REFERENCIAS_OPENALEX_URL", "https://api.openalex.org"),
 		ContactEmail:      os.Getenv("REFERENCIAS_CONTATO_EMAIL"),
 		OpenAlexAPIKey:    os.Getenv("OPENALEX_API_KEY"),
+		UploadsBucket:     os.Getenv("UPLOADS_BUCKET"),
+		S3PathStyle:       os.Getenv("AWS_ENDPOINT_URL_S3") != "",
 	}
 	var missing []string
 	for name, value := range map[string]string{

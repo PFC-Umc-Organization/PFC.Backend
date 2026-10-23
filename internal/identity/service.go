@@ -10,6 +10,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 )
 
 type Service struct {
@@ -252,20 +253,28 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	return nil
 }
 
-// ListUsers is open to every signed-in user: students need the names of
-// their group and advisor. E-mails are personal data, shown to staff only.
-func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, error) {
+// ListUsers is for the academic team; students get their group's names from
+// the project itself.
+func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
 		return nil, apperr.Internal("falha ao listar usuários", err)
 	}
-	staff := viewer.HasRole(actor.RoleAdmin, actor.RoleAdvisor)
-	for i := range users {
-		if users[i].RGM != "" {
-			users[i].CohortIDs = s.cohortsOf(ctx, users[i].RGM)
+	rgms := make([]string, 0, len(users))
+	for _, u := range users {
+		if u.RGM != "" {
+			rgms = append(rgms, u.RGM)
 		}
-		if !staff {
-			users[i].Email = ""
+	}
+	// Like cohortsOf, a failed lookup leaves the cohorts empty.
+	cohorts, err := s.academic.CohortsOf(ctx, rgms)
+	if err != nil {
+		slog.WarnContext(ctx, "cohort lookup failed", "error", err)
+	}
+	for i := range users {
+		users[i].CohortIDs = []string{}
+		if c := cohorts[users[i].RGM]; c != "" {
+			users[i].CohortIDs = []string{c}
 		}
 	}
 	slices.SortStableFunc(users, func(a, b User) int {
@@ -316,6 +325,46 @@ func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 		return false, err
 	}
 	return slices.ContainsFunc(users, func(u User) bool { return u.Role == actor.RoleStudent && u.RGM == rgm }), nil
+}
+
+// StudentNames maps each RGM with a student account to its name.
+func (s *Service) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
+	found, err := parallel.Map(rgms, func(rgm string) (User, error) {
+		users, err := s.directory.UsersWithEmailPrefix(ctx, rgm+"@")
+		if err != nil {
+			return User{}, err
+		}
+		i := slices.IndexFunc(users, func(u User) bool { return u.Role == actor.RoleStudent && u.RGM == rgm })
+		if i < 0 {
+			return User{}, nil
+		}
+		return users[i], nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(found))
+	for _, u := range found {
+		if u.RGM != "" {
+			names[u.RGM] = u.Name
+		}
+	}
+	return names, nil
+}
+
+func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, error) {
+	if !subFormat.MatchString(sub) {
+		return "", false, nil
+	}
+	users, err := s.directory.UsersWithSub(ctx, sub)
+	if err != nil {
+		return "", false, err
+	}
+	i := slices.IndexFunc(users, func(u User) bool { return u.ID == sub && u.Role == actor.RoleAdvisor })
+	if i < 0 {
+		return "", false, nil
+	}
+	return users[i].Name, true, nil
 }
 
 func (s *Service) AdvisorExists(ctx context.Context, sub string) (bool, error) {

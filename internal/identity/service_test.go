@@ -45,6 +45,15 @@ func (f *fakeDirectory) CreateAccount(_ context.Context, name, email string, rol
 	f.created = append(f.created, NewAccount{Name: name, Email: email, Role: role})
 	return f.err
 }
+func (f *fakeDirectory) UsersWithEmailPrefix(_ context.Context, prefix string) ([]User, error) {
+	var out []User
+	for _, u := range f.users {
+		if u.RGM != "" && strings.HasPrefix(u.RGM+"@", prefix) {
+			out = append(out, u)
+		}
+	}
+	return out, f.err
+}
 func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, error) {
 	f.queried++
 	var out []User
@@ -59,6 +68,15 @@ func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, err
 type cohorts map[string]string
 
 func (c cohorts) CohortOf(_ context.Context, rgm string) (string, error) { return c[rgm], nil }
+func (c cohorts) CohortsOf(_ context.Context, rgms []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, r := range rgms {
+		if c[r] != "" {
+			out[r] = c[r]
+		}
+	}
+	return out, nil
+}
 
 func newTestService(t *testing.T, d *fakeDirectory) *Service {
 	t.Helper()
@@ -169,22 +187,37 @@ func TestUserFromAttributes(t *testing.T) {
 
 func TestListUsers(t *testing.T) {
 	d := &fakeDirectory{users: []User{
-		{ID: "2", Name: "coord", Email: "coord@umc.br", Role: actor.RoleAdmin, CohortIDs: []string{}},
-		{ID: "1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, RGM: "12345678901", CohortIDs: []string{}},
+		{ID: "2", Name: "coord", Email: "coord@umc.br", Role: actor.RoleAdmin},
+		{ID: "1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, RGM: "12345678901"},
 	}}
-	for role, seesEmail := range map[actor.Role]bool{actor.RoleAdmin: true, actor.RoleAdvisor: true, actor.RoleStudent: false, "": false} {
-		users, err := newTestService(t, d).ListUsers(context.Background(), actor.Actor{Role: role})
-		if err != nil || len(users) != 2 || users[0].Name != "Aluno" || !reflect.DeepEqual(users[0].CohortIDs, []string{"turma-1"}) {
-			t.Fatalf("%q: users = %+v, err = %v", role, users, err)
-		}
-		for _, u := range users {
-			if (u.Email != "") != seesEmail {
-				t.Errorf("%q: e-mail of %s = %q", role, u.Name, u.Email)
-			}
-		}
+	users, err := newTestService(t, d).ListUsers(context.Background())
+	if err != nil || len(users) != 2 || users[0].Name != "Aluno" || !reflect.DeepEqual(users[0].CohortIDs, []string{"turma-1"}) ||
+		!reflect.DeepEqual(users[1].CohortIDs, []string{}) || users[1].Email != "coord@umc.br" {
+		t.Fatalf("users = %+v, err = %v", users, err)
 	}
-	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background(), actor.Actor{}); err == nil {
+	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background()); err == nil {
 		t.Error("directory failure must fail")
+	}
+}
+
+func TestStudentAndAdvisorNames(t *testing.T) {
+	ctx := context.Background()
+	sub := "0c8f5a7e-1111-4222-8333-944455556666"
+	d := &fakeDirectory{users: []User{
+		{ID: "s1", Name: "Ana", Role: actor.RoleStudent, RGM: "11111111111"},
+		{ID: "s2", Name: "Prof com RGM", Role: actor.RoleAdvisor, RGM: "22222222222"},
+		{ID: sub, Name: "Orientadora", Role: actor.RoleAdvisor},
+	}}
+	svc := newTestService(t, d)
+	names, err := svc.StudentNames(ctx, []string{"11111111111", "22222222222", "33333333333"})
+	if err != nil || !reflect.DeepEqual(names, map[string]string{"11111111111": "Ana"}) {
+		t.Fatalf("names = %v, err = %v", names, err)
+	}
+	if name, ok, err := svc.AdvisorName(ctx, sub); err != nil || !ok || name != "Orientadora" {
+		t.Fatalf("advisor = %q %v %v", name, ok, err)
+	}
+	if _, ok, _ := svc.AdvisorName(ctx, "s1"); ok {
+		t.Error("a malformed sub is not an advisor")
 	}
 }
 

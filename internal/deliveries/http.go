@@ -19,10 +19,16 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("DELETE", "/atividades/:atividadeId", staff("atividade.removida", "atividadeId", h.deleteActivity))
 	r.Handle("POST", "/atividades/:atividadeId/campos", staff("atividade.campo_adicionado", "atividadeId", h.addField))
 	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", staff("atividade.campo_removido", "atividadeId", h.removeField))
-	r.Handle("GET", "/atividades/:atividadeId/entregas", staff("", "", h.submissionsOfActivity))
+	r.Handle("GET", "/atividades/:atividadeId/entregas", httpapi.Restrict(httpapi.Policy{
+		Roles:   []actor.Role{actor.RoleAdmin},
+		Message: msgAdminOnly,
+	}, h.submissionsOfActivity))
+	r.Handle("GET", "/programas/:programaId/entregas", staff("", "", h.submissionsOfProgram))
 	r.Handle("GET", "/projetos/:projetoId/entregas", h.submissionsOfProject)
 	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", h.submit)
 	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", staff("entrega.removida", "atividadeId", h.removeSubmission))
+	r.Handle("POST", "/projetos/:projetoId/entregas/:atividadeId/arquivos", h.requestUpload)
+	r.Handle("GET", "/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId", h.downloadFile)
 }
 
 // staff admits admins and advisors. A denial is audited under auditAction,
@@ -84,6 +90,11 @@ func (h handlers) submissionsOfActivity(ctx context.Context, r *httpapi.Request)
 	return httpapi.Reply(200, submissions, err)
 }
 
+func (h handlers) submissionsOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	submissions, err := h.svc.SubmissionsOfProgram(ctx, r.Actor, r.Param("programaId"))
+	return httpapi.Reply(200, submissions, err)
+}
+
 func (h handlers) submissionsOfProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	submissions, err := h.svc.SubmissionsOfProject(ctx, r.Actor, r.Param("projetoId"))
 	return httpapi.Reply(200, submissions, err)
@@ -99,5 +110,19 @@ func (h handlers) submit(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 }
 
 func (h handlers) removeSubmission(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("entrega removida", h.svc.RemoveSubmission(ctx, r.Param("projetoId"), r.Param("atividadeId")))
+	return httpapi.Message("entrega removida", h.svc.RemoveSubmission(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId")))
+}
+
+func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in UploadRequest
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	ticket, err := h.svc.RequestUpload(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId"), in)
+	return httpapi.Reply(201, ticket, err)
+}
+
+func (h handlers) downloadFile(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	d, err := h.svc.DownloadFile(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId"), r.Param("campoId"))
+	return httpapi.Reply(200, d, err)
 }

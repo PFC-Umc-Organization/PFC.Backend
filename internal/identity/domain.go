@@ -183,6 +183,7 @@ var (
 
 const (
 	msgAdminOnly           = "acesso restrito a administradores"
+	msgStaffOnly           = "acesso restrito à equipe acadêmica"
 	msgCredentialsRequired = "informe o e-mail e a senha"
 	msgNotConfirmed        = "conta ainda não confirmada — digite o código enviado por e-mail"
 	msgBadCredentials      = "e-mail ou senha inválidos"

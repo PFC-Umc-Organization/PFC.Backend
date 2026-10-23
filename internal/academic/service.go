@@ -392,6 +392,34 @@ func inBatches(rgms []string, write func([]string) error) []EnrollmentFailure {
 	return failures
 }
 
+// Cohort takes the course name from the course, like ListCohorts.
+func (s *Service) Cohort(ctx context.Context, id string) (Cohort, bool, error) {
+	if id == "" {
+		return Cohort{}, false, nil
+	}
+	c, found, err := s.store.GetCohort(ctx, id)
+	if err != nil || !found || c.CourseID == "" {
+		return c, found, err
+	}
+	course, ok, err := s.store.GetCourse(ctx, c.CourseID)
+	if err != nil {
+		return Cohort{}, false, err
+	}
+	if ok {
+		c.Course = course.Name
+	}
+	return c, true, nil
+}
+
+func (s *Service) CohortExists(ctx context.Context, id string) (bool, error) {
+	return s.store.CohortExists(ctx, id)
+}
+
+func (s *Service) CohortOfProgram(ctx context.Context, programID string) (string, bool, error) {
+	p, found, err := s.store.GetProgram(ctx, programID)
+	return p.CohortID, found, err
+}
+
 func (s *Service) ProgramExists(ctx context.Context, id string) (bool, error) {
 	return s.store.ProgramExists(ctx, id)
 }

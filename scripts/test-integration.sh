@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 export AWS_ENDPOINT_URL_DYNAMODB="${DYNAMODB_LOCAL:-http://localhost:8000}"
 export AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER="http://127.0.0.1:18766"
 export REFERENCIAS_CROSSREF_URL="http://127.0.0.1:18767"
+export AWS_ENDPOINT_URL_S3="http://127.0.0.1:18769" UPLOADS_BUCKET=pfc-integracao-arquivos
 export REFERENCIAS_OPENALEX_URL="http://127.0.0.1:18768"
 export AWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local
 export TABLE_NAME=pfc-integracao GSI_NAME=GSI1

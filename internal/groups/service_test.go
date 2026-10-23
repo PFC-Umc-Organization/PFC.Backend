@@ -111,6 +111,30 @@ func (w *world) DeleteInvitation(_ context.Context, projectID, rgm string) error
 }
 
 func (w *world) ProgramExists(context.Context, string) (bool, error) { return true, nil }
+func (w *world) CohortOfProgram(_ context.Context, program string) (string, bool, error) {
+	for cohort, p := range w.programs {
+		if p == program {
+			return cohort, true, nil
+		}
+	}
+	return "", false, nil
+}
+func (w *world) Cohort(_ context.Context, id string) (Cohort, bool, error) {
+	if id == "" {
+		return Cohort{}, false, nil
+	}
+	return Cohort{ID: id, Course: "Curso " + id, Shift: "NOITE", Term: "2026.2"}, true, nil
+}
+func (w *world) ProjectsOfProgram(_ context.Context, program string) ([]Project, error) {
+	out := []Project{}
+	for _, p := range w.projects {
+		if p.ProgramID == program {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b Project) int { return strings.Compare(a.ID, b.ID) })
+	return out, nil
+}
 func (w *world) ProgramOfCohort(_ context.Context, cohort string) (string, bool, error) {
 	id, ok := w.programs[cohort]
 	return id, ok, nil
@@ -134,6 +158,18 @@ type noAccounts struct{}
 
 func (noAccounts) StudentExists(context.Context, string) (bool, error) { return false, nil }
 func (noAccounts) AdvisorExists(context.Context, string) (bool, error) { return false, nil }
+func (noAccounts) StudentNames(_ context.Context, rgms []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, r := range rgms {
+		if r != "999" {
+			out[r] = "Aluno " + r
+		}
+	}
+	return out, nil
+}
+func (noAccounts) AdvisorName(_ context.Context, sub string) (string, bool, error) {
+	return "Prof " + sub, true, nil
+}
 
 func (w *world) service(t *testing.T) (*Service, *bytes.Buffer) {
 	t.Helper()
@@ -150,7 +186,7 @@ func studentActor(rgm string) actor.Actor {
 	return actor.Actor{Role: actor.RoleStudent, Email: rgm + "@alunos.umc.br", Name: "Aluno " + rgm}
 }
 
-var advisor = actor.Actor{Role: actor.RoleAdvisor, Email: "prof@umc.br"}
+var advisor = actor.Actor{Role: actor.RoleAdvisor, Email: "prof@umc.br", Sub: "prof-sub"}
 
 func kindOf(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
@@ -335,11 +371,14 @@ func TestInvite(t *testing.T) {
 
 func TestInvitationsOfProjectVisibility(t *testing.T) {
 	for viewer, allowed := range map[*actor.Actor]bool{
-		ptr(studentActor("111")): true,
-		ptr(advisor):             true,
+		ptr(studentActor("111")):                true,
+		ptr(advisor):                            true,
+		ptr(actor.Actor{Role: actor.RoleAdmin}): true,
+		ptr(actor.Actor{Role: actor.RoleAdvisor, Email: "outro@umc.br", Sub: "outro"}): false,
 		ptr(studentActor("333")): false,
 	} {
 		w := newWorld()
+		w.advise("p1")
 		svc, _ := w.service(t)
 		invitations, err := svc.InvitationsOfProject(context.Background(), *viewer, "p1")
 		if !allowed {
@@ -355,6 +394,87 @@ func TestInvitationsOfProjectVisibility(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func (w *world) advise(id string) {
+	p := w.projects[id]
+	p.AdvisorID = advisor.Sub
+	w.projects[id] = p
+}
+
+func TestProjectsOfProgramScope(t *testing.T) {
+	w := newWorld()
+	w.projects["p2"] = Project{ID: "p2", Name: "Outro", ProgramID: "prog-a", Members: []string{}}
+	w.advise("p2")
+	svc, _ := w.service(t)
+	ctx := context.Background()
+
+	all, err := svc.ProjectsOfProgram(ctx, actor.Actor{Role: actor.RoleAdmin}, "prog-a")
+	if err != nil || len(all) != 2 {
+		t.Fatalf("admin: %+v, %v", all, err)
+	}
+	mine, err := svc.ProjectsOfProgram(ctx, advisor, "prog-a")
+	if err != nil || len(mine) != 1 || mine[0].ID != "p2" {
+		t.Fatalf("advisor: %+v, %v", mine, err)
+	}
+	none, _ := svc.ProjectsOfProgram(ctx, actor.Actor{Role: actor.RoleAdvisor}, "prog-a")
+	if len(none) != 0 {
+		t.Fatalf("advisor without sub sees %+v", none)
+	}
+}
+
+func TestDetail(t *testing.T) {
+	w := newWorld()
+	p := w.projects["p1"]
+	p.Members = []string{"111", "999"}
+	w.projects["p1"] = p
+	w.advise("p1")
+	svc, _ := w.service(t)
+	ctx := context.Background()
+
+	d, err := svc.Detail(ctx, studentActor("111"), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Members) != 2 || d.Members[0].Name == nil || *d.Members[0].Name != "Aluno 111" || d.Members[1].Name != nil {
+		t.Errorf("members = %+v", d.Members)
+	}
+	if d.Advisor == nil || *d.Advisor != (Advisor{ID: "prof-sub", Name: "Prof prof-sub"}) {
+		t.Errorf("advisor = %+v", d.Advisor)
+	}
+	if d.Cohort == nil || d.Cohort.ID != "turma-a" {
+		t.Errorf("cohort = %+v", d.Cohort)
+	}
+	if _, err := svc.Detail(ctx, studentActor("333"), "p1"); kindOf(err) != apperr.KindForbidden {
+		t.Errorf("outsider: %v", err)
+	}
+	if _, err := svc.Detail(ctx, advisor, "missing"); kindOf(err) != apperr.KindNotFound {
+		t.Errorf("missing project: %v", err)
+	}
+}
+
+func TestMyPFC(t *testing.T) {
+	w := newWorld()
+	w.programs = map[string]string{"turma-a": "prog-a"}
+	svc, _ := w.service(t)
+	ctx := context.Background()
+
+	mine, err := svc.MyPFC(ctx, studentActor("111"))
+	if err != nil || mine.Group == nil || mine.Group.Project.ID != "p1" || mine.ProgramID != "prog-a" || mine.Cohort == nil {
+		t.Fatalf("member: %+v, %v", mine, err)
+	}
+	free, err := svc.MyPFC(ctx, studentActor("444"))
+	if err != nil || free.Group != nil || free.Cohort == nil || free.Cohort.ID != "turma-a" || free.ProgramID != "prog-a" {
+		t.Fatalf("free student: %+v, %v", free, err)
+	}
+	noProgram, err := svc.MyPFC(ctx, studentActor("333"))
+	if err != nil || noProgram.Cohort == nil || noProgram.ProgramID != "" {
+		t.Fatalf("cohort without program: %+v, %v", noProgram, err)
+	}
+	outside, err := svc.MyPFC(ctx, studentActor("000"))
+	if err != nil || outside.Cohort != nil || outside.Group != nil {
+		t.Fatalf("not pre-authorized: %+v, %v", outside, err)
+	}
+}
 
 func TestCancelInvitation(t *testing.T) {
 	w := newWorld()

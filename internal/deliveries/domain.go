@@ -25,11 +25,12 @@ const (
 	maxLabelLen       = 100
 	maxTextLen        = 300
 	maxLongTextLen    = 5000
-	maxFileNameLen    = 255
+	maxFileNameLen    = 400
 	maxFields         = 20
 )
 
-// A file field stores only the file name: there is no file storage yet.
+// A file field's answer is the key of the uploaded file (see files.go), or
+// a bare file name in submissions made before storage existed.
 type Field struct {
 	ID       string    `json:"id"`
 	Label    string    `json:"rotulo"`
@@ -183,7 +184,9 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 
 const (
 	msgStaffOnly          = "acesso restrito à equipe acadêmica"
-	msgMembersAndStaff    = "acesso restrito aos integrantes do projeto e à equipe acadêmica"
+	msgMembersAndStaff    = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
+	msgReviewersOnly      = "apenas a coordenação e o orientador do projeto podem devolver uma entrega"
+	msgAdminOnly          = "acesso restrito a administradores"
 	msgMembersOnly        = "apenas integrantes do projeto podem entregar"
 	msgActivityNotFound   = "atividade não encontrada"
 	msgFieldNotFound      = "campo não encontrado"

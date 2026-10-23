@@ -82,7 +82,7 @@ func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
 	store := &memoryStore{refs: map[string]Reference{}}
-	svc := NewService(store, works, fakeProjects{"p1": {ID: "p1", Members: []string{"11111111"}}})
+	svc := NewService(store, works, fakeProjects{"p1": {ID: "p1", Members: []string{"11111111"}, AdvisorID: "prof-sub"}})
 	svc.now = func() time.Time { return accessDate }
 	return svc, store
 }
@@ -175,7 +175,8 @@ func TestPermissions(t *testing.T) {
 		{"member with ALUNO", actor.Actor{Role: actor.RoleStudent, Email: "11111111@alunos.umc.br"}, true, true},
 		{"student of another group", actor.Actor{Email: "33333333@alunos.umc.br"}, false, false},
 		{"student without e-mail", actor.Actor{}, false, false},
-		{"advisor", actor.Actor{Role: actor.RoleAdvisor, Email: "alessandro.horas@umc.br"}, true, false},
+		{"project's advisor", actor.Actor{Role: actor.RoleAdvisor, Email: "alessandro.horas@umc.br", Sub: "prof-sub"}, true, false},
+		{"another advisor", actor.Actor{Role: actor.RoleAdvisor, Email: "outro@umc.br", Sub: "outro"}, false, false},
 		{"admin whose user matches an RGM", actor.Actor{Role: actor.RoleAdmin, Email: "11111111@umc.br"}, true, false},
 	}
 	for _, c := range cases {
