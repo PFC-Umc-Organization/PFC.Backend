@@ -202,7 +202,7 @@ func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, 
 	if err != nil {
 		return nil, apperr.Internal("Falha ao listar entregas", err)
 	}
-	return slices.Concat(perProject...), nil
+	return append([]Submission{}, slices.Concat(perProject...)...), nil
 }
 
 // Submit creates or edits the group's submission. After the deadline only a

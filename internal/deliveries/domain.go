@@ -220,5 +220,5 @@ const (
 	msgFieldLimit         = "Limite de campos da atividade atingido"
 	msgSubmissionNotFound = "Entrega não encontrada"
 	msgProjectNotFound    = "Projeto não encontrado"
-	msgDeadlinePassed     = "O prazo desta atividade acabou: só quem entregou no prazo pode editar a entrega"
+	msgDeadlinePassed     = "O prazo desta atividade acabou e ela não recebe mais entregas"
 )

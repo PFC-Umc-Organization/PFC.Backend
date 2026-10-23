@@ -246,6 +246,10 @@ func TestSubmissionsOfProgram(t *testing.T) {
 	if err != nil || len(got) != 3 {
 		t.Fatalf("submissions = %+v, err = %v", got, err)
 	}
+	got, err = newTestService(t, &fakeStore{}).SubmissionsOfProgram(context.Background(), actor.Actor{Role: actor.RoleAdmin}, "prog")
+	if err != nil || got == nil {
+		t.Fatalf("empty program = %#v, err = %v; want [] so the JSON is not null", got, err)
+	}
 }
 
 func TestRemoveSubmissionNeedsReviewer(t *testing.T) {
