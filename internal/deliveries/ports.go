@@ -25,7 +25,9 @@ type Store interface {
 	AddField(ctx context.Context, activityID string, f Field) error
 	RemoveField(ctx context.Context, activityID string, position int, fieldID string) error
 
-	PutSubmission(ctx context.Context, s Submission) error
+	// PutSubmission with mustExist only replaces a submission still there:
+	// after the deadline a handed-back one must not come back.
+	PutSubmission(ctx context.Context, s Submission, mustExist bool) error
 	GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error)
 	// DeleteSubmission returns what was deleted, so its files can go too.
 	DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error)

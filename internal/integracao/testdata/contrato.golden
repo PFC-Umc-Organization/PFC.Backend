@@ -652,11 +652,11 @@ GET /meus-convites [ALUNO]
 < 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","projetoId":"<id12>","projetoNome":"Athena","rgm":"444"}]
 
 POST /atividades [ALUNO]
-> {"titulo":"Tema","prazo":"2026-11-01T23:59"}
+> {"titulo":"Tema","prazo":"2099-11-01T23:59"}
 < 403 {"erro":"acesso restrito à equipe acadêmica"}
 
 POST /atividades [ADMIN]
-> {"titulo":"","prazo":"2026-11-01T23:59"}
+> {"titulo":"","prazo":"2099-11-01T23:59"}
 < 400 {"erro":"título é obrigatório"}
 
 POST /atividades [ADMIN]
@@ -664,31 +664,31 @@ POST /atividades [ADMIN]
 < 400 {"erro":"prazo inválido"}
 
 POST /atividades [ADMIN]
-> {"titulo":"Sem campos","prazo":"2026-11-01T23:59","campos":[]}
-< 201 {"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2026-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"}
+> {"titulo":"Sem campos","prazo":"2099-11-01T23:59","campos":[]}
+< 201 {"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"}
 
 POST /atividades [ORIENTADOR]
-> {"titulo":"Definição do Tema","descricao":"d","prazo":"2026-11-01T23:59"}
-< 201 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"d","id":"<id16>","prazo":"2026-11-01T23:59","publicadaEm":"<ts>","titulo":"Definição do Tema"}
+> {"titulo":"Definição do Tema","descricao":"d","prazo":"2099-11-01T23:59"}
+< 201 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"d","id":"<id16>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Definição do Tema"}
 
 POST /atividades [ADMIN]
-> {"titulo":"Revisão","prazo":"2026-12-01T23:59","campos":[{"rotulo":"Repositório","tipo":"LINK","obrigatorio":true},{"rotulo":"Resumo","tipo":"TEXTO_LONGO"}]}
-< 201 {"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2026-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}
+> {"titulo":"Revisão","prazo":"2099-12-01T23:59","campos":[{"rotulo":"Repositório","tipo":"LINK","obrigatorio":true},{"rotulo":"Resumo","tipo":"TEXTO_LONGO"}]}
+< 201 {"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2099-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}
 
 GET /atividades [ALUNO]
-< 200 [{"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2026-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"},{"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"d","id":"<id16>","prazo":"2026-11-01T23:59","publicadaEm":"<ts>","titulo":"Definição do Tema"},{"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2026-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}]
+< 200 [{"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"},{"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"d","id":"<id16>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Definição do Tema"},{"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2099-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}]
 
 PUT /atividades/<id16> [ALUNO]
-> {"titulo":"x","prazo":"2026-11-01T23:59"}
+> {"titulo":"x","prazo":"2099-11-01T23:59"}
 < 403 {"erro":"acesso restrito à equipe acadêmica"}
 
 PUT /atividades/inexistente [ADMIN]
-> {"titulo":"x","prazo":"2026-11-01T23:59"}
+> {"titulo":"x","prazo":"2099-11-01T23:59"}
 < 404 {"erro":"atividade não encontrada"}
 
 PUT /atividades/<id16> [ADMIN]
-> {"titulo":"Tema final","descricao":"","prazo":"2026-11-02T23:59"}
-< 200 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id16>","prazo":"2026-11-02T23:59","publicadaEm":"<ts>","titulo":"Tema final"}
+> {"titulo":"Tema final","descricao":"","prazo":"2099-11-02T23:59"}
+< 200 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id16>","prazo":"2099-11-02T23:59","publicadaEm":"<ts>","titulo":"Tema final"}
 
 POST /atividades/<id16>/campos [ALUNO]
 > {"rotulo":"X","tipo":"TEXTO"}
@@ -716,7 +716,7 @@ DELETE /atividades/<id16>/campos/<id21> [ADMIN]
 < 200 {"mensagem":"campo removido"}
 
 GET /atividades [ADMIN]
-< 200 [{"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2026-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"},{"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id16>","prazo":"2026-11-02T23:59","publicadaEm":"<ts>","titulo":"Tema final"},{"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2026-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}]
+< 200 [{"campos":[{"id":"<id15>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id14>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Sem campos"},{"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id16>","prazo":"2099-11-02T23:59","publicadaEm":"<ts>","titulo":"Tema final"},{"campos":[{"id":"<id19>","obrigatorio":true,"rotulo":"Repositório","tipo":"LINK"},{"id":"<id20>","obrigatorio":false,"rotulo":"Resumo","tipo":"TEXTO_LONGO"}],"descricao":"","id":"<id18>","prazo":"2099-12-01T23:59","publicadaEm":"<ts>","titulo":"Revisão"}]
 
 PUT /projetos/<id12>/entregas/<id18> [ALUNO]
 > {"respostas":{}}

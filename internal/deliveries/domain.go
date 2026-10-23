@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 	"unicode/utf8"
 )
 
@@ -44,7 +45,8 @@ type FieldInput struct {
 	Required bool      `json:"obrigatorio"`
 }
 
-// Deadline comes from <input type="datetime-local">, with no time zone.
+// Deadline comes from <input type="datetime-local">, with no time zone, and
+// is read as Brasília time.
 type Activity struct {
 	ID          string  `json:"id"`
 	Title       string  `json:"titulo"`
@@ -63,12 +65,15 @@ type ActivityInput struct {
 	Fields      []FieldInput `json:"campos"`
 }
 
-// Answers are keyed by field id.
+// Answers are keyed by field id. SubmittedAt is the first submission, the
+// one the deadline is checked against; editing sets UpdatedAt.
 type Submission struct {
 	ActivityID  string            `json:"atividadeId"`
 	ProjectID   string            `json:"projetoId"`
 	SubmittedAt string            `json:"entregueEm"`
 	SubmittedBy string            `json:"entreguePor"`
+	UpdatedAt   string            `json:"atualizadaEm,omitempty"`
+	UpdatedBy   string            `json:"atualizadaPor,omitempty"`
 	Answers     map[string]string `json:"respostas"`
 }
 
@@ -78,13 +83,34 @@ type SubmissionInput struct {
 
 var deadlineLayouts = []string{"2006-01-02T15:04", "2006-01-02T15:04:05", time.RFC3339}
 
-func validDeadline(s string) bool {
+var brasilia = mustLoadLocation("America/Sao_Paulo")
+
+func mustLoadLocation(name string) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}
+
+func deadlineOf(s string) (time.Time, bool) {
 	for _, l := range deadlineLayouts {
-		if _, err := time.Parse(l, s); err == nil {
-			return true
+		if t, err := time.ParseInLocation(l, s, brasilia); err == nil {
+			return t, true
 		}
 	}
-	return false
+	return time.Time{}, false
+}
+
+func validDeadline(s string) bool {
+	_, ok := deadlineOf(s)
+	return ok
+}
+
+// closed tells whether a group without a submission can no longer submit.
+func (a Activity) closed(now time.Time) bool {
+	deadline, ok := deadlineOf(a.Deadline)
+	return ok && now.After(deadline)
 }
 
 func (in ActivityInput) normalized() ActivityInput {
@@ -194,4 +220,5 @@ const (
 	msgFieldLimit         = "limite de campos da atividade atingido"
 	msgSubmissionNotFound = "entrega não encontrada"
 	msgProjectNotFound    = "projeto não encontrado"
+	msgDeadlinePassed     = "o prazo desta atividade acabou: só quem entregou no prazo pode editar a entrega"
 )

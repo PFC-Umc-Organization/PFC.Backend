@@ -77,6 +77,8 @@ type submissionItem struct {
 	GSI1SK      string            `dynamodbav:"GSI1SK"`
 	SubmittedAt string            `dynamodbav:"entregueEm"`
 	SubmittedBy string            `dynamodbav:"entreguePor"`
+	UpdatedAt   string            `dynamodbav:"atualizadaEm,omitempty"`
+	UpdatedBy   string            `dynamodbav:"atualizadaPor,omitempty"`
 	Answers     map[string]string `dynamodbav:"respostas"`
 }
 
@@ -90,6 +92,8 @@ func (it submissionItem) submission() Submission {
 		ProjectID:   strings.TrimPrefix(it.PK, projectPrefix),
 		SubmittedAt: it.SubmittedAt,
 		SubmittedBy: it.SubmittedBy,
+		UpdatedAt:   it.UpdatedAt,
+		UpdatedBy:   it.UpdatedBy,
 		Answers:     answers,
 	}
 }
@@ -236,12 +240,25 @@ func (s *DynamoStore) RemoveField(ctx context.Context, activityID string, positi
 	return err
 }
 
-func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission) error {
-	return s.put(ctx, submissionItem{
+func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, mustExist bool) error {
+	item, err := attributevalue.MarshalMap(submissionItem{
 		PK: projectPrefix + sub.ProjectID, SK: submissionPrefix + sub.ActivityID,
 		GSI1PK: submissionsPrefix + sub.ActivityID, GSI1SK: projectPrefix + sub.ProjectID,
-		SubmittedAt: sub.SubmittedAt, SubmittedBy: sub.SubmittedBy, Answers: sub.Answers,
+		SubmittedAt: sub.SubmittedAt, SubmittedBy: sub.SubmittedBy,
+		UpdatedAt: sub.UpdatedAt, UpdatedBy: sub.UpdatedBy, Answers: sub.Answers,
 	})
+	if err != nil {
+		return err
+	}
+	in := &dynamodb.PutItemInput{TableName: aws.String(s.table.Name), Item: item}
+	if mustExist {
+		in.ConditionExpression = aws.String("attribute_exists(PK)")
+	}
+	_, err = s.table.Client.PutItem(ctx, in)
+	if dynamo.ConditionFailed(err) {
+		return errNotFound
+	}
+	return err
 }
 
 func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error) {

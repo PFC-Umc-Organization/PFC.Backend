@@ -53,7 +53,7 @@ func TestArquivos(t *testing.T) {
 	esperar(t, admin, "POST", "/programas", `{"cursoId":"`+turma+`"}`, 201)
 	esperar(t, admin, "POST", "/admin/students", `{"turmaId":"`+turma+`","rgms":["111","222"]}`, 200)
 	p1 := id(t, esperar(t, aluno("111"), "POST", "/meu-pfc", `{"nome":"Athena"}`, 201))
-	atividade := esperar(t, admin, "POST", "/atividades", `{"titulo":"Monografia","prazo":"2026-12-01T23:59"}`, 201)
+	atividade := esperar(t, admin, "POST", "/atividades", `{"titulo":"Monografia","prazo":"2099-12-01T23:59"}`, 201)
 	a1, campo := id(t, atividade), jsonField(t, atividade, "campos", 0, "id")
 	rota := "/projetos/" + p1 + "/entregas/" + a1
 
@@ -106,6 +106,13 @@ func TestArquivos(t *testing.T) {
 		t.Fatal("o arquivo da entrega devolvida devia ter sido apagado")
 	}
 	esperar(t, admin, "GET", rota+"/arquivos/"+campo, "", 404)
+
+	// Prazo vencido sem entrega: nem arquivo nem envio.
+	vencida := esperar(t, admin, "POST", "/atividades", `{"titulo":"Banca","prazo":"2020-01-01T23:59"}`, 201)
+	rotaVencida := "/projetos/" + p1 + "/entregas/" + id(t, vencida)
+	campoVencido := jsonField(t, vencida, "campos", 0, "id")
+	esperar(t, aluno("111"), "POST", rotaVencida+"/arquivos", `{"campoId":"`+campoVencido+`","nome":"a.pdf","tamanho":8}`, 409)
+	esperar(t, aluno("111"), "PUT", rotaVencida, `{"respostas":{"`+campoVencido+`":"a.pdf"}}`, 409)
 
 	// Material em arquivo, só para a turma: o aluno de outra turma não vê.
 	var mt ticket

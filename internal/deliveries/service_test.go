@@ -39,12 +39,15 @@ func (f *fakeStore) RemoveField(_ context.Context, _ string, position int, _ str
 	f.removed = append(f.removed, position)
 	return nil
 }
-func (f *fakeStore) PutSubmission(_ context.Context, s Submission) error {
+func (f *fakeStore) PutSubmission(_ context.Context, s Submission, mustExist bool) error {
 	for i, old := range f.saved {
 		if old.ProjectID == s.ProjectID && old.ActivityID == s.ActivityID {
 			f.saved[i] = s
 			return nil
 		}
+	}
+	if mustExist {
+		return errNotFound
 	}
 	f.saved = append(f.saved, s)
 	return nil
@@ -177,6 +180,43 @@ func TestSubmit(t *testing.T) {
 	}
 	if len(store.saved) != 1 {
 		t.Errorf("refusals must not save: %d saved", len(store.saved))
+	}
+}
+
+func TestDeadline(t *testing.T) {
+	store := &fakeStore{activities: map[string]Activity{
+		"open":   {ID: "open", Deadline: "2026-10-16T09:30", Fields: tcc.Fields},
+		"closed": {ID: "closed", Deadline: "2026-10-16T08:59", Fields: tcc.Fields},
+	}}
+	svc := newTestService(t, store)
+	ctx := context.Background()
+	ana := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	bia := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Bia"}
+	file := func(name string) SubmissionInput { return SubmissionInput{Answers: map[string]string{"f1": name}} }
+
+	// 12:00 UTC is 09:00 in Brasília.
+	if _, err := svc.Submit(ctx, ana, "p1", "open", file("v1.pdf")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "closed", file("v1.pdf")); message(err) != msgDeadlinePassed {
+		t.Errorf("first submission after the deadline: %v", err)
+	}
+
+	svc.now = func() time.Time { return time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC) }
+	sub, err := svc.Submit(ctx, bia, "p1", "open", file("v2.docx"))
+	if err != nil || sub.SubmittedAt != "2026-10-16T12:00:00Z" || sub.SubmittedBy != "Ana" ||
+		sub.UpdatedAt != "2026-10-20T12:00:00Z" || sub.UpdatedBy != "Bia" || sub.Answers["f1"] != "v2.docx" {
+		t.Fatalf("editing after the deadline: %+v, %v", sub, err)
+	}
+
+	if err := svc.RemoveSubmission(ctx, actor.Actor{Role: actor.RoleAdmin}, "p1", "open"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "open", file("v3.pdf")); message(err) != msgDeadlinePassed {
+		t.Errorf("handed back after the deadline: %v", err)
+	}
+	if len(store.saved) != 0 {
+		t.Errorf("saved = %+v", store.saved)
 	}
 }
 

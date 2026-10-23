@@ -340,12 +340,12 @@ func TestCursos(t *testing.T) {
 
 func TestAtividade(t *testing.T) {
 	resetar(t)
-	a := id(t, esperar(t, admin, "POST", "/atividades", `{"titulo":"Tema","prazo":"2026-11-01T23:59"}`, 201))
-	body := esperar(t, admin, "PUT", "/atividades/"+a, `{"titulo":"Tema final","prazo":"2026-11-02T23:59"}`, 200)
+	a := id(t, esperar(t, admin, "POST", "/atividades", `{"titulo":"Tema","prazo":"2099-11-01T23:59"}`, 201))
+	body := esperar(t, admin, "PUT", "/atividades/"+a, `{"titulo":"Tema final","prazo":"2099-11-02T23:59"}`, 200)
 	if !strings.Contains(body, `"titulo":"Tema final"`) || !strings.Contains(body, `"campos":[{`) {
 		t.Fatalf("PUT devia devolver a atividade atualizada: %s", body)
 	}
-	esperar(t, admin, "PUT", "/atividades/inexistente", `{"titulo":"x","prazo":"2026-11-02T23:59"}`, 404)
+	esperar(t, admin, "PUT", "/atividades/inexistente", `{"titulo":"x","prazo":"2099-11-02T23:59"}`, 404)
 	esperar(t, admin, "POST", "/atividades/inexistente/campos", `{"rotulo":"Link","tipo":"LINK"}`, 404)
 	// Nasce com 1 campo; o limite é 20.
 	for i := 1; i < 20; i++ {

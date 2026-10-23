@@ -202,7 +202,9 @@ func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, 
 	return slices.Concat(perProject...), nil
 }
 
-// Submit overwrites the group's previous submission for the activity.
+// Submit creates or edits the group's submission. After the deadline only a
+// group that submitted in time can still edit; the first submission's time
+// is kept.
 func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, activityID string, in SubmissionInput) (Submission, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -224,15 +226,26 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	if msg != "" {
 		return Submission{}, apperr.Invalid(msg)
 	}
-	previous, _, err := s.store.GetSubmission(ctx, p.ID, a.ID)
+	previous, found, err := s.store.GetSubmission(ctx, p.ID, a.ID)
 	if err != nil {
 		return Submission{}, apperr.Internal("falha ao carregar a entrega anterior", err)
+	}
+	closed := a.closed(s.now())
+	if closed && !found {
+		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
 	}
 	if err := s.checkFiles(ctx, p.ID, a, answers, previous.Answers); err != nil {
 		return Submission{}, err
 	}
 	sub := Submission{ActivityID: a.ID, ProjectID: p.ID, SubmittedAt: s.timestamp(), SubmittedBy: member.Name, Answers: answers}
-	if err := s.store.PutSubmission(ctx, sub); err != nil {
+	if found && previous.SubmittedAt != "" {
+		sub.SubmittedAt, sub.SubmittedBy = previous.SubmittedAt, previous.SubmittedBy
+		sub.UpdatedAt, sub.UpdatedBy = s.timestamp(), member.Name
+	}
+	switch err := s.store.PutSubmission(ctx, sub, closed); {
+	case errors.Is(err, errNotFound):
+		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
+	case err != nil:
 		return Submission{}, apperr.Internal("falha ao salvar entrega", err)
 	}
 	s.deleteFiles(ctx, replaced(previous.Answers, answers))
@@ -241,8 +254,15 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	return sub, nil
 }
 
+func (s *Service) deadlinePassed(ctx context.Context, projectID, activityID string) error {
+	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgDeadlinePassed,
+		Resource: activityResource(activityID), Details: map[string]any{"projetoId": projectID}})
+	return apperr.Conflict(msgDeadlinePassed)
+}
+
 // RemoveSubmission is how the academic team hands an activity back to the
-// group; nobody else edits a submission's content.
+// group; nobody else edits a submission's content. After the deadline the
+// group can no longer submit it again.
 func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, projectID, activityID string) error {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -285,6 +305,15 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	}
 	if !found {
 		return UploadTicket{}, apperr.NotFound(msgActivityNotFound)
+	}
+	if a.closed(s.now()) {
+		_, submitted, err := s.store.GetSubmission(ctx, p.ID, a.ID)
+		if err != nil {
+			return UploadTicket{}, apperr.Internal("falha ao carregar a entrega", err)
+		}
+		if !submitted {
+			return UploadTicket{}, apperr.Conflict(msgDeadlinePassed)
+		}
 	}
 	i := slices.IndexFunc(a.Fields, func(f Field) bool { return f.ID == in.FieldID })
 	switch {

@@ -153,7 +153,7 @@ ver [Migração](#migração).
 | GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN |
 | GET    | `/programas/:programaId/entregas`        | Entregas (com respostas) de todos os projetos do programa, numa chamada — a matriz do painel; o orientador recebe só as dos projetos que orienta | ADMIN, ORIENTADOR |
 | GET    | `/projetos/:projetoId/entregas`          | Entregas do grupo                                                   | integrantes, orientador do projeto, ADMIN |
-| PUT    | `/projetos/:projetoId/entregas/:atividadeId` | Entrega/reenvia (`{ respostas: { <campoId>: valor } }`), validada contra os campos | integrantes do projeto |
+| PUT    | `/projetos/:projetoId/entregas/:atividadeId` | Entrega/edita (`{ respostas: { <campoId>: valor } }`), validada contra os campos; depois do prazo (horário de Brasília) só edita quem entregou (409) | integrantes do projeto |
 | DELETE | `/projetos/:projetoId/entregas/:atividadeId` | Remove a entrega do grupo (devolve pra refazer) e apaga os arquivos dela | ADMIN, orientador do projeto |
 | POST   | `/projetos/:projetoId/entregas/:atividadeId/arquivos` | Pede o envio de um arquivo para um campo ARQUIVO (`{ campoId, nome, tamanho }`) → `{ url, campos, chave, expiraEm, tamanhoMaximo }`: o navegador manda `campos` + o arquivo (campo `file`) em multipart para `url`, e a `chave` vira a resposta do campo no `PUT` da entrega. 400 tipo não aceito ou acima de 50 MB; 503 sem `UPLOADS_BUCKET` | integrantes do projeto |
 | GET    | `/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId` | `{ url, nome }`: link de download de 5 minutos. 404 se a resposta é só um nome (entrega de antes do upload) | integrantes, orientador do projeto, ADMIN |
