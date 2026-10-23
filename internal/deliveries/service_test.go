@@ -276,6 +276,7 @@ func TestRemoveSubmissionNeedsReviewer(t *testing.T) {
 type fakeFiles struct {
 	sizes   map[string]int64
 	deleted []string
+	folders []string
 }
 
 func (f *fakeFiles) PresignUpload(_ context.Context, key, contentType string, maxBytes int64, _ time.Duration) (storage.Upload, error) {
@@ -290,6 +291,10 @@ func (f *fakeFiles) Size(_ context.Context, key string) (int64, bool, error) {
 }
 func (f *fakeFiles) Delete(_ context.Context, key string) error {
 	f.deleted = append(f.deleted, key)
+	return nil
+}
+func (f *fakeFiles) DeletePrefix(_ context.Context, prefix string) error {
+	f.folders = append(f.folders, prefix)
 	return nil
 }
 

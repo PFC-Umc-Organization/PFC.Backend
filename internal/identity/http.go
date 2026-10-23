@@ -65,7 +65,7 @@ func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.R
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("enviamos um código novo — confira o e-mail (e a caixa de spam)", h.svc.ResendCode(ctx, in))
+	return httpapi.Message("se houver um cadastro aguardando confirmação com esse e-mail, enviamos um código novo — confira também a caixa de spam", h.svc.ResendCode(ctx, in))
 }
 
 func (h handlers) completeNewPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

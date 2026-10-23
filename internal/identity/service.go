@@ -188,16 +188,15 @@ func signUpError(err error) error {
 	return apperr.Invalid("não foi possível concluir o cadastro")
 }
 
+// confirmationError gives a wrong code, an unknown e-mail and an account
+// already confirmed the same answer, so the endpoint does not reveal who is
+// registered.
 func confirmationError(err error) error {
 	switch {
-	case errors.Is(err, errWrongCode):
-		return apperr.Invalid(msgWrongCode)
+	case errors.Is(err, errWrongCode), errors.Is(err, errNoAccount), errors.Is(err, errAlreadyConfirmed):
+		return apperr.Invalid(msgConfirmFailed)
 	case errors.Is(err, errExpiredCode):
 		return apperr.Invalid(msgExpiredCode)
-	case errors.Is(err, errAlreadyConfirmed):
-		return apperr.Conflict("esta conta já está confirmada — é só entrar")
-	case errors.Is(err, errNoAccount):
-		return apperr.NotFound("não há cadastro com esse e-mail")
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
 	}
@@ -246,9 +245,17 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	if email == "" {
 		return apperr.Invalid(msgEmailRequired)
 	}
-	if err := s.directory.ResendCode(ctx, email); err != nil {
-		slog.WarnContext(ctx, "code resend failed", "email", email, "error", err)
-		return confirmationError(err)
+	err := s.directory.ResendCode(ctx, email)
+	switch {
+	case err == nil:
+		record(ctx, "auth.codigo_reenviado", audit.Success, "", &audit.Actor{Email: email})
+	case errors.Is(err, errNoAccount), errors.Is(err, errInvalidInput):
+		// Cognito answers InvalidParameter for an account already confirmed.
+		record(ctx, "auth.codigo_reenviado", audit.Failure, "conta inexistente ou já confirmada", &audit.Actor{Email: email})
+	case errors.Is(err, errThrottled):
+		return apperr.TooManyRequests(msgThrottled)
+	default:
+		return apperr.Internal("falha ao reenviar o código", err)
 	}
 	return nil
 }

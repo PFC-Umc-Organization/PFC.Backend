@@ -21,7 +21,9 @@ type Store interface {
 	GetActivity(ctx context.Context, id string) (Activity, bool, error)
 	ListActivities(ctx context.Context) ([]Activity, error)
 	UpdateActivity(ctx context.Context, id string, in ActivityInput) (Activity, error)
-	DeleteActivity(ctx context.Context, id string) error
+	// DeleteActivity returns the projects that had a submission, whose files
+	// go too.
+	DeleteActivity(ctx context.Context, id string) ([]string, error)
 	AddField(ctx context.Context, activityID string, f Field) error
 	RemoveField(ctx context.Context, activityID string, position int, fieldID string) error
 
@@ -42,6 +44,7 @@ type Files interface {
 	PresignDownload(ctx context.Context, key, fileName string, ttl time.Duration) (string, error)
 	Size(ctx context.Context, key string) (int64, bool, error)
 	Delete(ctx context.Context, key string) error
+	DeletePrefix(ctx context.Context, prefix string) error
 }
 
 type Projects interface {

@@ -25,6 +25,9 @@ type Service struct {
 	// notify is the e-mail hook for invitations. There is no e-mail
 	// provider yet: students answer invitations in the app.
 	notify func(context.Context, Invitation)
+	// deleted runs after a project is gone, so other modules clean up what
+	// they keep for it.
+	deleted []func(ctx context.Context, projectID string)
 }
 
 func NewService(store Store, academic Academic, accounts Accounts) *Service {
@@ -229,7 +232,14 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 		return apperr.Internal("falha ao remover projeto", err)
 	}
 	success(ctx, "projeto.removido", projectResource(id), nil)
+	for _, f := range s.deleted {
+		f(ctx, id)
+	}
 	return nil
+}
+
+func (s *Service) OnProjectDeleted(f func(ctx context.Context, projectID string)) {
+	s.deleted = append(s.deleted, f)
 }
 
 func (s *Service) AssignAdvisor(ctx context.Context, id string, in AdvisorInput) error {

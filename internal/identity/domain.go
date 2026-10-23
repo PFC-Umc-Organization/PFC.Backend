@@ -200,5 +200,6 @@ const (
 	msgSessionExpired      = "a troca de senha expirou — entre de novo com a senha temporária do e-mail"
 	msgWrongCode           = "código incorreto — confira o e-mail e tente de novo"
 	msgExpiredCode         = "código expirado — peça um código novo"
+	msgConfirmFailed       = "código incorreto — confira o e-mail e o código; se a conta já foi confirmada, é só entrar"
 	msgNoSession           = "sessão inválida — entre de novo"
 )

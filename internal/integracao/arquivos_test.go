@@ -133,4 +133,26 @@ func TestArquivos(t *testing.T) {
 	if bucket.has(mt.Chave) {
 		t.Fatal("o arquivo do material removido devia ter sido apagado")
 	}
+
+	// Apagar a atividade ou o projeto leva os arquivos, inclusive os enviados
+	// e nunca entregues.
+	entregar := func(atividade, campo string) (entregue, abandonado string) {
+		tk := pedirEnvio(t, p1, atividade, campo, "relatorio.pdf")
+		enviar(t, tk, "entregue")
+		esperar(t, aluno("111"), "PUT", "/projetos/"+p1+"/entregas/"+atividade, `{"respostas":{"`+campo+`":"`+tk.Chave+`"}}`, 200)
+		solto := pedirEnvio(t, p1, atividade, campo, "rascunho.pdf")
+		enviar(t, solto, "rascunho")
+		return tk.Chave, solto.Chave
+	}
+	relatorio := esperar(t, admin, "POST", "/atividades", `{"titulo":"Relatório","prazo":"2099-12-01T23:59"}`, 201)
+	entregue, abandonado := entregar(id(t, relatorio), jsonField(t, relatorio, "campos", 0, "id"))
+	esperar(t, admin, "DELETE", "/atividades/"+id(t, relatorio), "", 200)
+	if bucket.has(entregue) || bucket.has(abandonado) {
+		t.Fatal("os arquivos da atividade removida deviam ter sido apagados")
+	}
+	entregue, abandonado = entregar(a1, campo)
+	esperar(t, admin, "DELETE", "/projetos/"+p1, "", 200)
+	if bucket.has(entregue) || bucket.has(abandonado) {
+		t.Fatal("os arquivos do projeto removido deviam ter sido apagados")
+	}
 }

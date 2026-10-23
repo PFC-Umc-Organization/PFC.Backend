@@ -21,13 +21,15 @@ var lambdaPolicy = map[string]bool{
 	"dynamodb:DeleteItem": true, "dynamodb:Query": true, "dynamodb:Scan": true,
 	"dynamodb:BatchWriteItem": true, "dynamodb:BatchGetItem": true, "dynamodb:ConditionCheckItem": true,
 	"cognito-idp:ListUsers": true, "cognito-idp:AdminCreateUser": true,
-	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true,
+	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true, "s3:ListBucket": true,
 }
 
 // s3Actions maps operations to their IAM action. Presigning runs the
 // operation's middleware too, so PutObject and GetObject are recorded when
 // the URLs are signed; the browser's request uses the Lambda's permission.
-var s3Actions = map[string]string{"HeadObject": "s3:GetObject"}
+var s3Actions = map[string]string{
+	"HeadObject": "s3:GetObject", "ListObjectsV2": "s3:ListBucket", "DeleteObjects": "s3:DeleteObject",
+}
 
 // Cognito's public operations are authorized by the app client, not by IAM.
 var cognitoPublic = map[string]bool{

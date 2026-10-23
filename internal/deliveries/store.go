@@ -168,17 +168,17 @@ func (s *DynamoStore) UpdateActivity(ctx context.Context, id string, in Activity
 	return it.activity(), nil
 }
 
-func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) error {
+func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) ([]string, error) {
 	_, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName:           aws.String(s.table.Name),
 		Key:                 activityKey(id),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 	})
 	if dynamo.ConditionFailed(err) {
-		return errNotFound
+		return nil, errNotFound
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	items, err := s.table.QueryAll(ctx, &dynamodb.QueryInput{
 		IndexName:                 aws.String(s.table.Index),
@@ -187,13 +187,17 @@ func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) error {
 		ProjectionExpression:      aws.String("PK, SK"),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	keys := make([]dynamo.Item, 0, len(items))
+	projects := make([]string, 0, len(items))
 	for _, i := range items {
 		keys = append(keys, dynamo.Item{"PK": i["PK"], "SK": i["SK"]})
+		if pk, ok := i["PK"].(*types.AttributeValueMemberS); ok {
+			projects = append(projects, strings.TrimPrefix(pk.Value, projectPrefix))
+		}
 	}
-	return s.table.DeleteKeys(ctx, keys)
+	return projects, s.table.DeleteKeys(ctx, keys)
 }
 
 func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) error {

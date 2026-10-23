@@ -138,12 +138,13 @@ func TestContrato(t *testing.T) {
 	tr.expect(pub, "POST", "/auth/registrar", `{"nome":"Aluno Cinco","email":"555@alunos.umc.br","senha":"Senha#123","perfil":"ADMIN"}`, 202)
 	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"555@alunos.umc.br"}`, 400)
 	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"555@alunos.umc.br","codigo":"000000"}`, 400)
-	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"nada@alunos.umc.br","codigo":"123456"}`, 404)
+	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"nada@alunos.umc.br","codigo":"123456"}`, 400)
 	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"555@alunos.umc.br","codigo":"123456"}`, 200)
-	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"555@alunos.umc.br","codigo":"123456"}`, 409)
+	tr.expect(pub, "POST", "/auth/confirmar", `{"email":"555@alunos.umc.br","codigo":"123456"}`, 400)
 	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{}`, 400)
-	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"nada@alunos.umc.br"}`, 404)
+	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"nada@alunos.umc.br"}`, 200)
 	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"444@alunos.umc.br"}`, 200)
+	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"111@alunos.umc.br"}`, 200)
 
 	// contas
 	tr.expect(aluno("111"), "POST", "/admin/usuarios", `{"nome":"X","email":"x@umc.br","perfil":"ORIENTADOR"}`, 403)

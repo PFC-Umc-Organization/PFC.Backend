@@ -44,11 +44,11 @@ POST /auth/confirmar [público]
 
 POST /auth/confirmar [público]
 > {"email":"555@alunos.umc.br","codigo":"000000"}
-< 400 {"erro":"código incorreto — confira o e-mail e tente de novo"}
+< 400 {"erro":"código incorreto — confira o e-mail e o código; se a conta já foi confirmada, é só entrar"}
 
 POST /auth/confirmar [público]
 > {"email":"nada@alunos.umc.br","codigo":"123456"}
-< 404 {"erro":"não há cadastro com esse e-mail"}
+< 400 {"erro":"código incorreto — confira o e-mail e o código; se a conta já foi confirmada, é só entrar"}
 
 POST /auth/confirmar [público]
 > {"email":"555@alunos.umc.br","codigo":"123456"}
@@ -56,7 +56,7 @@ POST /auth/confirmar [público]
 
 POST /auth/confirmar [público]
 > {"email":"555@alunos.umc.br","codigo":"123456"}
-< 409 {"erro":"esta conta já está confirmada — é só entrar"}
+< 400 {"erro":"código incorreto — confira o e-mail e o código; se a conta já foi confirmada, é só entrar"}
 
 POST /auth/reenviar-codigo [público]
 > {}
@@ -64,11 +64,15 @@ POST /auth/reenviar-codigo [público]
 
 POST /auth/reenviar-codigo [público]
 > {"email":"nada@alunos.umc.br"}
-< 404 {"erro":"não há cadastro com esse e-mail"}
+< 200 {"mensagem":"se houver um cadastro aguardando confirmação com esse e-mail, enviamos um código novo — confira também a caixa de spam"}
 
 POST /auth/reenviar-codigo [público]
 > {"email":"444@alunos.umc.br"}
-< 200 {"mensagem":"enviamos um código novo — confira o e-mail (e a caixa de spam)"}
+< 200 {"mensagem":"se houver um cadastro aguardando confirmação com esse e-mail, enviamos um código novo — confira também a caixa de spam"}
+
+POST /auth/reenviar-codigo [público]
+> {"email":"111@alunos.umc.br"}
+< 200 {"mensagem":"se houver um cadastro aguardando confirmação com esse e-mail, enviamos um código novo — confira também a caixa de spam"}
 
 POST /admin/usuarios [ALUNO]
 > {"nome":"X","email":"x@umc.br","perfil":"ORIENTADOR"}

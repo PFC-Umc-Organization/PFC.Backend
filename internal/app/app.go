@@ -71,7 +71,9 @@ func New(d Deps) *httpapi.Router {
 	identity.Routes(r, identitySvc)
 	academic.Routes(r, academicSvc)
 	groups.Routes(r, groupsSvc)
-	deliveries.Routes(r, deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc, deliveryFiles))
+	deliveriesSvc := deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc, deliveryFiles)
+	groupsSvc.OnProjectDeleted(deliveriesSvc.ProjectDeleted)
+	deliveries.Routes(r, deliveriesSvc)
 	materials.Routes(r, materials.NewService(materials.NewDynamoStore(d.Table), academicSvc, materialFiles))
 	references.Routes(r, references.NewService(references.NewDynamoStore(d.Table), catalog, groupsSvc))
 	return r

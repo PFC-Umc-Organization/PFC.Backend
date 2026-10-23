@@ -6,6 +6,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -80,4 +81,36 @@ func (b *Bucket) Size(ctx context.Context, key string) (size int64, found bool, 
 func (b *Bucket) Delete(ctx context.Context, key string) error {
 	_, err := b.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(b.name), Key: aws.String(key)})
 	return err
+}
+
+// DeletePrefix deletes every object under prefix. Listing needs
+// s3:ListBucket, which also makes HeadObject answer 404 instead of 403 for a
+// missing key.
+func (b *Bucket) DeletePrefix(ctx context.Context, prefix string) error {
+	pages := s3.NewListObjectsV2Paginator(b.client, &s3.ListObjectsV2Input{Bucket: aws.String(b.name), Prefix: aws.String(prefix)})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return err
+		}
+		if len(page.Contents) == 0 {
+			continue
+		}
+		ids := make([]types.ObjectIdentifier, len(page.Contents))
+		for i, o := range page.Contents {
+			ids[i] = types.ObjectIdentifier{Key: o.Key}
+		}
+		out, err := b.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(b.name),
+			Delete: &types.Delete{Objects: ids, Quiet: aws.Bool(true)},
+		})
+		if err != nil {
+			return err
+		}
+		if len(out.Errors) > 0 {
+			first := out.Errors[0]
+			return fmt.Errorf("%d objects not deleted, %s: %s", len(out.Errors), aws.ToString(first.Key), aws.ToString(first.Message))
+		}
+	}
+	return nil
 }

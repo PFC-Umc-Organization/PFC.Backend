@@ -95,12 +95,15 @@ func (s *Service) UpdateActivity(ctx context.Context, id string, in ActivityInpu
 }
 
 func (s *Service) DeleteActivity(ctx context.Context, id string) error {
-	err := s.store.DeleteActivity(ctx, id)
+	projects, err := s.store.DeleteActivity(ctx, id)
 	if errors.Is(err, errNotFound) {
 		return apperr.NotFound(msgActivityNotFound)
 	}
 	if err != nil {
 		return apperr.Internal("falha ao remover atividade", err)
+	}
+	for _, p := range projects {
+		s.deleteFolder(ctx, filesPrefix+p+"/"+id+"/")
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.removida", Result: audit.Success, Resource: activityResource(id)})
 	return nil
@@ -386,6 +389,20 @@ func (s *Service) deleteFiles(ctx context.Context, keys []string) {
 		if err := s.files.Delete(ctx, k); err != nil {
 			slog.WarnContext(ctx, "file not deleted", "key", k, "error", err)
 		}
+	}
+}
+
+// ProjectDeleted removes the project's files, abandoned uploads included.
+func (s *Service) ProjectDeleted(ctx context.Context, projectID string) {
+	s.deleteFolder(ctx, filesPrefix+projectID+"/")
+}
+
+func (s *Service) deleteFolder(ctx context.Context, prefix string) {
+	if s.files == nil {
+		return
+	}
+	if err := s.files.DeletePrefix(ctx, prefix); err != nil {
+		slog.WarnContext(ctx, "files not deleted", "prefix", prefix, "error", err)
 	}
 }
 

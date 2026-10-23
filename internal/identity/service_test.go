@@ -154,8 +154,19 @@ func TestConfirmValidatesInput(t *testing.T) {
 			t.Errorf("%+v: %d %q", in, k, msg)
 		}
 	}
-	if k, _ := status(newTestService(t, &fakeDirectory{err: errAlreadyConfirmed}).Confirm(context.Background(), Confirmation{Email: "a@b", Code: "1"})); k != apperr.KindConflict {
-		t.Errorf("already confirmed: kind %d", k)
+}
+
+func TestConfirmDoesNotRevealAccounts(t *testing.T) {
+	for _, err := range []error{errWrongCode, errNoAccount, errAlreadyConfirmed} {
+		k, msg := status(newTestService(t, &fakeDirectory{err: err}).Confirm(context.Background(), Confirmation{Email: "a@b", Code: "1"}))
+		if k != apperr.KindInvalid || msg != msgConfirmFailed {
+			t.Errorf("%v: %d %q", err, k, msg)
+		}
+	}
+	for _, err := range []error{nil, errNoAccount, errInvalidInput} {
+		if got := newTestService(t, &fakeDirectory{err: err}).ResendCode(context.Background(), ResendInput{Email: "a@b"}); got != nil {
+			t.Errorf("resend %v: %v", err, got)
+		}
 	}
 }
 

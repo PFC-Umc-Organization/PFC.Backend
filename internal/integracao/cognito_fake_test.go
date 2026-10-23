@@ -201,8 +201,13 @@ func (f *fakeCognito) confirmSignUp(w http.ResponseWriter, in map[string]any) {
 }
 
 func (f *fakeCognito) resend(w http.ResponseWriter, in map[string]any) {
-	if f.users[str(in, "Username")] == nil {
+	u := f.users[str(in, "Username")]
+	switch {
+	case u == nil:
 		f.fail(w, "UserNotFoundException", "Username/client id combination not found.")
+		return
+	case u.confirmed:
+		f.fail(w, "InvalidParameterException", "User is already confirmed.")
 		return
 	}
 	f.ok(w, map[string]any{"CodeDeliveryDetails": map[string]any{"DeliveryMedium": "EMAIL"}})

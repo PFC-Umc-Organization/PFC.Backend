@@ -117,8 +117,8 @@ ver [Migração](#migração).
 | ------ | ---------------------------------------- | ------------------------------------------------------------------ | ----------- |
 | POST   | `/auth/login`                            | Autentica via Cognito, devolve `{ usuario, token }`                | pública |
 | POST   | `/auth/registrar`                        | Cadastro self-service de aluno. `perfil` do corpo é ignorado — sempre ALUNO | pública |
-| POST   | `/auth/confirmar`                        | Confirma a conta com o código do e-mail (`{ email, codigo }`)       | pública |
-| POST   | `/auth/reenviar-codigo`                  | Manda outro código de confirmação (`{ email }`)                     | pública |
+| POST   | `/auth/confirmar`                        | Confirma a conta com o código do e-mail (`{ email, codigo }`); não revela se o e-mail tem cadastro | pública |
+| POST   | `/auth/reenviar-codigo`                  | Manda outro código de confirmação (`{ email }`); 200 exista a conta ou não | pública |
 | POST   | `/auth/nova-senha`                       | Primeiro acesso de conta criada pelo admin: o login devolve `{ desafio: "NOVA_SENHA", sessao }` e esta rota troca a senha temporária (`{ email, sessao, senha }`), devolvendo `{ usuario, token }` | pública |
 | POST   | `/auth/esqueci-senha`                    | Manda o código de redefinição (`{ email }`); responde igual exista ou não a conta | pública |
 | POST   | `/auth/redefinir-senha`                  | Define a senha nova com o código (`{ email, codigo, senha }`)       | pública |

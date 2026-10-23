@@ -3,10 +3,12 @@ package integracao
 import (
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,11 +51,18 @@ func (f *fakeS3) has(key string) bool {
 func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if r.Method == http.MethodPost {
+	_, key, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	switch {
+	case r.Method == http.MethodPost && r.URL.Query().Has("delete"):
+		f.deleteObjects(w, r)
+		return
+	case r.Method == http.MethodPost:
 		f.post(w, r)
 		return
+	case r.Method == http.MethodGet && key == "" && r.URL.Query().Get("list-type") == "2":
+		f.list(w, r.URL.Query().Get("prefix"))
+		return
 	}
-	_, key, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	obj, ok := f.objects[key]
 	switch r.Method {
 	case http.MethodHead, http.MethodGet:
@@ -124,4 +133,36 @@ func (f *fakeS3) post(w http.ResponseWriter, r *http.Request) {
 	}
 	f.objects[key] = fakeObject{data: data, contentType: contentType}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// list answers ListObjectsV2 in a single page.
+func (f *fakeS3) list(w http.ResponseWriter, prefix string) {
+	type object struct{ Key string }
+	out := struct {
+		XMLName  xml.Name `xml:"ListBucketResult"`
+		Contents []object
+	}{}
+	for k := range f.objects {
+		if strings.HasPrefix(k, prefix) {
+			out.Contents = append(out.Contents, object{k})
+		}
+	}
+	sort.Slice(out.Contents, func(i, j int) bool { return out.Contents[i].Key < out.Contents[j].Key })
+	w.Header().Set("Content-Type", "application/xml")
+	xml.NewEncoder(w).Encode(out)
+}
+
+func (f *fakeS3) deleteObjects(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Object []struct{ Key string }
+	}
+	if err := xml.NewDecoder(r.Body).Decode(&in); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	for _, o := range in.Object {
+		delete(f.objects, o.Key)
+	}
+	w.Header().Set("Content-Type", "application/xml")
+	io.WriteString(w, "<DeleteResult></DeleteResult>")
 }
