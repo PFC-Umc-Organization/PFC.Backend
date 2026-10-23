@@ -9,7 +9,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 )
 
-const msgInvalidBody = "corpo da requisição inválido"
+const msgInvalidBody = "Corpo da requisição inválido"
 
 type Request struct {
 	Method    string
@@ -53,7 +53,7 @@ func actorOf(ev events.APIGatewayProxyRequest) actor.Actor {
 	str := func(k string) string { s, _ := claims[k].(string); return s }
 	return actor.Actor{
 		Sub:   str("sub"),
-		Name:  str("name"),
+		Name:  actor.DisplayName(str("name"), str("email")),
 		Email: str("email"),
 		Role:  actor.Role(str("custom:perfil")),
 	}

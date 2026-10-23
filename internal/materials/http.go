@@ -42,7 +42,7 @@ func (h handlers) create(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 }
 
 func (h handlers) remove(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("material removido", h.svc.Delete(ctx, r.Actor, r.Param("materialId")))
+	return httpapi.Message("Material removido", h.svc.Delete(ctx, r.Actor, r.Param("materialId")))
 }
 
 func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

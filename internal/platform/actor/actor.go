@@ -38,3 +38,12 @@ func RGMFromEmail(email string) string {
 	}
 	return local
 }
+
+// DisplayName falls back to the e-mail: accounts created in the Cognito
+// console may have no name.
+func DisplayName(name, email string) string {
+	if n := strings.TrimSpace(name); n != "" {
+		return n
+	}
+	return email
+}

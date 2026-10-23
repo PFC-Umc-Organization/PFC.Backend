@@ -48,11 +48,11 @@ func (s *Service) cohortOf(ctx context.Context, viewer actor.Actor) (string, err
 func (s *Service) List(ctx context.Context, viewer actor.Actor) ([]Material, error) {
 	cohort, err := s.cohortOf(ctx, viewer)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar materiais", err)
+		return nil, apperr.Internal("Falha ao listar materiais", err)
 	}
 	all, err := s.store.List(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar materiais", err)
+		return nil, apperr.Internal("Falha ao listar materiais", err)
 	}
 	visible := slices.DeleteFunc(all, func(m Material) bool { return !m.visibleTo(viewer, cohort) })
 	slices.SortStableFunc(visible, func(a, b Material) int { return strings.Compare(b.PublishedAt, a.PublishedAt) })
@@ -67,7 +67,7 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 	if in.CohortID != nil {
 		exists, err := s.academic.CohortExists(ctx, *in.CohortID)
 		if err != nil {
-			return Material{}, apperr.Internal("falha ao validar a turma", err)
+			return Material{}, apperr.Internal("Falha ao validar a turma", err)
 		}
 		if !exists {
 			return Material{}, apperr.NotFound(msgCohortNotFound)
@@ -90,7 +90,7 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 		}
 		size, found, err := s.files.Size(ctx, in.File)
 		if err != nil {
-			return Material{}, apperr.Internal("falha ao conferir o arquivo enviado", err)
+			return Material{}, apperr.Internal("Falha ao conferir o arquivo enviado", err)
 		}
 		if !found || size > storage.MaxBytes {
 			return Material{}, apperr.Invalid(msgFileMissing)
@@ -98,7 +98,7 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 		m.fileKey, m.File = in.File, path.Base(in.File)
 	}
 	if err := s.store.Create(ctx, m); err != nil {
-		return Material{}, apperr.Internal("falha ao publicar material", err)
+		return Material{}, apperr.Internal("Falha ao publicar material", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "material.publicado", Result: audit.Success, Resource: resource(m.ID),
 		Details: map[string]any{"titulo": m.Title, "tipo": string(m.Kind), "cursoId": m.CohortID}})
@@ -108,7 +108,7 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 func (s *Service) Delete(ctx context.Context, who actor.Actor, id string) error {
 	m, found, err := s.store.Get(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao carregar material", err)
+		return apperr.Internal("Falha ao carregar material", err)
 	}
 	if !found {
 		return apperr.NotFound(msgNotFound)
@@ -122,7 +122,7 @@ func (s *Service) Delete(ctx context.Context, who actor.Actor, id string) error 
 		return apperr.NotFound(msgNotFound)
 	}
 	if err != nil {
-		return apperr.Internal("falha ao remover material", err)
+		return apperr.Internal("Falha ao remover material", err)
 	}
 	// A file left behind costs little and must not undo the removal.
 	if removed.fileKey != "" && s.files != nil {
@@ -152,7 +152,7 @@ func (s *Service) RequestUpload(ctx context.Context, in UploadRequest) (UploadTi
 	key := filesPrefix + s.newID() + "/" + name
 	up, err := s.files.PresignUpload(ctx, key, kind, storage.MaxBytes, uploadTTL)
 	if err != nil {
-		return UploadTicket{}, apperr.Internal("falha ao preparar o envio do arquivo", err)
+		return UploadTicket{}, apperr.Internal("Falha ao preparar o envio do arquivo", err)
 	}
 	return UploadTicket{URL: up.URL, Fields: up.Fields, Key: key, ExpiresAt: up.ExpiresAt.UTC().Format(time.RFC3339), MaxBytes: storage.MaxBytes}, nil
 }
@@ -163,11 +163,11 @@ func (s *Service) Download(ctx context.Context, viewer actor.Actor, id string) (
 	}
 	m, found, err := s.store.Get(ctx, id)
 	if err != nil {
-		return Download{}, apperr.Internal("falha ao carregar material", err)
+		return Download{}, apperr.Internal("Falha ao carregar material", err)
 	}
 	cohort, err := s.cohortOf(ctx, viewer)
 	if err != nil {
-		return Download{}, apperr.Internal("falha ao carregar material", err)
+		return Download{}, apperr.Internal("Falha ao carregar material", err)
 	}
 	if !found || !m.visibleTo(viewer, cohort) {
 		return Download{}, apperr.NotFound(msgNotFound)
@@ -177,7 +177,7 @@ func (s *Service) Download(ctx context.Context, viewer actor.Actor, id string) (
 	}
 	url, err := s.files.PresignDownload(ctx, m.fileKey, m.File, downloadTTL)
 	if err != nil {
-		return Download{}, apperr.Internal("falha ao preparar o download", err)
+		return Download{}, apperr.Internal("Falha ao preparar o download", err)
 	}
 	return Download{URL: url, Name: m.File}, nil
 }

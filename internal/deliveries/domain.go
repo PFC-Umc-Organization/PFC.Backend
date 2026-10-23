@@ -123,13 +123,13 @@ func (in ActivityInput) normalized() ActivityInput {
 func (in ActivityInput) validate() string {
 	switch {
 	case in.Title == "":
-		return "título é obrigatório"
+		return "Título é obrigatório"
 	case utf8.RuneCountInString(in.Title) > maxTitleLen:
-		return "título longo demais"
+		return "Título longo demais"
 	case utf8.RuneCountInString(in.Description) > maxDescriptionLen:
-		return "descrição longa demais"
+		return "Descrição longa demais"
 	case !validDeadline(in.Deadline):
-		return "prazo inválido"
+		return "Prazo inválido"
 	}
 	return ""
 }
@@ -138,15 +138,15 @@ func (in FieldInput) normalized() (FieldInput, string) {
 	in.Label = strings.TrimSpace(in.Label)
 	switch {
 	case in.Label == "":
-		return in, "nome do campo é obrigatório"
+		return in, "Nome do campo é obrigatório"
 	case utf8.RuneCountInString(in.Label) > maxLabelLen:
-		return in, "nome do campo longo demais"
+		return in, "Nome do campo longo demais"
 	}
 	switch in.Type {
 	case FieldFile, FieldText, FieldLongText, FieldLink:
 		return in, ""
 	}
-	return in, "tipo de campo inválido"
+	return in, "Tipo de campo inválido"
 }
 
 var defaultFields = []FieldInput{{Label: "Arquivo da entrega", Type: FieldFile, Required: true}}
@@ -156,7 +156,7 @@ func normalizedFields(fields []FieldInput) ([]FieldInput, string) {
 		return defaultFields, ""
 	}
 	if len(fields) > maxFields {
-		return nil, "campos demais na atividade"
+		return nil, "Campos demais na atividade"
 	}
 	out := make([]FieldInput, 0, len(fields))
 	for _, f := range fields {
@@ -176,7 +176,7 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 	}
 	for id := range answers {
 		if !known[id] {
-			return nil, "a resposta tem um campo que não existe na atividade"
+			return nil, "A resposta tem um campo que não existe na atividade"
 		}
 	}
 
@@ -185,7 +185,7 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 		v := strings.TrimSpace(answers[f.ID])
 		if v == "" {
 			if f.Required {
-				return nil, fmt.Sprintf("o campo %q é obrigatório", f.Label)
+				return nil, fmt.Sprintf("O campo %q é obrigatório", f.Label)
 			}
 			continue
 		}
@@ -197,11 +197,11 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 			limit = maxFileNameLen
 		case FieldLink:
 			if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
-				return nil, fmt.Sprintf("o campo %q precisa de um link http(s)", f.Label)
+				return nil, fmt.Sprintf("O campo %q precisa de um link http(s)", f.Label)
 			}
 		}
 		if utf8.RuneCountInString(v) > limit {
-			return nil, fmt.Sprintf("o campo %q passou do tamanho máximo", f.Label)
+			return nil, fmt.Sprintf("O campo %q passou do tamanho máximo", f.Label)
 		}
 		out[f.ID] = v
 	}
@@ -209,16 +209,16 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 }
 
 const (
-	msgStaffOnly          = "acesso restrito à equipe acadêmica"
-	msgMembersAndStaff    = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
-	msgReviewersOnly      = "apenas a coordenação e o orientador do projeto podem devolver uma entrega"
-	msgAdminOnly          = "acesso restrito a administradores"
-	msgMembersOnly        = "apenas integrantes do projeto podem entregar"
-	msgActivityNotFound   = "atividade não encontrada"
-	msgFieldNotFound      = "campo não encontrado"
-	msgLastField          = "a atividade precisa de ao menos um campo de entrega"
-	msgFieldLimit         = "limite de campos da atividade atingido"
-	msgSubmissionNotFound = "entrega não encontrada"
-	msgProjectNotFound    = "projeto não encontrado"
-	msgDeadlinePassed     = "o prazo desta atividade acabou: só quem entregou no prazo pode editar a entrega"
+	msgStaffOnly          = "Acesso restrito à equipe acadêmica"
+	msgMembersAndStaff    = "Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
+	msgReviewersOnly      = "Apenas a coordenação e o orientador do projeto podem devolver uma entrega"
+	msgAdminOnly          = "Acesso restrito a administradores"
+	msgMembersOnly        = "Apenas integrantes do projeto podem entregar"
+	msgActivityNotFound   = "Atividade não encontrada"
+	msgFieldNotFound      = "Campo não encontrado"
+	msgLastField          = "A atividade precisa de ao menos um campo de entrega"
+	msgFieldLimit         = "Limite de campos da atividade atingido"
+	msgSubmissionNotFound = "Entrega não encontrada"
+	msgProjectNotFound    = "Projeto não encontrado"
+	msgDeadlinePassed     = "O prazo desta atividade acabou: só quem entregou no prazo pode editar a entrega"
 )

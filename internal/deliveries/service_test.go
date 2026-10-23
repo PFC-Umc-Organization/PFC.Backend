@@ -170,7 +170,7 @@ func TestSubmit(t *testing.T) {
 		"outsider":         {actor.Actor{Email: "222@alunos.umc.br"}, "p1", "a1", nil, msgMembersOnly},
 		"missing project":  {member, "p9", "a1", nil, msgProjectNotFound},
 		"missing activity": {member, "p1", "a9", nil, msgActivityNotFound},
-		"required missing": {member, "p1", "a1", map[string]string{}, `o campo "Arquivo" é obrigatório`},
+		"required missing": {member, "p1", "a1", map[string]string{}, `O campo "Arquivo" é obrigatório`},
 	}
 	for name, c := range cases {
 		_, err := svc.Submit(ctx, c.who, c.project, c.activity, SubmissionInput{Answers: c.answers})
@@ -326,7 +326,7 @@ func TestFiles(t *testing.T) {
 		t.Errorf("outsider: %v", err)
 	}
 
-	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": ticket.Key}}); message(err) != `o arquivo do campo "Arquivo" não chegou — envie de novo` {
+	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": ticket.Key}}); message(err) != `O arquivo do campo "Arquivo" não chegou. Envie de novo` {
 		t.Errorf("file not uploaded: %v", err)
 	}
 	for _, forged := range []string{"monografia.pdf", "entregas/p2/a1/f1/x/a.pdf"} {

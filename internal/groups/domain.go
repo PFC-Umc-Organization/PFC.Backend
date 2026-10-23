@@ -143,46 +143,46 @@ func group(creator string, classmates []string) []string {
 }
 
 const (
-	msgAdminOnly            = "acesso restrito a administradores"
-	msgStudentsOnly         = "esta rota é para alunos"
-	msgStudentsOnlyCreate   = "esta rota é para alunos — a coordenação cria projetos pela gestão de PFC"
-	msgNoRGM                = "não foi possível identificar o seu RGM"
-	msgMembersAndStaffOnly  = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
-	msgStaffOnly            = "acesso restrito à equipe acadêmica"
-	msgMembersOnlyInvite    = "apenas integrantes do projeto podem convidar"
-	msgMembersOnlyCancel    = "apenas integrantes do projeto podem cancelar convites"
-	msgNameRequired         = "nome é obrigatório"
-	msgNameTooLong          = "nome longo demais"
-	msgDescriptionTooLong   = "descrição longa demais"
-	msgGroupTooLarge        = "grupo grande demais"
-	msgRGMRequired          = "rgm é obrigatório"
-	msgAdvisorRequired      = "orientadorId é obrigatório"
-	msgAdvisorNotFound      = "orientador não encontrado"
-	msgProjectNotFound      = "projeto não encontrado"
-	msgProgramNotFound      = "programa não encontrado"
-	msgGroupChanged         = "o grupo mudou enquanto você editava — atualize a página e tente de novo"
-	msgGroupFull            = "o grupo já está cheio"
-	msgGroupFullWithPending = "o grupo já está cheio (contando os convites pendentes)"
+	msgAdminOnly            = "Acesso restrito a administradores"
+	msgStudentsOnly         = "Esta rota é para alunos"
+	msgStudentsOnlyCreate   = "Esta rota é para alunos. A coordenação cria projetos pela gestão de PFC"
+	msgNoRGM                = "Não foi possível identificar o seu RGM"
+	msgMembersAndStaffOnly  = "Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
+	msgStaffOnly            = "Acesso restrito à equipe acadêmica"
+	msgMembersOnlyInvite    = "Apenas integrantes do projeto podem convidar"
+	msgMembersOnlyCancel    = "Apenas integrantes do projeto podem cancelar convites"
+	msgNameRequired         = "Nome é obrigatório"
+	msgNameTooLong          = "Nome longo demais"
+	msgDescriptionTooLong   = "Descrição longa demais"
+	msgGroupTooLarge        = "Grupo grande demais"
+	msgRGMRequired          = "Informe o RGM"
+	msgAdvisorRequired      = "Escolha o orientador"
+	msgAdvisorNotFound      = "Orientador não encontrado"
+	msgProjectNotFound      = "Projeto não encontrado"
+	msgProgramNotFound      = "Programa não encontrado"
+	msgGroupChanged         = "O grupo mudou enquanto você editava. Atualize a página e tente de novo"
+	msgGroupFull            = "O grupo já está cheio"
+	msgGroupFullWithPending = "O grupo já está cheio (contando os convites pendentes)"
 	msgNotPreauthorized     = "RGM não está pré-autorizado e não tem conta de aluno"
-	msgAlreadyInProject     = "você já faz parte de um projeto"
-	msgNoCohort             = "o seu RGM não está pré-autorizado em nenhuma turma — fale com a coordenação"
-	msgCohortWithoutProgram = "a sua turma ainda não tem PFC iniciado — fale com a coordenação"
-	msgOutsideGroupCohort   = "você não está pré-autorizado na turma deste grupo — fale com a coordenação"
-	msgInvitationNotFound   = "convite não encontrado"
-	msgGroupGone            = "este grupo não existe mais"
-	msgCannotJoin           = "não foi possível entrar: o grupo está cheio ou você já é integrante"
+	msgAlreadyInProject     = "Você já faz parte de um projeto"
+	msgNoCohort             = "O seu RGM não está pré-autorizado em nenhuma turma. Fale com a coordenação"
+	msgCohortWithoutProgram = "A sua turma ainda não tem PFC iniciado. Fale com a coordenação"
+	msgOutsideGroupCohort   = "Você não está pré-autorizado na turma deste grupo. Fale com a coordenação"
+	msgInvitationNotFound   = "Convite não encontrado"
+	msgGroupGone            = "Este grupo não existe mais"
+	msgCannotJoin           = "Não foi possível entrar: o grupo está cheio ou você já é integrante"
 )
 
-func msgAlreadyMember(rgm string) string  { return "o RGM " + rgm + " já é integrante do grupo" }
-func msgNotMember(rgm string) string      { return "o RGM " + rgm + " não é integrante do grupo" }
-func msgInOtherProject(rgm string) string { return "o RGM " + rgm + " já faz parte de outro projeto" }
+func msgAlreadyMember(rgm string) string  { return "O RGM " + rgm + " já é integrante do grupo" }
+func msgNotMember(rgm string) string      { return "O RGM " + rgm + " não é integrante do grupo" }
+func msgInOtherProject(rgm string) string { return "O RGM " + rgm + " já faz parte de outro projeto" }
 func msgNotInCohort(rgm string) string {
-	return "o RGM " + rgm + " não está pré-autorizado na sua turma"
+	return "O RGM " + rgm + " não está pré-autorizado na sua turma"
 }
 func msgNotInGroupCohort(rgm string) string {
-	return "o RGM " + rgm + " não está pré-autorizado na turma do grupo"
+	return "O RGM " + rgm + " não está pré-autorizado na turma do grupo"
 }
-func msgAlreadyInvited(rgm string) string { return "o RGM " + rgm + " já tem um convite deste grupo" }
+func msgAlreadyInvited(rgm string) string { return "O RGM " + rgm + " já tem um convite deste grupo" }
 func msgInNamedProject(rgm, name string) string {
-	return "o RGM " + rgm + " já faz parte do projeto \"" + name + "\""
+	return "O RGM " + rgm + " já faz parte do projeto \"" + name + "\""
 }

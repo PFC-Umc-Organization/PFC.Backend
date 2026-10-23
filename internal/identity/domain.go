@@ -126,7 +126,7 @@ func userFromAttributes(attrs map[string]string, username string, enabled, confi
 	}
 	u := User{
 		ID:        id,
-		Name:      attrs["name"],
+		Name:      actor.DisplayName(attrs["name"], attrs["email"]),
 		Email:     attrs["email"],
 		Role:      roleOrStudent(attrs["custom:perfil"]),
 		Status:    status,
@@ -162,7 +162,7 @@ func sessionUser(claims map[string]any) SessionUser {
 	str := func(k string) string { s, _ := claims[k].(string); return s }
 	u := SessionUser{
 		ID:        str("sub"),
-		Name:      str("name"),
+		Name:      actor.DisplayName(str("name"), str("email")),
 		Email:     str("email"),
 		Role:      roleOrStudent(str("custom:perfil")),
 		Status:    StatusActive,
@@ -182,24 +182,24 @@ var (
 )
 
 const (
-	msgAdminOnly           = "acesso restrito a administradores"
-	msgStaffOnly           = "acesso restrito à equipe acadêmica"
-	msgCredentialsRequired = "informe o e-mail e a senha"
-	msgNotConfirmed        = "conta ainda não confirmada — digite o código enviado por e-mail"
-	msgBadCredentials      = "e-mail ou senha inválidos"
-	msgSignUpRequired      = "nome, e-mail e senha são obrigatórios"
-	msgConfirmRequired     = "informe o e-mail e o código"
-	msgEmailRequired       = "informe o e-mail"
-	msgAccountRequired     = "nome e email são obrigatórios"
-	msgInstitutionalEmail  = "use um e-mail institucional (@umc.br)"
-	msgStaffRole           = "perfil deve ser ORIENTADOR ou ADMIN"
-	msgThrottled           = "muitas tentativas seguidas — aguarde alguns minutos e tente de novo"
-	msgNewPasswordRequired = "informe o e-mail, a sessão e a nova senha"
-	msgResetRequired       = "informe o e-mail, o código e a nova senha"
-	msgWeakPassword        = "a senha precisa ter ao menos 8 caracteres, com letra maiúscula, letra minúscula, número e símbolo"
-	msgSessionExpired      = "a troca de senha expirou — entre de novo com a senha temporária do e-mail"
-	msgWrongCode           = "código incorreto — confira o e-mail e tente de novo"
-	msgExpiredCode         = "código expirado — peça um código novo"
-	msgConfirmFailed       = "código incorreto — confira o e-mail e o código; se a conta já foi confirmada, é só entrar"
-	msgNoSession           = "sessão inválida — entre de novo"
+	msgAdminOnly           = "Acesso restrito a administradores"
+	msgStaffOnly           = "Acesso restrito à equipe acadêmica"
+	msgCredentialsRequired = "Informe o e-mail e a senha"
+	msgNotConfirmed        = "Conta ainda não confirmada. Digite o código enviado por e-mail"
+	msgBadCredentials      = "E-mail ou senha inválidos"
+	msgSignUpRequired      = "Nome, e-mail e senha são obrigatórios"
+	msgConfirmRequired     = "Informe o e-mail e o código"
+	msgEmailRequired       = "Informe o e-mail"
+	msgAccountRequired     = "Nome e e-mail são obrigatórios"
+	msgInstitutionalEmail  = "Use um e-mail institucional (@umc.br)"
+	msgStaffRole           = "Escolha o perfil: orientador ou admin"
+	msgThrottled           = "Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo"
+	msgNewPasswordRequired = "Informe o e-mail, a sessão e a nova senha"
+	msgResetRequired       = "Informe o e-mail, o código e a nova senha"
+	msgWeakPassword        = "A senha precisa ter ao menos 8 caracteres, com letra maiúscula, letra minúscula, número e símbolo"
+	msgSessionExpired      = "A troca de senha expirou. Entre de novo com a senha temporária do e-mail"
+	msgWrongCode           = "Código incorreto. Confira o e-mail e tente de novo"
+	msgExpiredCode         = "Código expirado. Peça um código novo"
+	msgConfirmFailed       = "Código incorreto. Confira o e-mail e o código; se a conta já foi confirmada, é só entrar"
+	msgNoSession           = "Sessão inválida. Entre de novo"
 )

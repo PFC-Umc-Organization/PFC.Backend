@@ -57,7 +57,7 @@ func writeError(err error) error {
 	if errors.Is(err, errNotFound) {
 		return apperr.NotFound(msgProjectNotFound)
 	}
-	return apperr.Internal("falha ao salvar — tente novamente em instantes", err)
+	return apperr.Internal("Falha ao salvar. Tente novamente em instantes", err)
 }
 
 func (s *Service) Project(ctx context.Context, id string) (Project, bool, error) {
@@ -67,7 +67,7 @@ func (s *Service) Project(ctx context.Context, id string) (Project, bool, error)
 func (s *Service) load(ctx context.Context, id string) (Project, error) {
 	p, found, err := s.store.GetProject(ctx, id)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao carregar projeto", err)
+		return Project{}, apperr.Internal("Falha ao carregar projeto", err)
 	}
 	if !found {
 		return Project{}, apperr.NotFound(msgProjectNotFound)
@@ -80,7 +80,7 @@ func (s *Service) load(ctx context.Context, id string) (Project, error) {
 func (s *Service) CreateProject(ctx context.Context, programID string, in ProjectInput) (Project, error) {
 	exists, err := s.academic.ProgramExists(ctx, programID)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar programa", err)
+		return Project{}, apperr.Internal("Falha ao validar programa", err)
 	}
 	if !exists {
 		return Project{}, apperr.NotFound(msgProgramNotFound)
@@ -91,7 +91,7 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 	}
 	p := Project{ID: s.newID(), Name: in.Name, Description: in.Description, ProgramID: programID, Members: []string{}}
 	if err := s.store.CreateProject(ctx, p); err != nil {
-		return Project{}, apperr.Internal("falha ao criar projeto", err)
+		return Project{}, apperr.Internal("Falha ao criar projeto", err)
 	}
 	success(ctx, "projeto.criado", projectResource(p.ID), map[string]any{"programaId": programID, "nome": p.Name})
 	return p, nil
@@ -101,7 +101,7 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar projetos", err)
+		return nil, apperr.Internal("Falha ao listar projetos", err)
 	}
 	if viewer.HasRole(actor.RoleAdmin) {
 		return projects, nil
@@ -186,7 +186,7 @@ func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error)
 	rgm := student.RGM()
 	p, found, err := s.store.ProjectOfMember(ctx, rgm)
 	if err != nil {
-		return MyPFC{}, apperr.Internal("falha ao carregar o seu projeto", err)
+		return MyPFC{}, apperr.Internal("Falha ao carregar o seu projeto", err)
 	}
 	if found {
 		d := s.detail(ctx, p)
@@ -194,18 +194,18 @@ func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error)
 	}
 	cohortID, err := s.academic.CohortOf(ctx, rgm)
 	if err != nil {
-		return MyPFC{}, apperr.Internal("falha ao validar a sua matrícula", err)
+		return MyPFC{}, apperr.Internal("Falha ao validar a sua matrícula", err)
 	}
 	if cohortID == "" {
 		return MyPFC{}, nil
 	}
 	cohort, err := s.cohort(ctx, cohortID)
 	if err != nil {
-		return MyPFC{}, apperr.Internal("falha ao carregar a sua turma", err)
+		return MyPFC{}, apperr.Internal("Falha ao carregar a sua turma", err)
 	}
 	programID, _, err := s.academic.ProgramOfCohort(ctx, cohortID)
 	if err != nil {
-		return MyPFC{}, apperr.Internal("falha ao carregar a sua turma", err)
+		return MyPFC{}, apperr.Internal("Falha ao carregar a sua turma", err)
 	}
 	return MyPFC{Cohort: cohort, ProgramID: programID}, nil
 }
@@ -229,7 +229,7 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgGroupChanged)
 	case err != nil:
-		return apperr.Internal("falha ao remover projeto", err)
+		return apperr.Internal("Falha ao remover projeto", err)
 	}
 	success(ctx, "projeto.removido", projectResource(id), nil)
 	for _, f := range s.deleted {
@@ -248,7 +248,7 @@ func (s *Service) AssignAdvisor(ctx context.Context, id string, in AdvisorInput)
 	}
 	exists, err := s.accounts.AdvisorExists(ctx, in.AdvisorID)
 	if err != nil {
-		return apperr.Internal("falha ao validar orientador", err)
+		return apperr.Internal("Falha ao validar orientador", err)
 	}
 	if !exists {
 		failure(ctx, "projeto.orientador_associado", "orientadorId não corresponde a uma conta de orientador", projectResource(id), nil)
@@ -288,14 +288,14 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 
 	enrolled, err := s.academic.IsEnrolled(ctx, rgm)
 	if err != nil {
-		return apperr.Internal("falha ao validar matrícula", err)
+		return apperr.Internal("Falha ao validar matrícula", err)
 	}
 	// An RGM outside the allowlist may still own a student account (created
 	// before the list, or removed from it later): that is a real student.
 	if !enrolled {
 		hasAccount, err := s.accounts.StudentExists(ctx, rgm)
 		if err != nil {
-			return apperr.Internal("falha ao validar matrícula", err)
+			return apperr.Internal("Falha ao validar matrícula", err)
 		}
 		if !hasAccount {
 			failure(ctx, action, msgNotPreauthorized, projectResource(id), map[string]any{"rgm": rgm})
@@ -305,7 +305,7 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 
 	other, taken, err := s.store.ProjectOfMember(ctx, rgm)
 	if err != nil {
-		return apperr.Internal("falha ao validar o integrante", err)
+		return apperr.Internal("Falha ao validar o integrante", err)
 	}
 	if taken {
 		failure(ctx, action, "RGM já é integrante de outro projeto", projectResource(id), map[string]any{"rgm": rgm, "outroProjetoId": other.ID})
@@ -318,7 +318,7 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgGroupChanged)
 	case err != nil:
-		return apperr.Internal("falha ao adicionar integrante", err)
+		return apperr.Internal("Falha ao adicionar integrante", err)
 	}
 	success(ctx, action, projectResource(id), map[string]any{"rgm": rgm})
 	return nil
@@ -337,7 +337,7 @@ func (s *Service) RemoveMember(ctx context.Context, id string, in MemberInput) e
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgGroupChanged)
 	case err != nil:
-		return apperr.Internal("falha ao remover integrante", err)
+		return apperr.Internal("Falha ao remover integrante", err)
 	}
 	success(ctx, "projeto.integrante_removido", projectResource(id), map[string]any{"rgm": rgm})
 	return nil
@@ -361,7 +361,7 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 
 	cohorts, err := s.academic.CohortsOf(ctx, members)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar a sua matrícula", err)
+		return Project{}, apperr.Internal("Falha ao validar a sua matrícula", err)
 	}
 	cohort := cohorts[rgm]
 	if cohort == "" {
@@ -370,7 +370,7 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 	}
 	programID, hasProgram, err := s.academic.ProgramOfCohort(ctx, cohort)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar a turma", err)
+		return Project{}, apperr.Internal("Falha ao validar a turma", err)
 	}
 	if !hasProgram {
 		fail("turma sem programa de PFC")
@@ -378,7 +378,7 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 	}
 	taken, err := s.store.ProjectsOfMembers(ctx, members)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar os integrantes", err)
+		return Project{}, apperr.Internal("Falha ao validar os integrantes", err)
 	}
 	for _, r := range members {
 		if cohorts[r] != cohort {
@@ -401,7 +401,7 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 		return Project{}, apperr.Conflict(msgAlreadyInProject)
 	}
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao criar projeto", err)
+		return Project{}, apperr.Internal("Falha ao criar projeto", err)
 	}
 
 	// A failed invitation does not undo the project: the group can invite
@@ -435,7 +435,7 @@ func (s *Service) invite(ctx context.Context, p Project, rgm, invitedBy string) 
 func (s *Service) InvitationsOf(ctx context.Context, rgm string) ([]Invitation, error) {
 	invitations, err := s.store.InvitationsOfStudent(ctx, rgm)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar convites", err)
+		return nil, apperr.Internal("Falha ao listar convites", err)
 	}
 	return invitations, nil
 }
@@ -448,14 +448,14 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 
 	exists, err := s.store.InvitationExists(ctx, projectID, rgm)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao carregar convite", err)
+		return Project{}, apperr.Internal("Falha ao carregar convite", err)
 	}
 	if !exists {
 		return Project{}, apperr.NotFound(msgInvitationNotFound)
 	}
 	p, found, err := s.store.GetProject(ctx, projectID)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao carregar o grupo", err)
+		return Project{}, apperr.Internal("Falha ao carregar o grupo", err)
 	}
 	if !found {
 		if err := s.store.DeleteInvitation(ctx, projectID, rgm); err != nil {
@@ -467,7 +467,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 
 	_, taken, err := s.store.ProjectOfMember(ctx, rgm)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar a sua participação", err)
+		return Project{}, apperr.Internal("Falha ao validar a sua participação", err)
 	}
 	if taken {
 		fail("aluno já está em um projeto")
@@ -475,11 +475,11 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 	}
 	cohort, err := s.academic.CohortOf(ctx, rgm)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar a sua matrícula", err)
+		return Project{}, apperr.Internal("Falha ao validar a sua matrícula", err)
 	}
 	programID, hasProgram, err := s.academic.ProgramOfCohort(ctx, cohort)
 	if err != nil {
-		return Project{}, apperr.Internal("falha ao validar a sua turma", err)
+		return Project{}, apperr.Internal("Falha ao validar a sua turma", err)
 	}
 	if cohort == "" || !hasProgram || programID != p.ProgramID {
 		fail("aluno fora da turma do grupo")
@@ -494,7 +494,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 		fail("grupo cheio ou aluno já é integrante")
 		return Project{}, apperr.Conflict(msgCannotJoin)
 	case err != nil:
-		return Project{}, apperr.Internal("falha ao entrar no grupo", err)
+		return Project{}, apperr.Internal("Falha ao entrar no grupo", err)
 	}
 
 	// One project per student: the other invitations lost their purpose.
@@ -519,7 +519,7 @@ func (s *Service) DeclineInvitation(ctx context.Context, rgm, projectID string) 
 	case errors.Is(err, errNotFound):
 		return apperr.NotFound(msgInvitationNotFound)
 	case err != nil:
-		return apperr.Internal("falha ao recusar convite", err)
+		return apperr.Internal("Falha ao recusar convite", err)
 	}
 	success(ctx, "convite.recusado", projectResource(projectID), map[string]any{"rgm": rgm})
 	return nil
@@ -535,7 +535,7 @@ func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, 
 	}
 	invitations, err := s.store.InvitationsOfProject(ctx, p.ID)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar convites", err)
+		return nil, apperr.Internal("Falha ao listar convites", err)
 	}
 	return invitations, nil
 }
@@ -562,11 +562,11 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 
 	cohort, err := s.academic.CohortOf(ctx, classmate)
 	if err != nil {
-		return Invitation{}, apperr.Internal("falha ao validar o convidado", err)
+		return Invitation{}, apperr.Internal("Falha ao validar o convidado", err)
 	}
 	programID, hasProgram, err := s.academic.ProgramOfCohort(ctx, cohort)
 	if err != nil {
-		return Invitation{}, apperr.Internal("falha ao validar o convidado", err)
+		return Invitation{}, apperr.Internal("Falha ao validar o convidado", err)
 	}
 	if cohort == "" || !hasProgram || programID != p.ProgramID {
 		fail("convidado fora da turma do grupo")
@@ -574,7 +574,7 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 	}
 	_, taken, err := s.store.ProjectOfMember(ctx, classmate)
 	if err != nil {
-		return Invitation{}, apperr.Internal("falha ao validar o convidado", err)
+		return Invitation{}, apperr.Internal("Falha ao validar o convidado", err)
 	}
 	if taken {
 		fail("convidado já está em um projeto")
@@ -582,7 +582,7 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 	}
 	pending, err := s.store.InvitationsOfProject(ctx, p.ID)
 	if err != nil {
-		return Invitation{}, apperr.Internal("falha ao validar o tamanho do grupo", err)
+		return Invitation{}, apperr.Internal("Falha ao validar o tamanho do grupo", err)
 	}
 	if len(p.Members)+len(pending) >= MaxMembers {
 		fail("grupo cheio")
@@ -594,7 +594,7 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 		return Invitation{}, apperr.Conflict(msgAlreadyInvited(classmate))
 	}
 	if err != nil {
-		return Invitation{}, apperr.Internal("falha ao enviar convite", err)
+		return Invitation{}, apperr.Internal("Falha ao enviar convite", err)
 	}
 	s.notify(ctx, inv)
 	success(ctx, "convite.enviado", projectResource(p.ID), map[string]any{"rgm": classmate})
@@ -614,7 +614,7 @@ func (s *Service) CancelInvitation(ctx context.Context, member actor.Actor, proj
 	case errors.Is(err, errNotFound):
 		return apperr.NotFound(msgInvitationNotFound)
 	case err != nil:
-		return apperr.Internal("falha ao cancelar convite", err)
+		return apperr.Internal("Falha ao cancelar convite", err)
 	}
 	success(ctx, "convite.cancelado", projectResource(p.ID), map[string]any{"rgm": rgm})
 	return nil

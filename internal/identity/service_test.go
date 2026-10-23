@@ -248,7 +248,7 @@ func TestCreateAccount(t *testing.T) {
 			t.Errorf("%s: kind %d", name, k)
 		}
 	}
-	if k, msg := status(newTestService(t, &fakeDirectory{err: errEmailTaken}).CreateAccount(ctx, NewAccount{Name: "A", Email: "a@umc.br", Role: actor.RoleAdmin})); k != apperr.KindConflict || !strings.Contains(msg, "já existe") {
+	if k, msg := status(newTestService(t, &fakeDirectory{err: errEmailTaken}).CreateAccount(ctx, NewAccount{Name: "A", Email: "a@umc.br", Role: actor.RoleAdmin})); k != apperr.KindConflict || !strings.Contains(msg, "Já existe") {
 		t.Errorf("taken: %d %q", k, msg)
 	}
 }

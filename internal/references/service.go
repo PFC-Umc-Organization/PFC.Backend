@@ -77,7 +77,7 @@ func (s *Service) LookupDOI(ctx context.Context, raw string) (FormattedWork, err
 func (s *Service) project(ctx context.Context, id string) (groups.Project, error) {
 	p, ok, err := s.projects.Project(ctx, id)
 	if err != nil {
-		return groups.Project{}, apperr.Internal("falha ao carregar projeto", err)
+		return groups.Project{}, apperr.Internal("Falha ao carregar projeto", err)
 	}
 	if !ok {
 		return groups.Project{}, apperr.NotFound(msgProjectNotFound)
@@ -97,7 +97,7 @@ func (s *Service) ReferencesOf(ctx context.Context, viewer actor.Actor, projectI
 	}
 	refs, err := s.store.ReferencesOf(ctx, p.ID)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar referências", err)
+		return nil, apperr.Internal("Falha ao listar referências", err)
 	}
 	slices.SortStableFunc(refs, func(a, b Reference) int {
 		return strings.Compare(strings.ToUpper(a.ABNT), strings.ToUpper(b.ABNT))
@@ -152,7 +152,7 @@ func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string,
 		return Reference{}, apperr.Conflict(msgDuplicate)
 	}
 	if err != nil {
-		return Reference{}, apperr.Internal("falha ao salvar referência", err)
+		return Reference{}, apperr.Internal("Falha ao salvar referência", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "referencia.adicionada", Result: audit.Success,
 		Resource: &audit.Resource{Type: "referencia", ID: ref.ID}, Details: map[string]any{"projetoId": p.ID, "doi": ref.DOI}})
@@ -171,7 +171,7 @@ func (s *Service) Remove(ctx context.Context, member actor.Actor, projectID, id 
 	case errors.Is(err, errNotFound):
 		return apperr.NotFound(msgReferenceNotFound)
 	case err != nil:
-		return apperr.Internal("falha ao remover referência", err)
+		return apperr.Internal("Falha ao remover referência", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "referencia.removida", Result: audit.Success,
 		Resource: &audit.Resource{Type: "referencia", ID: id}, Details: map[string]any{"projetoId": p.ID}})

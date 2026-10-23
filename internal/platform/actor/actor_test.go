@@ -24,3 +24,15 @@ func TestRGM(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayName(t *testing.T) {
+	for _, c := range []struct{ name, email, want string }{
+		{"Ana Souza", "ana@umc.br", "Ana Souza"},
+		{"  ", "ana@umc.br", "ana@umc.br"},
+		{"", "ana@umc.br", "ana@umc.br"},
+	} {
+		if got := DisplayName(c.name, c.email); got != c.want {
+			t.Errorf("DisplayName(%q, %q) = %q, want %q", c.name, c.email, got, c.want)
+		}
+	}
+}

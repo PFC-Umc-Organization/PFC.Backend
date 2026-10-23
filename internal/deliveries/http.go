@@ -69,7 +69,7 @@ func (h handlers) updateActivity(ctx context.Context, r *httpapi.Request) (httpa
 }
 
 func (h handlers) deleteActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("atividade removida", h.svc.DeleteActivity(ctx, r.Param("atividadeId")))
+	return httpapi.Message("Atividade removida", h.svc.DeleteActivity(ctx, r.Param("atividadeId")))
 }
 
 func (h handlers) addField(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -82,7 +82,7 @@ func (h handlers) addField(ctx context.Context, r *httpapi.Request) (httpapi.Res
 }
 
 func (h handlers) removeField(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("campo removido", h.svc.RemoveField(ctx, r.Param("atividadeId"), r.Param("campoId")))
+	return httpapi.Message("Campo removido", h.svc.RemoveField(ctx, r.Param("atividadeId"), r.Param("campoId")))
 }
 
 func (h handlers) submissionsOfActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -110,7 +110,7 @@ func (h handlers) submit(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 }
 
 func (h handlers) removeSubmission(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("entrega removida", h.svc.RemoveSubmission(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId")))
+	return httpapi.Message("Entrega removida", h.svc.RemoveSubmission(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId")))
 }
 
 func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

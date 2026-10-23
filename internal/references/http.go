@@ -43,5 +43,5 @@ func (h handlers) add(ctx context.Context, r *httpapi.Request) (httpapi.Response
 }
 
 func (h handlers) remove(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("referência removida", h.svc.Remove(ctx, r.Actor, r.Param("projetoId"), r.Param("referenciaId")))
+	return httpapi.Message("Referência removida", h.svc.Remove(ctx, r.Actor, r.Param("projetoId"), r.Param("referenciaId")))
 }

@@ -37,7 +37,7 @@ func programResource(id string) *audit.Resource { return &audit.Resource{Type: "
 func (s *Service) registeredCourse(ctx context.Context, name string) (Course, error) {
 	course, found, err := s.store.CourseByName(ctx, name)
 	if err != nil {
-		return Course{}, apperr.Internal("falha ao validar curso", err)
+		return Course{}, apperr.Internal("Falha ao validar curso", err)
 	}
 	if !found {
 		return Course{}, apperr.Invalid(msgInvalidCourse)
@@ -57,7 +57,7 @@ func (s *Service) CreateCourse(ctx context.Context, in CourseInput) (Course, err
 		return Course{}, apperr.Conflict(msgCourseDuplicate)
 	}
 	if err != nil {
-		return Course{}, apperr.Internal("falha ao criar curso", err)
+		return Course{}, apperr.Internal("Falha ao criar curso", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "curso.criado", Result: audit.Success, Resource: courseResource(c.ID), Details: map[string]any{"nome": c.Name}})
 	return c, nil
@@ -66,7 +66,7 @@ func (s *Service) CreateCourse(ctx context.Context, in CourseInput) (Course, err
 func (s *Service) ListCourses(ctx context.Context) ([]Course, error) {
 	courses, err := s.store.ListCourses(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar cursos", err)
+		return nil, apperr.Internal("Falha ao listar cursos", err)
 	}
 	slices.SortStableFunc(courses, func(a, b Course) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
@@ -83,7 +83,7 @@ func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) e
 	}
 	current, found, err := s.store.GetCourse(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao atualizar curso", err)
+		return apperr.Internal("Falha ao atualizar curso", err)
 	}
 	if !found {
 		return apperr.NotFound(msgCourseUnknown)
@@ -98,7 +98,7 @@ func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) e
 		case errors.Is(err, errStale):
 			return apperr.Conflict(msgCourseChanged)
 		case err != nil:
-			return apperr.Internal("falha ao atualizar curso", err)
+			return apperr.Internal("Falha ao atualizar curso", err)
 		}
 	}
 	audit.Record(ctx, audit.Event{Action: "curso.atualizado", Result: audit.Success, Resource: courseResource(id),
@@ -109,7 +109,7 @@ func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) e
 func (s *Service) DeleteCourse(ctx context.Context, id string) error {
 	c, found, err := s.store.GetCourse(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao remover curso", err)
+		return apperr.Internal("Falha ao remover curso", err)
 	}
 	if !found {
 		return apperr.NotFound(msgCourseUnknown)
@@ -123,7 +123,7 @@ func (s *Service) DeleteCourse(ctx context.Context, id string) error {
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgCourseChanged)
 	case err != nil:
-		return apperr.Internal("falha ao remover curso", err)
+		return apperr.Internal("Falha ao remover curso", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "curso.removido", Result: audit.Success, Resource: courseResource(id)})
 	return nil
@@ -148,7 +148,7 @@ func (s *Service) CreateCohort(ctx context.Context, in CohortInput) (Cohort, err
 		return Cohort{}, apperr.Conflict(msgCohortDuplicate)
 	}
 	if err != nil {
-		return Cohort{}, apperr.Internal("falha ao criar turma", err)
+		return Cohort{}, apperr.Internal("Falha ao criar turma", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "turma.criada", Result: audit.Success, Resource: cohortResource(c.ID), Details: c.details()})
 	return c, nil
@@ -159,11 +159,11 @@ func (s *Service) CreateCohort(ctx context.Context, in CohortInput) (Cohort, err
 func (s *Service) ListCohorts(ctx context.Context) ([]Cohort, error) {
 	cohorts, err := s.store.ListCohorts(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar turmas", err)
+		return nil, apperr.Internal("Falha ao listar turmas", err)
 	}
 	courses, err := s.store.ListCourses(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar turmas", err)
+		return nil, apperr.Internal("Falha ao listar turmas", err)
 	}
 	names := make(map[string]string, len(courses))
 	for _, c := range courses {
@@ -184,7 +184,7 @@ func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) e
 	}
 	current, found, err := s.store.GetCohort(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao atualizar turma", err)
+		return apperr.Internal("Falha ao atualizar turma", err)
 	}
 	if !found {
 		return apperr.NotFound(msgCohortNotFound)
@@ -205,7 +205,7 @@ func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) e
 		case errors.Is(err, errStale):
 			return apperr.Conflict(msgCohortChanged)
 		case err != nil:
-			return apperr.Internal("falha ao atualizar turma", err)
+			return apperr.Internal("Falha ao atualizar turma", err)
 		}
 	}
 	audit.Record(ctx, audit.Event{Action: "turma.atualizada", Result: audit.Success, Resource: cohortResource(id), Details: next.details()})
@@ -215,7 +215,7 @@ func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) e
 func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	c, found, err := s.store.GetCohort(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao remover turma", err)
+		return apperr.Internal("Falha ao remover turma", err)
 	}
 	if !found {
 		return apperr.NotFound(msgCohortNotFound)
@@ -229,7 +229,7 @@ func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgCohortChanged)
 	case err != nil:
-		return apperr.Internal("falha ao remover turma", err)
+		return apperr.Internal("Falha ao remover turma", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "turma.removida", Result: audit.Success, Resource: cohortResource(id)})
 	return nil
@@ -248,7 +248,7 @@ func (s *Service) CreateProgram(ctx context.Context, in ProgramInput) (Program, 
 			Details: map[string]any{"cursoId": in.CohortID}})
 		return Program{}, apperr.Conflict(msgProgramDuplicate)
 	case err != nil:
-		return Program{}, apperr.Internal("falha ao criar programa", err)
+		return Program{}, apperr.Internal("Falha ao criar programa", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "programa.criado", Result: audit.Success, Resource: programResource(p.ID),
 		Details: map[string]any{"cursoId": p.CohortID}})
@@ -258,7 +258,7 @@ func (s *Service) CreateProgram(ctx context.Context, in ProgramInput) (Program, 
 func (s *Service) ListPrograms(ctx context.Context) ([]Program, error) {
 	programs, err := s.store.ListPrograms(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar programas", err)
+		return nil, apperr.Internal("Falha ao listar programas", err)
 	}
 	return programs, nil
 }
@@ -269,7 +269,7 @@ func (s *Service) UpdateProgram(ctx context.Context, id string, in ProgramInput)
 	}
 	current, found, err := s.store.GetProgram(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao atualizar programa", err)
+		return apperr.Internal("Falha ao atualizar programa", err)
 	}
 	if !found {
 		return apperr.NotFound(msgProgramNotFound)
@@ -285,7 +285,7 @@ func (s *Service) UpdateProgram(ctx context.Context, id string, in ProgramInput)
 		case errors.Is(err, errStale):
 			return apperr.Conflict(msgProgramChanged)
 		case err != nil:
-			return apperr.Internal("falha ao atualizar programa", err)
+			return apperr.Internal("Falha ao atualizar programa", err)
 		}
 	}
 	audit.Record(ctx, audit.Event{Action: "programa.atualizado", Result: audit.Success, Resource: programResource(id),
@@ -299,14 +299,14 @@ func (s *Service) UpdateProgram(ctx context.Context, id string, in ProgramInput)
 func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 	p, found, err := s.store.GetProgram(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao remover programa", err)
+		return apperr.Internal("Falha ao remover programa", err)
 	}
 	if !found {
 		return apperr.NotFound(msgProgramNotFound)
 	}
 	hasProjects, err := s.projects.ProgramHasProjects(ctx, id)
 	if err != nil {
-		return apperr.Internal("falha ao remover programa", err)
+		return apperr.Internal("Falha ao remover programa", err)
 	}
 	if hasProjects {
 		audit.Record(ctx, audit.Event{Action: "programa.removido", Result: audit.Failure, Reason: "programa possui projetos vinculados", Resource: programResource(id)})
@@ -318,7 +318,7 @@ func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 	case errors.Is(err, errStale):
 		return apperr.Conflict(msgProgramChanged)
 	case err != nil:
-		return apperr.Internal("falha ao remover programa", err)
+		return apperr.Internal("Falha ao remover programa", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "programa.removido", Result: audit.Success, Resource: programResource(id)})
 	return nil
@@ -327,7 +327,7 @@ func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 func (s *Service) ListEnrollments(ctx context.Context) ([]Enrollment, error) {
 	enrollments, err := s.store.ListEnrollments(ctx)
 	if err != nil {
-		return nil, apperr.Internal("falha ao listar matrículas", err)
+		return nil, apperr.Internal("Falha ao listar matrículas", err)
 	}
 	return enrollments, nil
 }
@@ -339,7 +339,7 @@ func (s *Service) Enroll(ctx context.Context, in EnrollmentRequest) (EnrollmentR
 	}
 	exists, err := s.store.CohortExists(ctx, cohortID)
 	if err != nil {
-		return EnrollmentResult{}, apperr.Internal("falha ao validar turma", err)
+		return EnrollmentResult{}, apperr.Internal("Falha ao validar turma", err)
 	}
 	if !exists {
 		return EnrollmentResult{}, apperr.NotFound(msgCohortNotFound)

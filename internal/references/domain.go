@@ -151,15 +151,15 @@ const (
 )
 
 const (
-	msgSearchLength      = "informe de 3 a 200 caracteres para buscar"
-	msgInvalidPage       = "página inválida"
-	msgSearchUnavailable = "o serviço de busca de artigos está indisponível, tente novamente em instantes"
-	msgInvalidDOI        = "DOI inválido — use o formato 10.xxxx/xxxxx"
+	msgSearchLength      = "Informe de 3 a 200 caracteres para buscar"
+	msgInvalidPage       = "Página inválida"
+	msgSearchUnavailable = "O serviço de busca de artigos está indisponível. Tente novamente em instantes"
+	msgInvalidDOI        = "DOI inválido. Use o formato 10.xxxx/xxxxx"
 	msgDOINotFound       = "DOI não encontrado"
-	msgDOIUnavailable    = "o serviço de consulta de DOI está indisponível, tente novamente em instantes"
-	msgMembersAndStaff   = "acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
-	msgMembersOnly       = "apenas integrantes do projeto podem alterar as referências"
-	msgProjectNotFound   = "projeto não encontrado"
-	msgDuplicate         = "essa referência já está na lista do projeto"
-	msgReferenceNotFound = "referência não encontrada"
+	msgDOIUnavailable    = "O serviço de consulta de DOI está indisponível. Tente novamente em instantes"
+	msgMembersAndStaff   = "Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"
+	msgMembersOnly       = "Apenas integrantes do projeto podem alterar as referências"
+	msgProjectNotFound   = "Projeto não encontrado"
+	msgDuplicate         = "Essa referência já está na lista do projeto"
+	msgReferenceNotFound = "Referência não encontrada"
 )

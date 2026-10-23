@@ -60,7 +60,7 @@ func (rt *Router) serve(ctx context.Context, ev events.APIGatewayProxyRequest) R
 		})
 		return run(ctx, rte.handler, req)
 	}
-	return Error(404, "rota não encontrada")
+	return Error(404, "Rota não encontrada")
 }
 
 func run(ctx context.Context, h Handler, req *Request) (resp Response) {
@@ -78,7 +78,7 @@ func run(ctx context.Context, h Handler, req *Request) (resp Response) {
 	return resp
 }
 
-const msgInternal = "erro interno — tente novamente em instantes"
+const msgInternal = "Erro interno. Tente novamente em instantes"
 
 var statusOf = map[apperr.Kind]int{
 	apperr.KindInvalid:         400,

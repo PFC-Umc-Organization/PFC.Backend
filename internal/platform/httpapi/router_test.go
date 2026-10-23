@@ -45,7 +45,7 @@ func TestRouting(t *testing.T) {
 	if status != 200 || got.Param("projetoId") != "abc" || got.Query("q") != "x" {
 		t.Fatalf("status %d, request %+v", status, got)
 	}
-	if got.Actor != (actor.Actor{Sub: "s1", Email: "123@alunos.umc.br", Role: actor.RoleStudent}) {
+	if got.Actor != (actor.Actor{Sub: "s1", Name: "123@alunos.umc.br", Email: "123@alunos.umc.br", Role: actor.RoleStudent}) {
 		t.Fatalf("actor %+v", got.Actor)
 	}
 	if headers["Content-Type"] != "application/json" || headers["Access-Control-Allow-Origin"] != "*" {
@@ -54,7 +54,7 @@ func TestRouting(t *testing.T) {
 
 	// Without CORS headers the browser hides the 404 behind a CORS error.
 	status, msg, headers := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/nao-existe"})
-	if status != 404 || msg != "rota não encontrada" || headers["Access-Control-Allow-Origin"] != "*" {
+	if status != 404 || msg != "Rota não encontrada" || headers["Access-Control-Allow-Origin"] != "*" {
 		t.Fatalf("404: status %d, msg %q, headers %v", status, msg, headers)
 	}
 
