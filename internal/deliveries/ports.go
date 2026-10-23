@@ -35,6 +35,11 @@ type Store interface {
 	DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error)
 	SubmissionsOfProject(ctx context.Context, projectID string) ([]Submission, error)
 	SubmissionsOfActivity(ctx context.Context, activityID string) ([]Submission, error)
+
+	PenaltiesOfProject(ctx context.Context, projectID string) ([]penaltyRecord, error)
+	AddPenalty(ctx context.Context, projectID string, r penaltyRecord) error
+	// WaivePenalty returns errStale when the penalty was already waived.
+	WaivePenalty(ctx context.Context, projectID, penaltyID string, w Waiver) error
 }
 
 // Files is nil while no bucket is configured; file fields then keep only

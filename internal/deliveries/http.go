@@ -29,6 +29,11 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", staff("entrega.removida", "atividadeId", h.removeSubmission))
 	r.Handle("POST", "/projetos/:projetoId/entregas/:atividadeId/arquivos", h.requestUpload)
 	r.Handle("GET", "/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId", h.downloadFile)
+
+	r.Handle("GET", "/programas/:programaId/penalidades", staff("", "", h.penaltiesOfProgram))
+	r.Handle("GET", "/projetos/:projetoId/penalidades", h.penaltiesOfProject)
+	r.Handle("POST", "/projetos/:projetoId/penalidades", staff("penalidade.aplicada", "", h.applyPenalty))
+	r.Handle("POST", "/projetos/:projetoId/penalidades/:penalidadeId/perdao", staff("penalidade.perdoada", "", h.waivePenalty))
 }
 
 // staff admits admins and advisors. A denial is audited under auditAction,
@@ -125,4 +130,32 @@ func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpap
 func (h handlers) downloadFile(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	d, err := h.svc.DownloadFile(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId"), r.Param("campoId"))
 	return httpapi.Reply(200, d, err)
+}
+
+func (h handlers) penaltiesOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	penalties, err := h.svc.PenaltiesOfProgram(ctx, r.Actor, r.Param("programaId"))
+	return httpapi.Reply(200, penalties, err)
+}
+
+func (h handlers) penaltiesOfProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	penalties, err := h.svc.PenaltiesOfProject(ctx, r.Actor, r.Param("projetoId"))
+	return httpapi.Reply(200, penalties, err)
+}
+
+func (h handlers) applyPenalty(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in PenaltyInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	penalties, err := h.svc.ApplyPenalty(ctx, r.Actor, r.Param("projetoId"), in)
+	return httpapi.Reply(201, penalties, err)
+}
+
+func (h handlers) waivePenalty(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in WaiverInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	penalties, err := h.svc.WaivePenalty(ctx, r.Actor, r.Param("projetoId"), r.Param("penalidadeId"), in)
+	return httpapi.Reply(200, penalties, err)
 }

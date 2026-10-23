@@ -61,11 +61,13 @@ type AdvisorInput struct {
 }
 
 // Invitation is pending until the student accepts or declines it; only
-// then the RGM joins Members.
+// then the RGM joins Members. Name is the guest's, filled in when the group
+// lists its invitations and the RGM has an account.
 type Invitation struct {
 	ProjectID   string `json:"projetoId"`
 	ProjectName string `json:"projetoNome"`
 	RGM         string `json:"rgm"`
+	Name        string `json:"nome,omitempty"`
 	InvitedBy   string `json:"convidadoPor"`
 	CreatedAt   string `json:"criadoEm"`
 }

@@ -18,6 +18,7 @@ import (
 //
 //	activity    PK=ACTIVITY#<id>  SK=PROFILE        GSI1PK=ACTIVITIES      GSI1SK=ACTIVITY#<id>  campos (list)
 //	submission  PK=PROJECT#<pid>  SK=ENTREGA#<aid>  GSI1PK=ENTREGAS#<aid>  GSI1SK=PROJECT#<pid>
+//	penalty     PK=PROJECT#<pid>  SK=PENALIDADE#<id>  (manual penalty or waiver)
 //
 // A submission lives in the project's partition (a group's submissions are
 // one Query) and the GSI lists an activity's submissions.
@@ -26,6 +27,7 @@ const (
 	projectPrefix       = "PROJECT#"
 	submissionPrefix    = "ENTREGA#"
 	submissionsPrefix   = "ENTREGAS#"
+	penaltyPrefix       = "PENALIDADE#"
 	activitiesPartition = "ACTIVITIES"
 	profileSK           = "PROFILE"
 )
@@ -310,4 +312,74 @@ func submissions(items []submissionItem, err error) ([]Submission, error) {
 		out = append(out, it.submission())
 	}
 	return out, nil
+}
+
+type penaltyItem struct {
+	PK         string `dynamodbav:"PK"`
+	SK         string `dynamodbav:"SK"`
+	ActivityID string `dynamodbav:"atividadeId,omitempty"`
+	Reason     string `dynamodbav:"motivo,omitempty"`
+	AppliedAt  string `dynamodbav:"aplicadaEm,omitempty"`
+	AppliedBy  string `dynamodbav:"aplicadaPor,omitempty"`
+	WaivedFor  string `dynamodbav:"perdaoMotivo,omitempty"`
+	WaivedBy   string `dynamodbav:"perdoadaPor,omitempty"`
+	WaivedAt   string `dynamodbav:"perdoadaEm,omitempty"`
+}
+
+func (it penaltyItem) record() penaltyRecord {
+	r := penaltyRecord{
+		ID:         strings.TrimPrefix(it.SK, penaltyPrefix),
+		ActivityID: it.ActivityID,
+		Reason:     it.Reason,
+		AppliedAt:  it.AppliedAt,
+		AppliedBy:  it.AppliedBy,
+	}
+	if it.WaivedAt != "" {
+		r.Waiver = &Waiver{Reason: it.WaivedFor, By: it.WaivedBy, At: it.WaivedAt}
+	}
+	return r
+}
+
+func (s *DynamoStore) PenaltiesOfProject(ctx context.Context, projectID string) ([]penaltyRecord, error) {
+	items, err := dynamo.QueryPartition[penaltyItem](ctx, s.table, projectPrefix+projectID, penaltyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]penaltyRecord, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.record())
+	}
+	return out, nil
+}
+
+func (s *DynamoStore) AddPenalty(ctx context.Context, projectID string, r penaltyRecord) error {
+	item, err := attributevalue.MarshalMap(penaltyItem{
+		PK: projectPrefix + projectID, SK: penaltyPrefix + r.ID,
+		ActivityID: r.ActivityID, Reason: r.Reason, AppliedAt: r.AppliedAt, AppliedBy: r.AppliedBy,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(s.table.Name), Item: item, ConditionExpression: aws.String("attribute_not_exists(PK)"),
+	})
+	return err
+}
+
+// WaivePenalty creates the item for a deadline penalty, which is not stored
+// until waived.
+func (s *DynamoStore) WaivePenalty(ctx context.Context, projectID, penaltyID string, w Waiver) error {
+	_, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           aws.String(s.table.Name),
+		Key:                 dynamo.Key(projectPrefix+projectID, penaltyPrefix+penaltyID),
+		UpdateExpression:    aws.String("SET perdaoMotivo = :motivo, perdoadaPor = :por, perdoadaEm = :em"),
+		ConditionExpression: aws.String("attribute_not_exists(perdoadaEm)"),
+		ExpressionAttributeValues: dynamo.Item{
+			":motivo": dynamo.S(w.Reason), ":por": dynamo.S(w.By), ":em": dynamo.S(w.At),
+		},
+	})
+	if dynamo.ConditionFailed(err) {
+		return errStale
+	}
+	return err
 }

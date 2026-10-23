@@ -22,6 +22,30 @@ type fakeStore struct {
 	activities map[string]Activity
 	saved      []Submission
 	removed    []int
+	penalties  map[string][]penaltyRecord
+}
+
+func (f *fakeStore) PenaltiesOfProject(_ context.Context, projectID string) ([]penaltyRecord, error) {
+	return f.penalties[projectID], nil
+}
+func (f *fakeStore) AddPenalty(_ context.Context, projectID string, r penaltyRecord) error {
+	if f.penalties == nil {
+		f.penalties = map[string][]penaltyRecord{}
+	}
+	f.penalties[projectID] = append(f.penalties[projectID], r)
+	return nil
+}
+func (f *fakeStore) WaivePenalty(_ context.Context, projectID, penaltyID string, w Waiver) error {
+	for i, r := range f.penalties[projectID] {
+		if r.ID == penaltyID {
+			if r.Waiver != nil {
+				return errStale
+			}
+			f.penalties[projectID][i].Waiver = &w
+			return nil
+		}
+	}
+	return f.AddPenalty(context.Background(), projectID, penaltyRecord{ID: penaltyID, Waiver: &w})
 }
 
 func (f *fakeStore) GetActivity(_ context.Context, id string) (Activity, bool, error) {

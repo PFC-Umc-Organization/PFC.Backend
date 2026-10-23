@@ -387,7 +387,7 @@ func TestInvitationsOfProjectVisibility(t *testing.T) {
 			}
 			continue
 		}
-		if err != nil || len(invitations) != 1 || invitations[0].RGM != "222" {
+		if err != nil || len(invitations) != 1 || invitations[0].RGM != "222" || invitations[0].Name != "Aluno 222" {
 			t.Errorf("%s: invitations = %+v, err = %v", viewer.Email, invitations, err)
 		}
 	}

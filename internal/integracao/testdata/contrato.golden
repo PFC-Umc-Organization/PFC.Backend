@@ -584,13 +584,13 @@ GET /meus-convites [ALUNO]
 < 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","projetoId":"<id12>","projetoNome":"Athena","rgm":"222"}]
 
 GET /projetos/<id12>/convites [ALUNO]
-< 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","projetoId":"<id12>","projetoNome":"Athena","rgm":"222"}]
+< 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","nome":"Aluno Dois","projetoId":"<id12>","projetoNome":"Athena","rgm":"222"}]
 
 GET /projetos/<id12>/convites [ALUNO]
 < 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"}
 
 GET /projetos/<id12>/convites [ORIENTADOR]
-< 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","projetoId":"<id12>","projetoNome":"Athena","rgm":"222"}]
+< 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","nome":"Aluno Dois","projetoId":"<id12>","projetoNome":"Athena","rgm":"222"}]
 
 POST /projetos/<id12>/convites [ALUNO]
 > {"rgm":"444"}
@@ -811,6 +811,87 @@ GET /projetos/<id12>/entregas/<id18>/arquivos/<id19> [ALUNO]
 GET /projetos/<id12>/entregas/<id18>/arquivos/<id19> [ALUNO]
 < 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"}
 
+POST /atividades [ADMIN]
+> {"titulo":"Ficha","prazo":"2020-08-21T23:59"}
+< 201 {"campos":[{"id":"<id23>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id22>","prazo":"2020-08-21T23:59","publicadaEm":"<ts>","titulo":"Ficha"}
+
+POST /atividades [ADMIN]
+> {"titulo":"Arquitetura","prazo":"2020-08-28T23:59"}
+< 201 {"campos":[{"id":"<id25>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id24>","prazo":"2020-08-28T23:59","publicadaEm":"<ts>","titulo":"Arquitetura"}
+
+GET /projetos/<id12>/penalidades [ALUNO]
+< 200 {"ativas":2,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null}],"projetoId":"<id12>","reprovado":false}
+
+GET /projetos/<id12>/penalidades [ALUNO]
+< 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação"}
+
+POST /projetos/<id12>/penalidades [ALUNO]
+> {"motivo":"x"}
+< 403 {"erro":"Acesso restrito à equipe acadêmica"}
+
+POST /projetos/<id13>/penalidades [ORIENTADOR]
+> {"motivo":"x"}
+< 403 {"erro":"Apenas a coordenação e o orientador do projeto podem administrar penalidades"}
+
+POST /projetos/<id12>/penalidades [ADMIN]
+> {"motivo":" "}
+< 400 {"erro":"Informe o motivo"}
+
+POST /projetos/<id12>/penalidades [ADMIN]
+> {"motivo":"x","atividadeId":"inexistente"}
+< 404 {"erro":"Atividade não encontrada"}
+
+POST /projetos/<id12>/penalidades [ORIENTADOR]
+> {"motivo":"Entrega não validada","atividadeId":"<id18>"}
+< 201 {"ativas":3,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","aplicadaPor":"prof@umc.br","atividadeId":"<id18>","atividadeTitulo":"Revisão","id":"manual-<id26>","motivo":"Entrega não validada","origem":"MANUAL","perdao":null}],"projetoId":"<id12>","reprovado":true}
+
+PUT /projetos/<id12>/entregas/<id18> [ALUNO]
+> {"respostas":{"<id19>":"https://github.com/x/z"}}
+< 409 {"erro":"O grupo foi reprovado por penalidades e não pode mais entregar"}
+
+POST /projetos/<id12>/entregas/<id18>/arquivos [ALUNO]
+> {"campoId":"<id19>","nome":"a.pdf","tamanho":1}
+< 409 {"erro":"O grupo foi reprovado por penalidades e não pode mais entregar"}
+
+POST /projetos/<id12>/penalidades/prazo-<id22>/perdao [ALUNO]
+> {"motivo":"x"}
+< 403 {"erro":"Acesso restrito à equipe acadêmica"}
+
+POST /projetos/<id12>/penalidades/prazo-<id18>/perdao [ORIENTADOR]
+> {"motivo":"x"}
+< 404 {"erro":"Penalidade não encontrada"}
+
+POST /projetos/<id12>/penalidades/prazo-<id22>/perdao [ORIENTADOR]
+> {"motivo":""}
+< 400 {"erro":"Informe o motivo"}
+
+POST /projetos/<id12>/penalidades/prazo-<id22>/perdao [ORIENTADOR]
+> {"motivo":"Atestado médico"}
+< 200 {"ativas":2,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":{"em":"<ts>","motivo":"Atestado médico","por":"prof@umc.br"}},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","aplicadaPor":"prof@umc.br","atividadeId":"<id18>","atividadeTitulo":"Revisão","id":"manual-<id26>","motivo":"Entrega não validada","origem":"MANUAL","perdao":null}],"projetoId":"<id12>","reprovado":false}
+
+POST /projetos/<id12>/penalidades/prazo-<id22>/perdao [ADMIN]
+> {"motivo":"De novo"}
+< 409 {"erro":"Esta penalidade já foi perdoada"}
+
+PUT /projetos/<id12>/entregas/<id18> [ALUNO]
+> {"respostas":{"<id19>":"https://github.com/x/y"}}
+< 200 {"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"111@alunos.umc.br","entregueEm":"<ts>","entreguePor":"111@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y"}}
+
+GET /programas/<id9>/penalidades [ALUNO]
+< 403 {"erro":"Acesso restrito à equipe acadêmica"}
+
+GET /programas/<id9>/penalidades [ORIENTADOR]
+< 200 [{"ativas":2,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":{"em":"<ts>","motivo":"Atestado médico","por":"prof@umc.br"}},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","aplicadaPor":"prof@umc.br","atividadeId":"<id18>","atividadeTitulo":"Revisão","id":"manual-<id26>","motivo":"Entrega não validada","origem":"MANUAL","perdao":null}],"projetoId":"<id12>","reprovado":false}]
+
+GET /programas/<id9>/penalidades [ADMIN]
+< 200 [{"ativas":2,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null}],"projetoId":"<id13>","reprovado":false},{"ativas":2,"limite":3,"penalidades":[{"aplicadaEm":"<ts>","atividadeId":"<id22>","atividadeTitulo":"Ficha","id":"prazo-<id22>","origem":"PRAZO","perdao":{"em":"<ts>","motivo":"Atestado médico","por":"prof@umc.br"}},{"aplicadaEm":"<ts>","atividadeId":"<id24>","atividadeTitulo":"Arquitetura","id":"prazo-<id24>","origem":"PRAZO","perdao":null},{"aplicadaEm":"<ts>","aplicadaPor":"prof@umc.br","atividadeId":"<id18>","atividadeTitulo":"Revisão","id":"manual-<id26>","motivo":"Entrega não validada","origem":"MANUAL","perdao":null}],"projetoId":"<id12>","reprovado":false}]
+
+DELETE /atividades/<id22> [ADMIN]
+< 200 {"mensagem":"Atividade removida"}
+
+DELETE /atividades/<id24> [ADMIN]
+< 200 {"mensagem":"Atividade removida"}
+
 POST /materiais [ALUNO]
 > {"titulo":"X","tipo":"LINK","url":"https://x"}
 < 403 {"erro":"Acesso restrito à equipe acadêmica"}
@@ -829,25 +910,25 @@ POST /materiais [ADMIN]
 
 POST /materiais [ADMIN]
 > {"titulo":"Manual do PFC","descricao":"Regras","tipo":"DOCUMENTO","url":"https://umc.br/manual.pdf"}
-< 201 {"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id22>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"}
+< 201 {"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id27>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"}
 
 POST /materiais [ORIENTADOR]
 > {"titulo":"Aula gravada","tipo":"VIDEO","url":"https://youtu.be/x","cursoId":"<id4>"}
-< 201 {"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id23>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}
+< 201 {"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id28>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}
 
 GET /materiais [ALUNO]
-< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id22>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"},{"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id23>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}]
+< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id27>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"},{"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id28>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}]
 
 GET /materiais [ALUNO]
-< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id22>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"}]
+< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id27>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"}]
 
 GET /materiais [ORIENTADOR]
-< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id22>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"},{"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id23>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}]
+< 200 [{"autorId":"00000000-0000-4000-8000-000000000001","cursoId":null,"descricao":"Regras","id":"<id27>","publicadoEm":"<ts>","publicadoPor":"coord@umc.br","tipo":"DOCUMENTO","titulo":"Manual do PFC","url":"https://umc.br/manual.pdf"},{"autorId":"00000000-0000-4000-8000-000000000002","cursoId":"<id4>","descricao":"","id":"<id28>","publicadoEm":"<ts>","publicadoPor":"prof@umc.br","tipo":"VIDEO","titulo":"Aula gravada","url":"https://youtu.be/x"}]
 
-GET /materiais/<id22>/arquivo [ALUNO]
+GET /materiais/<id27>/arquivo [ALUNO]
 < 404 {"erro":"Este material não tem arquivo"}
 
-GET /materiais/<id23>/arquivo [ALUNO]
+GET /materiais/<id28>/arquivo [ALUNO]
 < 404 {"erro":"Material não encontrado"}
 
 POST /materiais/arquivos [ALUNO]
@@ -858,16 +939,16 @@ POST /materiais/arquivos [ORIENTADOR]
 > {"nome":"a.exe","tamanho":1}
 < 400 {"erro":"Tipo de arquivo não aceito. Envie PDF, documento do Office/LibreOffice, imagem, ZIP ou texto"}
 
-DELETE /materiais/<id22> [ORIENTADOR]
+DELETE /materiais/<id27> [ORIENTADOR]
 < 403 {"erro":"O orientador só remove os materiais que publicou"}
 
-DELETE /materiais/<id23> [ALUNO]
+DELETE /materiais/<id28> [ALUNO]
 < 403 {"erro":"Acesso restrito à equipe acadêmica"}
 
-DELETE /materiais/<id23> [ORIENTADOR]
+DELETE /materiais/<id28> [ORIENTADOR]
 < 200 {"mensagem":"Material removido"}
 
-DELETE /materiais/<id23> [ADMIN]
+DELETE /materiais/<id28> [ADMIN]
 < 404 {"erro":"Material não encontrado"}
 
 GET /referencias/busca?q=ab [ALUNO]
@@ -944,7 +1025,7 @@ GET /atividades/<id18>/entregas [ADMIN]
 
 POST /meu-pfc [ALUNO]
 > {"nome":"Recomeço"}
-< 201 {"descricao":"","id":"<id24>","integrantes":["111"],"nome":"Recomeço","programaId":"<id9>"}
+< 201 {"descricao":"","id":"<id29>","integrantes":["111"],"nome":"Recomeço","programaId":"<id9>"}
 
 DELETE /atividades/<id18> [ALUNO]
 < 403 {"erro":"Acesso restrito à equipe acadêmica"}

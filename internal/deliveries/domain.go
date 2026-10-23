@@ -221,4 +221,10 @@ const (
 	msgSubmissionNotFound = "Entrega não encontrada"
 	msgProjectNotFound    = "Projeto não encontrado"
 	msgDeadlinePassed     = "O prazo desta atividade acabou e ela não recebe mais entregas"
+	msgGroupFailed        = "O grupo foi reprovado por penalidades e não pode mais entregar"
+	msgPenaltyReviewers   = "Apenas a coordenação e o orientador do projeto podem administrar penalidades"
+	msgPenaltyNotFound    = "Penalidade não encontrada"
+	msgAlreadyWaived      = "Esta penalidade já foi perdoada"
+	msgReasonRequired     = "Informe o motivo"
+	msgReasonTooLong      = "Motivo longo demais"
 )

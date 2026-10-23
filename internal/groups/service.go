@@ -537,6 +537,20 @@ func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, 
 	if err != nil {
 		return nil, apperr.Internal("Falha ao listar convites", err)
 	}
+	if len(invitations) == 0 {
+		return invitations, nil
+	}
+	rgms := make([]string, len(invitations))
+	for i, inv := range invitations {
+		rgms[i] = inv.RGM
+	}
+	names, err := s.accounts.StudentNames(ctx, rgms)
+	if err != nil {
+		slog.WarnContext(ctx, "guest names not loaded", "project", p.ID, "error", err)
+	}
+	for i := range invitations {
+		invitations[i].Name = names[invitations[i].RGM]
+	}
 	return invitations, nil
 }
 
