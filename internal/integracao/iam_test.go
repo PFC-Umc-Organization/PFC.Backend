@@ -18,7 +18,7 @@ import (
 // BatchGetItem came in.
 var lambdaPolicy = map[string]bool{
 	"dynamodb:GetItem": true, "dynamodb:PutItem": true, "dynamodb:UpdateItem": true,
-	"dynamodb:DeleteItem": true, "dynamodb:Query": true, "dynamodb:Scan": true,
+	"dynamodb:DeleteItem": true, "dynamodb:Query": true,
 	"dynamodb:BatchWriteItem": true, "dynamodb:BatchGetItem": true, "dynamodb:ConditionCheckItem": true,
 	"cognito-idp:ListUsers": true, "cognito-idp:AdminCreateUser": true,
 	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true, "s3:ListBucket": true,
