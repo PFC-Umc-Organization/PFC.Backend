@@ -43,7 +43,7 @@ func (s *Service) timestamp() string { return s.now().UTC().Format(time.RFC3339)
 func (s *Service) ListActivities(ctx context.Context) ([]Activity, error) {
 	activities, err := s.store.ListActivities(ctx)
 	if err != nil {
-		return nil, apperr.Internal("Falha ao listar atividades", err)
+		return nil, apperr.Internal("Não foi possível carregar as atividades. Tente novamente em instantes.", err)
 	}
 	slices.SortStableFunc(activities, func(a, b Activity) int { return strings.Compare(a.Deadline, b.Deadline) })
 	return activities, nil
@@ -70,7 +70,7 @@ func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activit
 		a.Fields = append(a.Fields, Field{ID: s.newID(), Label: f.Label, Type: f.Type, Required: f.Required})
 	}
 	if err := s.store.CreateActivity(ctx, a); err != nil {
-		return Activity{}, apperr.Internal("Falha ao criar atividade", err)
+		return Activity{}, apperr.Internal("Não foi possível criar a atividade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.criada", Result: audit.Success, Resource: activityResource(a.ID),
 		Details: map[string]any{"titulo": a.Title, "prazo": a.Deadline}})
@@ -87,7 +87,7 @@ func (s *Service) UpdateActivity(ctx context.Context, id string, in ActivityInpu
 		return Activity{}, apperr.NotFound(msgActivityNotFound)
 	}
 	if err != nil {
-		return Activity{}, apperr.Internal("Falha ao atualizar atividade", err)
+		return Activity{}, apperr.Internal("Não foi possível atualizar a atividade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.atualizada", Result: audit.Success, Resource: activityResource(id),
 		Details: map[string]any{"titulo": in.Title, "prazo": in.Deadline}})
@@ -100,7 +100,7 @@ func (s *Service) DeleteActivity(ctx context.Context, id string) error {
 		return apperr.NotFound(msgActivityNotFound)
 	}
 	if err != nil {
-		return apperr.Internal("Falha ao remover atividade", err)
+		return apperr.Internal("Não foi possível excluir a atividade. Tente novamente em instantes.", err)
 	}
 	for _, p := range projects {
 		s.deleteFolder(ctx, filesPrefix+p+"/"+id+"/")
@@ -121,7 +121,7 @@ func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput
 	case errors.Is(err, errFull):
 		return Field{}, apperr.Conflict(msgFieldLimit)
 	case err != nil:
-		return Field{}, apperr.Internal("Falha ao adicionar campo", err)
+		return Field{}, apperr.Internal("Não foi possível adicionar o campo. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.campo_adicionado", Result: audit.Success, Resource: activityResource(activityID),
 		Details: map[string]any{"campoId": f.ID, "rotulo": f.Label, "tipo": string(f.Type)}})
@@ -132,7 +132,7 @@ func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput
 func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) error {
 	a, found, err := s.store.GetActivity(ctx, activityID)
 	if err != nil {
-		return apperr.Internal("Falha ao remover campo", err)
+		return apperr.Internal("Não foi possível remover o campo. Tente novamente em instantes.", err)
 	}
 	if !found {
 		return apperr.NotFound(msgActivityNotFound)
@@ -148,7 +148,7 @@ func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) e
 	case errors.Is(err, errStale):
 		return apperr.NotFound(msgFieldNotFound)
 	case err != nil:
-		return apperr.Internal("Falha ao remover campo", err)
+		return apperr.Internal("Não foi possível remover o campo. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.campo_removido", Result: audit.Success, Resource: activityResource(activityID),
 		Details: map[string]any{"campoId": fieldID}})
@@ -158,7 +158,7 @@ func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) e
 func (s *Service) SubmissionsOfActivity(ctx context.Context, activityID string) ([]Submission, error) {
 	submissions, err := s.store.SubmissionsOfActivity(ctx, activityID)
 	if err != nil {
-		return nil, apperr.Internal("Falha ao listar entregas", err)
+		return nil, apperr.Internal("Não foi possível carregar as entregas. Tente novamente em instantes.", err)
 	}
 	return submissions, nil
 }
@@ -166,7 +166,7 @@ func (s *Service) SubmissionsOfActivity(ctx context.Context, activityID string) 
 func (s *Service) project(ctx context.Context, id string) (groups.Project, error) {
 	p, found, err := s.projects.Project(ctx, id)
 	if err != nil {
-		return groups.Project{}, apperr.Internal("Falha ao carregar projeto", err)
+		return groups.Project{}, apperr.Internal("Não foi possível carregar o projeto. Tente novamente em instantes.", err)
 	}
 	if !found {
 		return groups.Project{}, apperr.NotFound(msgProjectNotFound)
@@ -184,7 +184,7 @@ func (s *Service) SubmissionsOfProject(ctx context.Context, viewer actor.Actor, 
 	}
 	submissions, err := s.store.SubmissionsOfProject(ctx, p.ID)
 	if err != nil {
-		return nil, apperr.Internal("Falha ao listar entregas", err)
+		return nil, apperr.Internal("Não foi possível carregar as entregas. Tente novamente em instantes.", err)
 	}
 	return submissions, nil
 }
@@ -200,7 +200,7 @@ func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, 
 		return s.store.SubmissionsOfProject(ctx, p.ID)
 	})
 	if err != nil {
-		return nil, apperr.Internal("Falha ao listar entregas", err)
+		return nil, apperr.Internal("Não foi possível carregar as entregas. Tente novamente em instantes.", err)
 	}
 	return append([]Submission{}, slices.Concat(perProject...)...), nil
 }
@@ -223,7 +223,7 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	}
 	a, found, err := s.store.GetActivity(ctx, activityID)
 	if err != nil {
-		return Submission{}, apperr.Internal("Falha ao carregar atividade", err)
+		return Submission{}, apperr.Internal("Não foi possível carregar a atividade. Tente novamente em instantes.", err)
 	}
 	if !found {
 		return Submission{}, apperr.NotFound(msgActivityNotFound)
@@ -234,7 +234,7 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	}
 	previous, found, err := s.store.GetSubmission(ctx, p.ID, a.ID)
 	if err != nil {
-		return Submission{}, apperr.Internal("Falha ao carregar a entrega anterior", err)
+		return Submission{}, apperr.Internal("Não foi possível carregar a entrega anterior. Tente novamente em instantes.", err)
 	}
 	closed := a.closed(s.now())
 	if closed && !found {
@@ -252,7 +252,7 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	case errors.Is(err, errNotFound):
 		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
 	case err != nil:
-		return Submission{}, apperr.Internal("Falha ao salvar entrega", err)
+		return Submission{}, apperr.Internal("Não foi possível salvar a entrega. Tente novamente em instantes.", err)
 	}
 	s.deleteFiles(ctx, replaced(previous.Answers, answers))
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Success, Resource: activityResource(a.ID),
@@ -284,7 +284,7 @@ func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, pr
 		return apperr.NotFound(msgSubmissionNotFound)
 	}
 	if err != nil {
-		return apperr.Internal("Falha ao remover entrega", err)
+		return apperr.Internal("Não foi possível remover a entrega. Tente novamente em instantes.", err)
 	}
 	s.deleteFiles(ctx, replaced(removed.Answers, nil))
 	audit.Record(ctx, audit.Event{Action: "entrega.removida", Result: audit.Success, Resource: activityResource(activityID),
@@ -310,7 +310,7 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	}
 	a, found, err := s.store.GetActivity(ctx, activityID)
 	if err != nil {
-		return UploadTicket{}, apperr.Internal("Falha ao carregar atividade", err)
+		return UploadTicket{}, apperr.Internal("Não foi possível carregar a atividade. Tente novamente em instantes.", err)
 	}
 	if !found {
 		return UploadTicket{}, apperr.NotFound(msgActivityNotFound)
@@ -318,7 +318,7 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	if a.closed(s.now()) {
 		_, submitted, err := s.store.GetSubmission(ctx, p.ID, a.ID)
 		if err != nil {
-			return UploadTicket{}, apperr.Internal("Falha ao carregar a entrega", err)
+			return UploadTicket{}, apperr.Internal("Não foi possível carregar a entrega. Tente novamente em instantes.", err)
 		}
 		if !submitted {
 			return UploadTicket{}, apperr.Conflict(msgDeadlinePassed)
@@ -343,7 +343,7 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	key := fieldPrefix(p.ID, a.ID, in.FieldID) + s.newID() + "/" + name
 	up, err := s.files.PresignUpload(ctx, key, kind, storage.MaxBytes, uploadTTL)
 	if err != nil {
-		return UploadTicket{}, apperr.Internal("Falha ao preparar o envio do arquivo", err)
+		return UploadTicket{}, apperr.Internal("Não foi possível preparar o envio do arquivo. Tente novamente em instantes.", err)
 	}
 	return UploadTicket{URL: up.URL, Fields: up.Fields, Key: key, ExpiresAt: up.ExpiresAt.UTC().Format(time.RFC3339), MaxBytes: storage.MaxBytes}, nil
 }
@@ -361,14 +361,14 @@ func (s *Service) checkFiles(ctx context.Context, projectID string, a Activity, 
 			continue
 		}
 		if !strings.HasPrefix(v, fieldPrefix(projectID, a.ID, f.ID)) {
-			return apperr.Invalid(fmt.Sprintf("Envie o arquivo do campo %q pelo botão de envio", f.Label))
+			return apperr.Invalid(fmt.Sprintf("Use o botão Escolher arquivo para enviar o arquivo do campo %q.", f.Label))
 		}
 		size, found, err := s.files.Size(ctx, v)
 		if err != nil {
-			return apperr.Internal("Falha ao conferir o arquivo enviado", err)
+			return apperr.Internal("Não foi possível conferir o arquivo enviado. Tente novamente em instantes.", err)
 		}
 		if !found || size > storage.MaxBytes {
-			return apperr.Invalid(fmt.Sprintf("O arquivo do campo %q não chegou. Envie de novo", f.Label))
+			return apperr.Invalid(fmt.Sprintf("O arquivo do campo %q não foi recebido. Envie-o novamente.", f.Label))
 		}
 	}
 	return nil
@@ -425,7 +425,7 @@ func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectI
 	}
 	sub, found, err := s.store.GetSubmission(ctx, p.ID, activityID)
 	if err != nil {
-		return Download{}, apperr.Internal("Falha ao carregar a entrega", err)
+		return Download{}, apperr.Internal("Não foi possível carregar a entrega. Tente novamente em instantes.", err)
 	}
 	key := sub.Answers[fieldID]
 	if !found || !isStoredFile(key) {
@@ -434,7 +434,7 @@ func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectI
 	name := fileNameOf(key)
 	url, err := s.files.PresignDownload(ctx, key, name, downloadTTL)
 	if err != nil {
-		return Download{}, apperr.Internal("Falha ao preparar o download", err)
+		return Download{}, apperr.Internal("Não foi possível preparar o download. Tente novamente em instantes.", err)
 	}
 	return Download{URL: url, Name: name}, nil
 }
@@ -479,7 +479,7 @@ func (s *Service) projectPenalties(ctx context.Context, projectID string) (penal
 func (s *Service) failed(ctx context.Context, projectID, activityID string) error {
 	penalties, err := s.groupPenalties(ctx, projectID)
 	if err != nil {
-		return apperr.Internal("Falha ao carregar as penalidades", err)
+		return apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
 	if !penalties.Failed {
 		return nil
@@ -499,7 +499,7 @@ func (s *Service) PenaltiesOfProject(ctx context.Context, viewer actor.Actor, pr
 	}
 	penalties, err := s.groupPenalties(ctx, p.ID)
 	if err != nil {
-		return Penalties{}, apperr.Internal("Falha ao carregar as penalidades", err)
+		return Penalties{}, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
 	return penalties, nil
 }
@@ -513,14 +513,14 @@ func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, pr
 	}
 	activities, err := s.store.ListActivities(ctx)
 	if err != nil {
-		return nil, apperr.Internal("Falha ao carregar as penalidades", err)
+		return nil, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
 	out, err := parallel.Map(projects, func(p groups.Project) (Penalties, error) {
 		src, err := s.projectPenalties(ctx, p.ID)
 		return penaltiesOf(p.ID, activities, src.submissions, src.records, s.now()), err
 	})
 	if err != nil {
-		return nil, apperr.Internal("Falha ao carregar as penalidades", err)
+		return nil, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
 	return append([]Penalties{}, out...), nil
 }
@@ -553,7 +553,7 @@ func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projec
 	if activityID != "" {
 		_, found, err := s.store.GetActivity(ctx, activityID)
 		if err != nil {
-			return Penalties{}, apperr.Internal("Falha ao carregar atividade", err)
+			return Penalties{}, apperr.Internal("Não foi possível carregar a atividade. Tente novamente em instantes.", err)
 		}
 		if !found {
 			return Penalties{}, apperr.NotFound(msgActivityNotFound)
@@ -561,7 +561,7 @@ func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projec
 	}
 	r := penaltyRecord{ID: manualPenaltyPrefix + s.newID(), ActivityID: activityID, Reason: reason, AppliedAt: s.timestamp(), AppliedBy: reviewer.Name}
 	if err := s.store.AddPenalty(ctx, p.ID, r); err != nil {
-		return Penalties{}, apperr.Internal("Falha ao aplicar a penalidade", err)
+		return Penalties{}, apperr.Internal("Não foi possível aplicar a penalidade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "penalidade.aplicada", Result: audit.Success, Resource: &audit.Resource{Type: "projeto", ID: p.ID},
 		Details: map[string]any{"penalidadeId": r.ID, "atividadeId": activityID, "motivo": reason}})
@@ -581,7 +581,7 @@ func (s *Service) WaivePenalty(ctx context.Context, reviewer actor.Actor, projec
 	}
 	current, err := s.groupPenalties(ctx, p.ID)
 	if err != nil {
-		return Penalties{}, apperr.Internal("Falha ao carregar as penalidades", err)
+		return Penalties{}, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
 	i := slices.IndexFunc(current.Items, func(x Penalty) bool { return x.ID == penaltyID })
 	switch {
@@ -594,7 +594,7 @@ func (s *Service) WaivePenalty(ctx context.Context, reviewer actor.Actor, projec
 	case errors.Is(err, errStale):
 		return Penalties{}, apperr.Conflict(msgAlreadyWaived)
 	case err != nil:
-		return Penalties{}, apperr.Internal("Falha ao perdoar a penalidade", err)
+		return Penalties{}, apperr.Internal("Não foi possível perdoar a penalidade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "penalidade.perdoada", Result: audit.Success, Resource: &audit.Resource{Type: "projeto", ID: p.ID},
 		Details: map[string]any{"penalidadeId": penaltyID, "motivo": reason}})

@@ -60,7 +60,7 @@ func (rt *Router) serve(ctx context.Context, ev events.APIGatewayProxyRequest) R
 		})
 		return run(ctx, rte.handler, req)
 	}
-	return Error(404, "Rota não encontrada")
+	return Error(404, "Endereço não encontrado.")
 }
 
 func run(ctx context.Context, h Handler, req *Request) (resp Response) {
@@ -78,7 +78,7 @@ func run(ctx context.Context, h Handler, req *Request) (resp Response) {
 	return resp
 }
 
-const msgInternal = "Erro interno. Tente novamente em instantes"
+const msgInternal = "Ocorreu um erro inesperado. Tente novamente em instantes."
 
 var statusOf = map[apperr.Kind]int{
 	apperr.KindInvalid:         400,

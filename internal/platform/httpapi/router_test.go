@@ -54,7 +54,7 @@ func TestRouting(t *testing.T) {
 
 	// Without CORS headers the browser hides the 404 behind a CORS error.
 	status, msg, headers := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/nao-existe"})
-	if status != 404 || msg != "Rota não encontrada" || headers["Access-Control-Allow-Origin"] != "*" {
+	if status != 404 || msg != "Endereço não encontrado." || headers["Access-Control-Allow-Origin"] != "*" {
 		t.Fatalf("404: status %d, msg %q, headers %v", status, msg, headers)
 	}
 

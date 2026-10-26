@@ -104,11 +104,11 @@ func (h handlers) updateProject(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Projeto atualizado", h.svc.UpdateProject(ctx, r.Param("projetoId"), in))
+	return httpapi.Message("Projeto atualizado.", h.svc.UpdateProject(ctx, r.Param("projetoId"), in))
 }
 
 func (h handlers) deleteProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Projeto removido", h.svc.DeleteProject(ctx, r.Param("projetoId")))
+	return httpapi.Message("Projeto excluído.", h.svc.DeleteProject(ctx, r.Param("projetoId")))
 }
 
 func (h handlers) assignAdvisor(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -116,11 +116,11 @@ func (h handlers) assignAdvisor(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Orientador associado", h.svc.AssignAdvisor(ctx, r.Param("projetoId"), in))
+	return httpapi.Message("Orientador definido.", h.svc.AssignAdvisor(ctx, r.Param("projetoId"), in))
 }
 
 func (h handlers) removeAdvisor(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Orientador removido", h.svc.RemoveAdvisor(ctx, r.Param("projetoId")))
+	return httpapi.Message("Orientador removido.", h.svc.RemoveAdvisor(ctx, r.Param("projetoId")))
 }
 
 func (h handlers) addMember(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -128,7 +128,7 @@ func (h handlers) addMember(ctx context.Context, r *httpapi.Request) (httpapi.Re
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Aluno associado ao projeto", h.svc.AddMember(ctx, r.Param("projetoId"), in))
+	return httpapi.Message("Aluno incluído no projeto.", h.svc.AddMember(ctx, r.Param("projetoId"), in))
 }
 
 func (h handlers) removeMember(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -136,7 +136,7 @@ func (h handlers) removeMember(ctx context.Context, r *httpapi.Request) (httpapi
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Aluno removido do projeto", h.svc.RemoveMember(ctx, r.Param("projetoId"), in))
+	return httpapi.Message("Aluno removido do projeto.", h.svc.RemoveMember(ctx, r.Param("projetoId"), in))
 }
 
 func (h handlers) myInvitations(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -150,7 +150,7 @@ func (h handlers) acceptInvitation(ctx context.Context, r *httpapi.Request) (htt
 }
 
 func (h handlers) declineInvitation(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Convite recusado", h.svc.DeclineInvitation(ctx, r.Actor.RGM(), r.Param("projetoId")))
+	return httpapi.Message("Convite recusado.", h.svc.DeclineInvitation(ctx, r.Actor.RGM(), r.Param("projetoId")))
 }
 
 func (h handlers) projectInvitations(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -168,5 +168,5 @@ func (h handlers) invite(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 }
 
 func (h handlers) cancelInvitation(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Convite cancelado", h.svc.CancelInvitation(ctx, r.Actor, r.Param("projetoId"), r.Param("rgm")))
+	return httpapi.Message("Convite cancelado.", h.svc.CancelInvitation(ctx, r.Actor, r.Param("projetoId"), r.Param("rgm")))
 }

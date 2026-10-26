@@ -69,7 +69,7 @@ func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error
 func (s *Service) session(ctx context.Context, token string) (Session, error) {
 	claims, err := claimsOf(token)
 	if err != nil {
-		return Session{}, apperr.Internal("Falha ao processar autenticação", err)
+		return Session{}, apperr.Internal("Não foi possível processar a autenticação. Tente novamente em instantes.", err)
 	}
 	u := sessionUser(claims)
 	if u.Role == actor.RoleStudent {
@@ -97,7 +97,7 @@ func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) 
 		case errors.Is(err, errThrottled):
 			appErr = apperr.TooManyRequests(msgThrottled)
 		default:
-			return Session{}, apperr.Internal("Falha ao definir a senha", err)
+			return Session{}, apperr.Internal("Não foi possível definir a senha. Tente novamente em instantes.", err)
 		}
 		record(ctx, "auth.senha_definida", audit.Failure, message(appErr), &audit.Actor{Email: email})
 		return Session{}, appErr
@@ -122,7 +122,7 @@ func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) er
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
 	default:
-		return apperr.Internal("Falha ao enviar o código", err)
+		return apperr.Internal("Não foi possível enviar o código. Tente novamente em instantes.", err)
 	}
 	return nil
 }
@@ -149,7 +149,7 @@ func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) erro
 	case errors.Is(err, errThrottled):
 		appErr = apperr.TooManyRequests(msgThrottled)
 	default:
-		return apperr.Internal("Falha ao redefinir a senha", err)
+		return apperr.Internal("Não foi possível redefinir a senha. Tente novamente em instantes.", err)
 	}
 	record(ctx, "auth.senha_redefinida", audit.Failure, message(appErr), &audit.Actor{Email: email})
 	return appErr
@@ -177,15 +177,15 @@ func signUpError(err error) error {
 	case errors.Is(err, errWeakPassword):
 		return apperr.Invalid(msgWeakPassword)
 	case errors.Is(err, errEmailTaken):
-		return apperr.Conflict("Já existe uma conta com esse e-mail. Use \"Entrar\" ou recupere a senha")
+		return apperr.Conflict("Já existe uma conta com este e-mail. Entre com a sua senha ou use \"Esqueci minha senha\".")
 	case errors.Is(err, errSignUpRejected):
-		return apperr.Forbidden("Cadastro não autorizado: use o e-mail <seu RGM>@alunos.umc.br e confirme com a coordenação se o seu RGM foi pré-autorizado")
+		return apperr.Forbidden("Cadastro não autorizado. Use o e-mail no formato RGM@alunos.umc.br e confirme com a coordenação se o seu RGM foi pré-autorizado.")
 	case errors.Is(err, errInvalidInput):
-		return apperr.Invalid("Dados inválidos. Confira o nome e o e-mail")
+		return apperr.Invalid("Dados inválidos. Confira o nome e o e-mail.")
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
 	}
-	return apperr.Invalid("Não foi possível concluir o cadastro")
+	return apperr.Invalid("Não foi possível concluir o cadastro. Tente novamente em instantes.")
 }
 
 // confirmationError gives a wrong code, an unknown e-mail and an account
@@ -200,7 +200,7 @@ func confirmationError(err error) error {
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
 	}
-	return apperr.Invalid("Não foi possível confirmar a conta")
+	return apperr.Invalid("Não foi possível confirmar a conta. Tente novamente em instantes.")
 }
 
 func message(err error) string {
@@ -255,7 +255,7 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
 	default:
-		return apperr.Internal("Falha ao reenviar o código", err)
+		return apperr.Internal("Não foi possível reenviar o código. Tente novamente em instantes.", err)
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
-		return nil, apperr.Internal("Falha ao listar usuários", err)
+		return nil, apperr.Internal("Não foi possível carregar os usuários. Tente novamente em instantes.", err)
 	}
 	rgms := make([]string, 0, len(users))
 	for _, u := range users {
@@ -307,11 +307,11 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 		var appErr error
 		switch {
 		case errors.Is(err, errEmailTaken):
-			appErr = apperr.Conflict("Já existe uma conta com esse e-mail")
+			appErr = apperr.Conflict("Já existe uma conta com este e-mail.")
 		case errors.Is(err, errInvalidInput):
-			appErr = apperr.Invalid("E-mail inválido")
+			appErr = apperr.Invalid("E-mail inválido.")
 		default:
-			appErr = apperr.Internal("Falha ao criar a conta", err)
+			appErr = apperr.Internal("Não foi possível criar a conta. Tente novamente em instantes.", err)
 		}
 		slog.WarnContext(ctx, "account creation failed", "email", email, "error", err)
 		audit.Record(ctx, audit.Event{Action: "usuario.criado", Result: audit.Failure, Reason: message(appErr), Details: details})

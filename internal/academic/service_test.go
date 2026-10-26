@@ -205,7 +205,7 @@ func TestUpdateCourseErrors(t *testing.T) {
 	}{
 		{errDuplicate, apperr.KindConflict, msgCourseDuplicate},
 		{errStale, apperr.KindConflict, msgCourseChanged},
-		{errors.New("boom"), apperr.KindInternal, "Falha ao atualizar curso"},
+		{errors.New("boom"), apperr.KindInternal, "Não foi possível atualizar o curso. Tente novamente em instantes."},
 	}
 	for _, c := range cases {
 		svc, _, restore := newTestService(&fakeStore{courses: engCourse, err: c.storeErr}, false)
@@ -268,7 +268,7 @@ func TestCohortStoreErrors(t *testing.T) {
 	}{
 		{errDuplicate, apperr.KindConflict, msgCohortDuplicate},
 		{errStale, apperr.KindConflict, msgCohortChanged},
-		{errors.New("boom"), apperr.KindInternal, "Falha ao atualizar turma"},
+		{errors.New("boom"), apperr.KindInternal, "Não foi possível atualizar a turma. Tente novamente em instantes."},
 	}
 	for _, c := range cases {
 		svc, _, restore := newTestService(&fakeStore{courses: engCourse, cohorts: map[string]Cohort{"c1": engNight}, err: c.storeErr}, false)

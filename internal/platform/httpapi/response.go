@@ -15,7 +15,7 @@ type Response struct {
 func JSON(status int, v any) Response {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return Error(500, "Falha ao serializar resposta")
+		return Error(500, "Ocorreu um erro inesperado. Tente novamente em instantes.")
 	}
 	return Response{Status: status, Body: string(b)}
 }

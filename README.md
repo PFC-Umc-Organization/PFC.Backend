@@ -1,6 +1,6 @@
 # PFC.Backend
 
-Backend em Go do PFC Manager — um único Lambda com router interno atrás de
+Backend em Go do Rafa Manager — um único Lambda com router interno atrás de
 uma API Gateway REST API.
 
 ## Estrutura

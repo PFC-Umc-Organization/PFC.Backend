@@ -48,7 +48,7 @@ func (h handlers) signUp(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 		return httpapi.Response{}, err
 	}
 	return httpapi.Reply(202, map[string]string{
-		"mensagem": "Cadastro recebido. Confirme o código enviado por e-mail antes de entrar",
+		"mensagem": "Cadastro recebido. Para entrar, confirme o código enviado ao seu e-mail.",
 	}, h.svc.SignUp(ctx, in))
 }
 
@@ -57,7 +57,7 @@ func (h handlers) confirm(ctx context.Context, r *httpapi.Request) (httpapi.Resp
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Conta confirmada. Você já pode entrar", h.svc.Confirm(ctx, in))
+	return httpapi.Message("Conta confirmada. Você já pode entrar.", h.svc.Confirm(ctx, in))
 }
 
 func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -65,7 +65,7 @@ func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.R
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Se houver um cadastro aguardando confirmação com esse e-mail, enviamos um código novo. Confira também a caixa de spam", h.svc.ResendCode(ctx, in))
+	return httpapi.Message("Se houver um cadastro aguardando confirmação com este e-mail, um novo código foi enviado. Verifique também a caixa de spam.", h.svc.ResendCode(ctx, in))
 }
 
 func (h handlers) completeNewPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -82,7 +82,7 @@ func (h handlers) forgotPassword(ctx context.Context, r *httpapi.Request) (httpa
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Se houver uma conta com esse e-mail, enviamos um código para redefinir a senha", h.svc.ForgotPassword(ctx, in))
+	return httpapi.Message("Se houver uma conta com este e-mail, um código para redefinir a senha foi enviado.", h.svc.ForgotPassword(ctx, in))
 }
 
 func (h handlers) resetPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -90,7 +90,7 @@ func (h handlers) resetPassword(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Senha alterada. Você já pode entrar", h.svc.ResetPassword(ctx, in))
+	return httpapi.Message("Senha alterada. Você já pode entrar.", h.svc.ResetPassword(ctx, in))
 }
 
 func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -109,6 +109,6 @@ func (h handlers) createAccount(ctx context.Context, r *httpapi.Request) (httpap
 		return httpapi.Response{}, err
 	}
 	return httpapi.Reply(201, map[string]string{
-		"mensagem": "Conta criada. Um convite foi enviado por e-mail",
+		"mensagem": "Conta criada. A pessoa receberá por e-mail uma senha temporária de acesso.",
 	}, h.svc.CreateAccount(ctx, in))
 }

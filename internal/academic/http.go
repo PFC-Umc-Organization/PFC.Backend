@@ -59,11 +59,11 @@ func (h handlers) updateCourse(ctx context.Context, r *httpapi.Request) (httpapi
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Curso atualizado", h.svc.UpdateCourse(ctx, r.Param("cursoId"), in))
+	return httpapi.Message("Curso atualizado.", h.svc.UpdateCourse(ctx, r.Param("cursoId"), in))
 }
 
 func (h handlers) deleteCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Curso removido", h.svc.DeleteCourse(ctx, r.Param("cursoId")))
+	return httpapi.Message("Curso excluído.", h.svc.DeleteCourse(ctx, r.Param("cursoId")))
 }
 
 func (h handlers) createCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -85,11 +85,11 @@ func (h handlers) updateCohort(ctx context.Context, r *httpapi.Request) (httpapi
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Turma atualizada", h.svc.UpdateCohort(ctx, r.Param("turmaId"), in))
+	return httpapi.Message("Turma atualizada.", h.svc.UpdateCohort(ctx, r.Param("turmaId"), in))
 }
 
 func (h handlers) deleteCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Turma removida", h.svc.DeleteCohort(ctx, r.Param("turmaId")))
+	return httpapi.Message("Turma excluída.", h.svc.DeleteCohort(ctx, r.Param("turmaId")))
 }
 
 func (h handlers) listEnrollments(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
@@ -134,9 +134,9 @@ func (h handlers) updateProgram(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Programa atualizado", h.svc.UpdateProgram(ctx, r.Param("programaId"), in))
+	return httpapi.Message("Programa atualizado.", h.svc.UpdateProgram(ctx, r.Param("programaId"), in))
 }
 
 func (h handlers) deleteProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	return httpapi.Message("Programa removido", h.svc.DeleteProgram(ctx, r.Param("programaId")))
+	return httpapi.Message("Programa excluído.", h.svc.DeleteProgram(ctx, r.Param("programaId")))
 }

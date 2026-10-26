@@ -7,12 +7,12 @@ import (
 
 const (
 	filesPrefix   = "entregas/"
-	msgNoStorage  = "O envio de arquivos ainda não está disponível"
-	msgNotAFile   = "Este campo não recebe arquivo"
-	msgFileType   = "Tipo de arquivo não aceito. Envie PDF, documento do Office/LibreOffice, imagem, ZIP ou texto"
-	msgFileSize   = "O arquivo passa de 50 MB"
-	msgFileEmpty  = "O arquivo está vazio"
-	msgNoFileHere = "Esta entrega não tem arquivo para baixar"
+	msgNoStorage  = "O envio de arquivos ainda não está disponível."
+	msgNotAFile   = "Este campo não aceita arquivo."
+	msgFileType   = "Tipo de arquivo não aceito. Envie PDF, documento do Office/LibreOffice, imagem, ZIP ou texto."
+	msgFileSize   = "O arquivo excede o limite de 50 MB."
+	msgFileEmpty  = "O arquivo está vazio."
+	msgNoFileHere = "Esta entrega não tem arquivo para download."
 )
 
 type UploadRequest struct {
