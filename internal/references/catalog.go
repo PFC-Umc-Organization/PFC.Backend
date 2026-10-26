@@ -47,7 +47,7 @@ func (c *Catalog) getJSON(ctx context.Context, endpoint string, dst any) error {
 	if err != nil {
 		return err
 	}
-	agent := "Athena-PFC/1.0"
+	agent := "RafaManager-PFC/1.0"
 	if c.cfg.ContactEmail != "" {
 		agent += " (mailto:" + c.cfg.ContactEmail + ")"
 	}
