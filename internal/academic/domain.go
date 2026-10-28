@@ -175,6 +175,8 @@ const (
 	msgCohortChanged        = "A turma foi alterada por outra pessoa enquanto você editava. Atualize a página e tente novamente."
 	msgCohortNotFound       = "Turma não encontrada."
 	msgCohortHasProgram     = "Não é possível excluir uma turma com programa de PFC. Exclua o programa primeiro."
+	msgCohortHasEnrollments = "Não é possível excluir uma turma com RGMs pré-autorizados. Remova as pré-autorizações da turma em Usuários antes de excluí-la."
+	msgNotEnrolled          = "Este RGM não está pré-autorizado em nenhuma turma."
 	msgCohortIDRequired     = "Selecione a turma."
 	msgCourseNotFound       = "Curso não encontrado."
 	msgProgramDuplicate     = "Esta turma já tem um programa de PFC."

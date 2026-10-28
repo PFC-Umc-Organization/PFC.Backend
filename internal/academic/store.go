@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
@@ -452,6 +454,37 @@ func (s *DynamoStore) DeleteEnrollments(ctx context.Context, rgms []string) erro
 
 func (s *DynamoStore) EnrollmentExists(ctx context.Context, rgm string) (bool, error) {
 	return s.table.Exists(ctx, enrollmentKey(rgm))
+}
+
+func (s *DynamoStore) EnrolledAmong(ctx context.Context, rgms []string) (map[string]bool, error) {
+	keys := make([]dynamo.Item, 0, len(rgms))
+	for _, rgm := range rgms {
+		keys = append(keys, enrollmentKey(rgm))
+	}
+	items, err := s.table.BatchGet(ctx, keys, "PK")
+	if err != nil {
+		return nil, err
+	}
+	found := make(map[string]bool, len(items))
+	for _, it := range items {
+		found[strings.TrimPrefix(dynamo.String(it, "PK"), enrollmentPrefix)] = true
+	}
+	return found, nil
+}
+
+func (s *DynamoStore) CohortHasEnrollments(ctx context.Context, cohortID string) (bool, error) {
+	out, err := s.table.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(s.table.Name),
+		IndexName:                 aws.String(s.table.Index),
+		KeyConditionExpression:    aws.String("GSI1PK = :pk"),
+		ExpressionAttributeValues: dynamo.Item{":pk": dynamo.S(EnrollmentsPartition(cohortID))},
+		ProjectionExpression:      aws.String("PK"),
+		Limit:                     aws.Int32(1),
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(out.Items) > 0, nil
 }
 
 func (s *DynamoStore) CohortOfStudent(ctx context.Context, rgm string) (string, error) {

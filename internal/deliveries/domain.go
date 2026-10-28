@@ -28,6 +28,7 @@ const (
 	maxLongTextLen    = 5000
 	maxFileNameLen    = 400
 	maxFields         = 20
+	maxCommentLen     = 2000
 )
 
 // A file field's answer is the key of the uploaded file (see files.go), or
@@ -66,7 +67,8 @@ type ActivityInput struct {
 }
 
 // Answers are keyed by field id. SubmittedAt is the first submission, the
-// one the deadline is checked against; editing sets UpdatedAt.
+// one the deadline is checked against; editing sets UpdatedAt and drops the
+// validation, which was about the previous content.
 type Submission struct {
 	ActivityID  string            `json:"atividadeId"`
 	ProjectID   string            `json:"projetoId"`
@@ -75,10 +77,46 @@ type Submission struct {
 	UpdatedAt   string            `json:"atualizadaEm,omitempty"`
 	UpdatedBy   string            `json:"atualizadaPor,omitempty"`
 	Answers     map[string]string `json:"respostas"`
+	Validation  *Validation       `json:"validacao,omitempty"`
 }
 
 type SubmissionInput struct {
 	Answers map[string]string `json:"respostas"`
+}
+
+type ValidationStatus string
+
+const (
+	Validated    ValidationStatus = "VALIDADA"
+	NotValidated ValidationStatus = "NAO_VALIDADA"
+)
+
+// Validation is the advisor's verdict on the submission as it is now. By is
+// the advisor's sub; ByName, the name shown to the group.
+type Validation struct {
+	Status  ValidationStatus `json:"status"`
+	Comment string           `json:"comentario,omitempty"`
+	By      string           `json:"por"`
+	ByName  string           `json:"porNome"`
+	At      string           `json:"em"`
+}
+
+type ValidationInput struct {
+	Status  ValidationStatus `json:"status"`
+	Comment string           `json:"comentario"`
+}
+
+func (in ValidationInput) normalized() (ValidationInput, string) {
+	in.Comment = strings.TrimSpace(in.Comment)
+	switch {
+	case in.Status != Validated && in.Status != NotValidated:
+		return in, msgValidationStatus
+	case in.Status == NotValidated && in.Comment == "":
+		return in, msgCommentRequired
+	case utf8.RuneCountInString(in.Comment) > maxCommentLen:
+		return in, msgCommentTooLong
+	}
+	return in, ""
 }
 
 var deadlineLayouts = []string{"2006-01-02T15:04", "2006-01-02T15:04:05", time.RFC3339}
@@ -227,4 +265,10 @@ const (
 	msgAlreadyWaived      = "Esta penalidade já foi perdoada."
 	msgReasonRequired     = "Informe o motivo."
 	msgReasonTooLong      = "O motivo excede o tamanho máximo permitido."
+
+	msgActivitiesAdminOnly = "Apenas a coordenação cria, altera e exclui atividades."
+	msgAdvisorValidates    = "Apenas o orientador do projeto pode validar a entrega."
+	msgValidationStatus    = "Informe se a entrega foi validada ou não validada."
+	msgCommentRequired     = "Informe o comentário para o grupo: o que precisa ser corrigido."
+	msgCommentTooLong      = "O comentário excede o tamanho máximo permitido."
 )

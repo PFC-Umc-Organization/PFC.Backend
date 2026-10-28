@@ -24,11 +24,20 @@ func Routes(r *httpapi.Router, svc *Service) {
 		Roles:   []actor.Role{actor.RoleAdmin, actor.RoleAdvisor},
 		Message: msgStaffOnly,
 	}, h.listUsers))
-	r.Handle("POST", "/admin/usuarios", httpapi.Restrict(httpapi.Policy{
+	r.Handle("POST", "/admin/usuarios", admin("usuario.criado", h.createAccount))
+	r.Handle("PUT", "/admin/usuarios/:usuarioId/nome", admin("usuario.nome_alterado", h.renameAccount))
+	r.Handle("PUT", "/admin/usuarios/:usuarioId/perfil", admin("usuario.perfil_alterado", h.changeRole))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/desativar", admin("usuario.desativado", h.disableAccount))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/reativar", admin("usuario.reativado", h.enableAccount))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/convite", admin("usuario.convite_reenviado", h.resendInvitation))
+}
+
+func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
+	return httpapi.Restrict(httpapi.Policy{
 		Roles:       []actor.Role{actor.RoleAdmin},
 		Message:     msgAdminOnly,
-		AuditAction: "usuario.criado",
-	}, h.createAccount))
+		AuditAction: auditAction,
+	}, h)
 }
 
 func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
@@ -98,9 +107,40 @@ func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response,
 	return httpapi.Reply(200, u, err)
 }
 
-func (h handlers) listUsers(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
-	users, err := h.svc.ListUsers(ctx)
+func (h handlers) listUsers(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	users, err := h.svc.ListUsers(ctx, r.Actor)
 	return httpapi.Reply(200, users, err)
+}
+
+func (h handlers) renameAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in NameInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	return httpapi.Message("Nome atualizado.", h.svc.RenameAccount(ctx, r.Param("usuarioId"), in))
+}
+
+func (h handlers) changeRole(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in RoleInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	return httpapi.Message("Perfil alterado. A mudança vale a partir da próxima entrada da pessoa no portal.",
+		h.svc.ChangeRole(ctx, r.Actor, r.Param("usuarioId"), in))
+}
+
+func (h handlers) disableAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	return httpapi.Message("Conta desativada. A pessoa não consegue mais entrar no portal.",
+		h.svc.DisableAccount(ctx, r.Actor, r.Param("usuarioId")))
+}
+
+func (h handlers) enableAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	return httpapi.Message("Conta reativada.", h.svc.EnableAccount(ctx, r.Param("usuarioId")))
+}
+
+func (h handlers) resendInvitation(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	return httpapi.Message("Convite reenviado. A pessoa receberá por e-mail uma nova senha temporária.",
+		h.svc.ResendInvitation(ctx, r.Param("usuarioId")))
 }
 
 func (h handlers) createAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

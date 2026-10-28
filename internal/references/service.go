@@ -116,16 +116,16 @@ func (s *Service) requireMember(ctx context.Context, member actor.Actor, p group
 }
 
 func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string, in ReferenceInput) (Reference, error) {
-	doi, ok := normalizeDOI(in.DOI)
-	if !ok {
-		return Reference{}, apperr.Invalid(msgInvalidDOI)
-	}
 	p, err := s.project(ctx, projectID)
 	if err != nil {
 		return Reference{}, err
 	}
 	if err := s.requireMember(ctx, member, p, "referencia.adicionada"); err != nil {
 		return Reference{}, err
+	}
+	doi, ok := normalizeDOI(in.DOI)
+	if !ok {
+		return Reference{}, apperr.Invalid(msgInvalidDOI)
 	}
 	w, err := s.workByDOI(ctx, doi)
 	if err != nil {

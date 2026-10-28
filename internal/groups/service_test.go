@@ -143,6 +143,13 @@ func (w *world) IsEnrolled(_ context.Context, rgm string) (bool, error) {
 	_, ok := w.cohorts[rgm]
 	return ok, nil
 }
+func (w *world) ProgramIDs(context.Context) ([]string, error) {
+	ids := []string{}
+	for _, p := range w.programs {
+		ids = append(ids, p)
+	}
+	return ids, nil
+}
 func (w *world) CohortOf(_ context.Context, rgm string) (string, error) { return w.cohorts[rgm], nil }
 func (w *world) CohortsOf(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
@@ -512,5 +519,22 @@ func TestMembership(t *testing.T) {
 	}
 	if !CanView(staff, p) || CanView(studentActor("222"), p) {
 		t.Error("CanView")
+	}
+}
+
+func TestMembersAdvisedBy(t *testing.T) {
+	w := newWorld()
+	w.projects["p2"] = Project{ID: "p2", ProgramID: "prog-b", Members: []string{"333"}}
+	w.projects["p3"] = Project{ID: "p3", ProgramID: "prog-a", Members: []string{"444"}, AdvisorID: "outro"}
+	w.advise("p1")
+	w.advise("p2")
+	svc, _ := w.service(t)
+	got, err := svc.MembersAdvisedBy(context.Background(), advisor.Sub)
+	slices.Sort(got)
+	if err != nil || !slices.Equal(got, []string{"111", "333"}) {
+		t.Fatalf("members = %v, err = %v", got, err)
+	}
+	if got, _ := svc.MembersAdvisedBy(context.Background(), ""); len(got) != 0 {
+		t.Errorf("no sub: %v", got)
 	}
 }

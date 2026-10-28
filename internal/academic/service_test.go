@@ -20,6 +20,30 @@ type fakeStore struct {
 	programs map[string]Program
 	err      error
 	written  [][]string
+	enrolled map[string]string
+	deleted  [][]string
+}
+
+func (f *fakeStore) CohortHasEnrollments(_ context.Context, cohortID string) (bool, error) {
+	for _, c := range f.enrolled {
+		if c == cohortID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+func (f *fakeStore) EnrolledAmong(_ context.Context, rgms []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, rgm := range rgms {
+		if _, ok := f.enrolled[rgm]; ok {
+			out[rgm] = true
+		}
+	}
+	return out, nil
+}
+func (f *fakeStore) DeleteEnrollments(_ context.Context, rgms []string) error {
+	f.deleted = append(f.deleted, rgms)
+	return nil
 }
 
 func (f *fakeStore) CourseByName(_ context.Context, name string) (Course, bool, error) {
@@ -298,6 +322,24 @@ func TestDeleteCohortWithProgram(t *testing.T) {
 	wantErr(t, svc.DeleteCohort(context.Background(), "c1"), apperr.KindConflict, msgCohortHasProgram)
 	if !strings.Contains(buf.String(), `"motivo":"turma possui programa vinculado"`) {
 		t.Fatalf("audit = %s", buf)
+	}
+}
+
+func TestDeleteCohortWithEnrollments(t *testing.T) {
+	store := &fakeStore{cohorts: map[string]Cohort{"c1": engNight}, enrolled: map[string]string{"111": "c1"}, err: errors.New("must not be called")}
+	svc, _, restore := newTestService(store, false)
+	defer restore()
+	wantErr(t, svc.DeleteCohort(context.Background(), "c1"), apperr.KindConflict, msgCohortHasEnrollments)
+}
+
+func TestUnenrollReportsUnknownRGMs(t *testing.T) {
+	store := &fakeStore{enrolled: map[string]string{"111": "c1"}}
+	svc, _, restore := newTestService(store, false)
+	defer restore()
+	result, err := svc.Unenroll(context.Background(), EnrollmentRequest{RGMs: []string{"111", "999"}})
+	if err != nil || result.Processed != 1 || !reflect.DeepEqual(result.Failures, []EnrollmentFailure{{RGM: "999", Error: msgNotEnrolled}}) ||
+		!reflect.DeepEqual(store.deleted, [][]string{{"111"}}) {
+		t.Fatalf("result = %+v, deleted = %v, err = %v", result, store.deleted, err)
 	}
 }
 

@@ -292,6 +292,40 @@ func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, pr
 	return nil
 }
 
+// Validate records the advisor's verdict on the submission as it is now:
+// only the project's advisor gives it; the coordination and the group read
+// it. Editing the submission afterwards drops it.
+func (s *Service) Validate(ctx context.Context, advisor actor.Actor, projectID, activityID string, in ValidationInput) (Submission, error) {
+	action := "entrega.validada"
+	if in.Status == NotValidated {
+		action = "entrega.nao_validada"
+	}
+	p, err := s.project(ctx, projectID)
+	if err != nil {
+		return Submission{}, err
+	}
+	if !groups.Advises(advisor, p) {
+		audit.Record(ctx, audit.Event{Action: action, Result: audit.Failure, Reason: msgAdvisorValidates,
+			Resource: activityResource(activityID), Details: map[string]any{"projetoId": p.ID}})
+		return Submission{}, apperr.Forbidden(msgAdvisorValidates)
+	}
+	in, msg := in.normalized()
+	if msg != "" {
+		return Submission{}, apperr.Invalid(msg)
+	}
+	v := Validation{Status: in.Status, Comment: in.Comment, By: advisor.Sub, ByName: advisor.Name, At: s.timestamp()}
+	sub, err := s.store.SetValidation(ctx, p.ID, activityID, v)
+	if errors.Is(err, errNotFound) {
+		return Submission{}, apperr.NotFound(msgSubmissionNotFound)
+	}
+	if err != nil {
+		return Submission{}, apperr.Internal("Não foi possível registrar a validação. Tente novamente em instantes.", err)
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: activityResource(activityID),
+		Details: map[string]any{"projetoId": p.ID}})
+	return sub, nil
+}
+
 // RequestUpload lets a member send one file for a file field. The answer
 // only changes when the group submits the form with the returned key.
 func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, projectID, activityID string, in UploadRequest) (UploadTicket, error) {
@@ -564,7 +598,7 @@ func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projec
 		return Penalties{}, apperr.Internal("Não foi possível aplicar a penalidade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "penalidade.aplicada", Result: audit.Success, Resource: &audit.Resource{Type: "projeto", ID: p.ID},
-		Details: map[string]any{"penalidadeId": r.ID, "atividadeId": activityID, "motivo": reason}})
+		Details: map[string]any{"penalidadeId": r.ID, "atividadeId": activityID}})
 	return s.PenaltiesOfProject(ctx, reviewer, p.ID)
 }
 
@@ -597,6 +631,6 @@ func (s *Service) WaivePenalty(ctx context.Context, reviewer actor.Actor, projec
 		return Penalties{}, apperr.Internal("Não foi possível perdoar a penalidade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "penalidade.perdoada", Result: audit.Success, Resource: &audit.Resource{Type: "projeto", ID: p.ID},
-		Details: map[string]any{"penalidadeId": penaltyID, "motivo": reason}})
+		Details: map[string]any{"penalidadeId": penaltyID}})
 	return s.PenaltiesOfProject(ctx, reviewer, p.ID)
 }

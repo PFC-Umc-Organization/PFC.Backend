@@ -44,6 +44,9 @@ type Store interface {
 	PutEnrollments(ctx context.Context, rgms []string, cohortID string) error
 	DeleteEnrollments(ctx context.Context, rgms []string) error
 	EnrollmentExists(ctx context.Context, rgm string) (bool, error)
+	// EnrolledAmong returns which of rgms have an enrollment, in any cohort.
+	EnrolledAmong(ctx context.Context, rgms []string) (map[string]bool, error)
+	CohortHasEnrollments(ctx context.Context, cohortID string) (bool, error)
 	CohortOfStudent(ctx context.Context, rgm string) (string, error)
 	CohortsOfStudents(ctx context.Context, rgms []string) (map[string]string, error)
 }

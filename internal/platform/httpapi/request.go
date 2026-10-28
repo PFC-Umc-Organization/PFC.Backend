@@ -9,7 +9,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 )
 
-const msgInvalidBody = "Corpo da requisição inválido"
+const msgInvalidBody = "Não foi possível ler os dados enviados. Atualize a página e tente novamente."
 
 type Request struct {
 	Method    string

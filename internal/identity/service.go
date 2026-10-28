@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
@@ -17,12 +18,17 @@ import (
 type Service struct {
 	directory Directory
 	academic  Academic
+	advising  Advising
 	names     *nameCache
 }
 
 func NewService(directory Directory, academic Academic) *Service {
 	return &Service{directory: directory, academic: academic, names: newNameCache(time.Now)}
 }
+
+// UseAdvising is set after construction: groups needs this service first,
+// for the members' names.
+func (s *Service) UseAdvising(a Advising) { s.advising = a }
 
 // cohortsOf returns the cohort the student's RGM was pre-authorized in. A
 // failed lookup must not block a login or the list: it is logged and the
@@ -262,12 +268,18 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	return nil
 }
 
-// ListUsers is for the academic team; students get their group's names from
-// the project itself.
-func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
+// ListUsers gives the coordination every account and an advisor only the
+// students of the projects they advise; students get their group's names
+// from the project itself.
+func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar os usuários. Tente novamente em instantes.", err)
+	}
+	if !viewer.HasRole(actor.RoleAdmin) {
+		if users, err = s.advisees(ctx, viewer, users); err != nil {
+			return nil, err
+		}
 	}
 	rgms := make([]string, 0, len(users))
 	for _, u := range users {
@@ -290,6 +302,208 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 	return users, nil
+}
+
+func (s *Service) advisees(ctx context.Context, advisor actor.Actor, users []User) ([]User, error) {
+	if s.advising == nil || !advisor.HasRole(actor.RoleAdvisor) {
+		return []User{}, nil
+	}
+	members, err := s.advising.MembersAdvisedBy(ctx, advisor.Sub)
+	if err != nil {
+		return nil, apperr.Internal("Não foi possível carregar os usuários. Tente novamente em instantes.", err)
+	}
+	return slices.DeleteFunc(users, func(u User) bool {
+		return u.Role != actor.RoleStudent || !slices.Contains(members, u.RGM)
+	}), nil
+}
+
+func accountResource(id string) *audit.Resource { return &audit.Resource{Type: "usuario", ID: id} }
+
+// account finds an account by its sub, the id the account list shows.
+func (s *Service) account(ctx context.Context, id string) (User, error) {
+	if !subFormat.MatchString(id) {
+		return User{}, apperr.NotFound(msgAccountNotFound)
+	}
+	users, err := s.directory.UsersWithSub(ctx, id)
+	if err != nil {
+		return User{}, apperr.Internal("Não foi possível carregar a conta. Tente novamente em instantes.", err)
+	}
+	i := slices.IndexFunc(users, func(u User) bool { return u.ID == id })
+	if i < 0 {
+		return User{}, apperr.NotFound(msgAccountNotFound)
+	}
+	u := users[i]
+	if u.Username == "" {
+		u.Username = u.ID
+	}
+	return u, nil
+}
+
+// lastActiveAdmin tells whether u is the only enabled admin account that can
+// log in, which must stay: without it nobody manages accounts or cohorts. An
+// admin still on the temporary password does not count, since the invite may
+// never be accepted.
+func (s *Service) lastActiveAdmin(ctx context.Context, u User) (bool, error) {
+	if u.Role != actor.RoleAdmin || u.Status != StatusActive {
+		return false, nil
+	}
+	users, err := s.directory.ListUsers(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, other := range users {
+		if other.ID != u.ID && other.Role == actor.RoleAdmin && other.Status == StatusActive && !other.FirstAccessPending {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (s *Service) forgetName(u User) {
+	keys := []string{"advisor#" + u.ID}
+	if u.RGM != "" {
+		keys = append(keys, "rgm#"+u.RGM)
+	}
+	s.names.drop(keys...)
+}
+
+func adminError(err error) error {
+	switch {
+	case errors.Is(err, errNoAccount):
+		return apperr.NotFound(msgAccountNotFound)
+	case errors.Is(err, errThrottled):
+		return apperr.TooManyRequests(msgThrottled)
+	}
+	return apperr.Internal("Não foi possível alterar a conta. Tente novamente em instantes.", err)
+}
+
+func refuse(ctx context.Context, action, id string, err error) error {
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Failure, Reason: message(err), Resource: accountResource(id)})
+	return err
+}
+
+// RenameAccount fixes the name of any account, students included.
+func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) error {
+	const action = "usuario.nome_alterado"
+	name := strings.TrimSpace(in.Name)
+	switch {
+	case name == "":
+		return apperr.Invalid(msgNameRequired)
+	case utf8.RuneCountInString(name) > maxAccountNameLen:
+		return apperr.Invalid(msgNameTooLong)
+	}
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.directory.SetName(ctx, u.Username, name); err != nil {
+		return refuse(ctx, action, id, adminError(err))
+	}
+	s.forgetName(u)
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
+	return nil
+}
+
+// ChangeRole moves a staff account between advisor and coordination. The
+// person's current token keeps the old role until it expires.
+func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, in RoleInput) error {
+	const action = "usuario.perfil_alterado"
+	if in.Role != actor.RoleAdvisor && in.Role != actor.RoleAdmin {
+		return apperr.Invalid(msgStaffRole)
+	}
+	if id == admin.Sub {
+		return refuse(ctx, action, id, apperr.Conflict(msgOwnRole))
+	}
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return err
+	}
+	switch {
+	case u.Role == actor.RoleStudent:
+		return refuse(ctx, action, id, apperr.Conflict(msgStudentRole))
+	case u.Role == in.Role:
+		return apperr.Conflict(msgSameRole)
+	}
+	last, err := s.lastActiveAdmin(ctx, u)
+	if err != nil {
+		return apperr.Internal("Não foi possível alterar a conta. Tente novamente em instantes.", err)
+	}
+	if last {
+		return refuse(ctx, action, id, apperr.Conflict(msgLastAdmin))
+	}
+	if err := s.directory.SetRole(ctx, u.Username, in.Role); err != nil {
+		return refuse(ctx, action, id, adminError(err))
+	}
+	s.forgetName(u)
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id),
+		Details: map[string]any{"de": string(u.Role), "para": string(in.Role)}})
+	return nil
+}
+
+// DisableAccount blocks the sign-in and ends the person's sessions.
+func (s *Service) DisableAccount(ctx context.Context, admin actor.Actor, id string) error {
+	const action = "usuario.desativado"
+	if id == admin.Sub {
+		return refuse(ctx, action, id, apperr.Conflict(msgOwnDisable))
+	}
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return err
+	}
+	if u.Status != StatusActive {
+		return apperr.Conflict(msgAlreadyDisabled)
+	}
+	last, err := s.lastActiveAdmin(ctx, u)
+	if err != nil {
+		return apperr.Internal("Não foi possível alterar a conta. Tente novamente em instantes.", err)
+	}
+	if last {
+		return refuse(ctx, action, id, apperr.Conflict(msgLastAdmin))
+	}
+	if err := s.directory.Disable(ctx, u.Username); err != nil {
+		return refuse(ctx, action, id, adminError(err))
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
+	return nil
+}
+
+func (s *Service) EnableAccount(ctx context.Context, id string) error {
+	const action = "usuario.reativado"
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return err
+	}
+	if u.Status == StatusActive {
+		return apperr.Conflict(msgAlreadyEnabled)
+	}
+	if err := s.directory.Enable(ctx, u.Username); err != nil {
+		return refuse(ctx, action, id, adminError(err))
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
+	return nil
+}
+
+// ResendInvitation is for a staff account still on its temporary password,
+// which Cognito expires after a few days.
+func (s *Service) ResendInvitation(ctx context.Context, id string) error {
+	const action = "usuario.convite_reenviado"
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return err
+	}
+	switch {
+	case u.Role == actor.RoleStudent:
+		return apperr.Conflict(msgInvitationStaffOnly)
+	case u.Status != StatusActive:
+		return apperr.Conflict(msgDisabledInvitation)
+	case !u.FirstAccessPending:
+		return apperr.Conflict(msgNoPendingInvitation)
+	}
+	if err := s.directory.ResendInvitation(ctx, u.Email); err != nil {
+		return refuse(ctx, action, id, adminError(err))
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
+	return nil
 }
 
 func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +94,15 @@ func (f *fakeStore) GetSubmission(_ context.Context, projectID, activityID strin
 		}
 	}
 	return Submission{}, false, nil
+}
+func (f *fakeStore) SetValidation(_ context.Context, projectID, activityID string, v Validation) (Submission, error) {
+	for i, s := range f.saved {
+		if s.ProjectID == projectID && s.ActivityID == activityID {
+			f.saved[i].Validation = &v
+			return f.saved[i], nil
+		}
+	}
+	return Submission{}, errNotFound
 }
 func (f *fakeStore) DeleteSubmission(_ context.Context, projectID, activityID string) (Submission, error) {
 	for i, s := range f.saved {
@@ -261,6 +271,69 @@ func TestWritesAreStaffOnly(t *testing.T) {
 		if resp.StatusCode != 403 {
 			t.Errorf("%s %s: student got %d", route[0], route[1], resp.StatusCode)
 		}
+	}
+}
+
+func TestActivitiesAreCoordinationOnly(t *testing.T) {
+	r := httpapi.NewRouter()
+	Routes(r, newTestService(t, &fakeStore{}))
+	for _, route := range [][2]string{
+		{"POST", "/atividades"},
+		{"PUT", "/atividades/a1"},
+		{"DELETE", "/atividades/a1"},
+		{"POST", "/atividades/a1/campos"},
+		{"DELETE", "/atividades/a1/campos/f1"},
+	} {
+		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: route[0], Path: route[1],
+			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": "ORIENTADOR"}}}})
+		if resp.StatusCode != 403 {
+			t.Errorf("%s %s: advisor got %d", route[0], route[1], resp.StatusCode)
+		}
+	}
+}
+
+func TestValidate(t *testing.T) {
+	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
+	svc := newTestService(t, store)
+	ctx := context.Background()
+	member := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	advisor := actor.Actor{Role: actor.RoleAdvisor, Sub: "prof-sub", Name: "Prof. Bia"}
+	ok := ValidationInput{Status: Validated}
+
+	if _, err := svc.Validate(ctx, advisor, "p1", "a1", ok); kind(err) != apperr.KindNotFound {
+		t.Errorf("no submission yet: %v", err)
+	}
+	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": "tema.pdf"}}); err != nil {
+		t.Fatal(err)
+	}
+	for name, who := range map[string]actor.Actor{
+		"admin":         {Role: actor.RoleAdmin, Sub: "coord"},
+		"other advisor": {Role: actor.RoleAdvisor, Sub: "outro"},
+		"member":        member,
+	} {
+		if _, err := svc.Validate(ctx, who, "p1", "a1", ok); message(err) != msgAdvisorValidates {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, in := range map[string]ValidationInput{
+		"no status":            {},
+		"unknown status":       {Status: "TALVEZ"},
+		"not validated, blank": {Status: NotValidated, Comment: "  "},
+		"comment too long":     {Status: Validated, Comment: strings.Repeat("a", maxCommentLen+1)},
+	} {
+		if _, err := svc.Validate(ctx, advisor, "p1", "a1", in); kind(err) != apperr.KindInvalid {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	sub, err := svc.Validate(ctx, advisor, "p1", "a1", ValidationInput{Status: NotValidated, Comment: " Falta o resumo. "})
+	if err != nil || sub.Validation == nil || sub.Validation.Status != NotValidated || sub.Validation.Comment != "Falta o resumo." ||
+		sub.Validation.By != "prof-sub" || sub.Validation.ByName != "Prof. Bia" || sub.Validation.At != "2026-10-16T12:00:00Z" {
+		t.Fatalf("validation = %+v, err = %v", sub.Validation, err)
+	}
+	sub, err = svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": "tema-v2.pdf"}})
+	if err != nil || sub.Validation != nil || store.saved[0].Validation != nil {
+		t.Fatalf("editing must drop the validation: %+v, %v", store.saved[0], err)
 	}
 }
 

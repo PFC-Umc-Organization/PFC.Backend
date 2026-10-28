@@ -82,6 +82,15 @@ type submissionItem struct {
 	UpdatedAt   string            `dynamodbav:"atualizadaEm,omitempty"`
 	UpdatedBy   string            `dynamodbav:"atualizadaPor,omitempty"`
 	Answers     map[string]string `dynamodbav:"respostas"`
+	Validation  *validationItem   `dynamodbav:"validacao,omitempty"`
+}
+
+type validationItem struct {
+	Status  ValidationStatus `dynamodbav:"status"`
+	Comment string           `dynamodbav:"comentario,omitempty"`
+	By      string           `dynamodbav:"por"`
+	ByName  string           `dynamodbav:"porNome"`
+	At      string           `dynamodbav:"em"`
 }
 
 func (it submissionItem) submission() Submission {
@@ -89,7 +98,7 @@ func (it submissionItem) submission() Submission {
 	if answers == nil {
 		answers = map[string]string{}
 	}
-	return Submission{
+	sub := Submission{
 		ActivityID:  strings.TrimPrefix(it.SK, submissionPrefix),
 		ProjectID:   strings.TrimPrefix(it.PK, projectPrefix),
 		SubmittedAt: it.SubmittedAt,
@@ -98,6 +107,11 @@ func (it submissionItem) submission() Submission {
 		UpdatedBy:   it.UpdatedBy,
 		Answers:     answers,
 	}
+	if it.Validation != nil {
+		v := Validation(*it.Validation)
+		sub.Validation = &v
+	}
+	return sub
 }
 
 func activityKey(id string) dynamo.Item { return dynamo.Key(activityPrefix+id, profileSK) }
@@ -265,6 +279,34 @@ func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, mustExi
 		return errNotFound
 	}
 	return err
+}
+
+// SetValidation only touches a submission still there; the group's next
+// edit replaces the whole item, which drops the validation with it.
+func (s *DynamoStore) SetValidation(ctx context.Context, projectID, activityID string, v Validation) (Submission, error) {
+	value, err := attributevalue.Marshal(validationItem(v))
+	if err != nil {
+		return Submission{}, err
+	}
+	out, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 aws.String(s.table.Name),
+		Key:                       submissionKey(projectID, activityID),
+		UpdateExpression:          aws.String("SET validacao = :v"),
+		ConditionExpression:       aws.String("attribute_exists(PK)"),
+		ExpressionAttributeValues: dynamo.Item{":v": value},
+		ReturnValues:              types.ReturnValueAllNew,
+	})
+	if dynamo.ConditionFailed(err) {
+		return Submission{}, errNotFound
+	}
+	if err != nil {
+		return Submission{}, err
+	}
+	var it submissionItem
+	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+		return Submission{}, err
+	}
+	return it.submission(), nil
 }
 
 func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error) {

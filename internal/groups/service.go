@@ -14,6 +14,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 )
 
 type Service struct {
@@ -107,6 +108,30 @@ func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, pro
 		return projects, nil
 	}
 	return slices.DeleteFunc(projects, func(p Project) bool { return !Advises(viewer, p) }), nil
+}
+
+// MembersAdvisedBy lists the RGMs of every project the advisor advises. There
+// is no index by advisor: it reads the projects program by program, a few
+// per term.
+func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]string, error) {
+	if advisorSub == "" {
+		return []string{}, nil
+	}
+	programs, err := s.academic.ProgramIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	perProgram, err := parallel.Map(programs, func(id string) ([]Project, error) { return s.store.ProjectsOfProgram(ctx, id) })
+	if err != nil {
+		return nil, err
+	}
+	members := []string{}
+	for _, p := range slices.Concat(perProgram...) {
+		if p.AdvisorID == advisorSub {
+			members = append(members, p.Members...)
+		}
+	}
+	return members, nil
 }
 
 func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (Detail, error) {

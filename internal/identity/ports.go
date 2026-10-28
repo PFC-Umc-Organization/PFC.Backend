@@ -46,8 +46,23 @@ type Directory interface {
 	// password.
 	CreateAccount(ctx context.Context, name, email string, role actor.Role) error
 	ListUsers(ctx context.Context) ([]User, error)
+	SetName(ctx context.Context, username, name string) error
+	SetRole(ctx context.Context, username string, role actor.Role) error
+	// Disable also signs the account out of every device; tokens already
+	// issued stay valid until they expire.
+	Disable(ctx context.Context, username string) error
+	Enable(ctx context.Context, username string) error
+	// ResendInvitation e-mails a new temporary password to an account that
+	// never signed in.
+	ResendInvitation(ctx context.Context, email string) error
 	UsersWithEmailPrefix(ctx context.Context, prefix string) ([]User, error)
 	UsersWithSub(ctx context.Context, sub string) ([]User, error)
+}
+
+// Advising tells which students an advisor follows: the members of the
+// projects they advise.
+type Advising interface {
+	MembersAdvisedBy(ctx context.Context, advisorSub string) ([]string, error)
 }
 
 type Academic interface {

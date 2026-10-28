@@ -42,3 +42,11 @@ func (c *nameCache) put(key, name string) {
 	defer c.mu.Unlock()
 	c.entries[key] = cachedName{name: name, expires: c.now().Add(nameTTL)}
 }
+
+func (c *nameCache) drop(keys ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, k := range keys {
+		delete(c.entries, k)
+	}
+}

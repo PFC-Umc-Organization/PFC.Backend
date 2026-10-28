@@ -41,6 +41,7 @@ type Academic interface {
 	IsEnrolled(ctx context.Context, rgm string) (bool, error)
 	CohortOf(ctx context.Context, rgm string) (string, error)
 	CohortsOf(ctx context.Context, rgms []string) (map[string]string, error)
+	ProgramIDs(ctx context.Context) ([]string, error)
 }
 
 type Accounts interface {

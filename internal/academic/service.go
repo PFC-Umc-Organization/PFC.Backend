@@ -220,6 +220,17 @@ func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	if !found {
 		return apperr.NotFound(msgCohortNotFound)
 	}
+	// Checked before the transaction: a cohort holds any number of
+	// enrollments, too many for a condition. An RGM enrolled in between is
+	// left without a cohort, as before this check.
+	enrolled, err := s.store.CohortHasEnrollments(ctx, c.ID)
+	if err != nil {
+		return apperr.Internal("Não foi possível excluir a turma. Tente novamente em instantes.", err)
+	}
+	if enrolled {
+		audit.Record(ctx, audit.Event{Action: "turma.removida", Result: audit.Failure, Reason: "turma possui RGMs pré-autorizados", Resource: cohortResource(id)})
+		return apperr.Conflict(msgCohortHasEnrollments)
+	}
 	switch err := s.store.DeleteCohort(ctx, c); {
 	case errors.Is(err, errInUse):
 		audit.Record(ctx, audit.Event{Action: "turma.removida", Result: audit.Failure, Reason: "turma possui programa vinculado", Resource: cohortResource(id)})
@@ -366,8 +377,23 @@ func (s *Service) Unenroll(ctx context.Context, in EnrollmentRequest) (Enrollmen
 	if len(rgms) == 0 {
 		return EnrollmentResult{}, apperr.Invalid(msgRGMRequired)
 	}
-	failures := inBatches(rgms, func(batch []string) error { return s.store.DeleteEnrollments(ctx, batch) })
-	result := EnrollmentResult{Processed: len(rgms) - len(failures), Failures: failures}
+	// The delete itself succeeds for an RGM that was never enrolled, so the
+	// count would report it as removed.
+	enrolled, err := s.store.EnrolledAmong(ctx, rgms)
+	if err != nil {
+		return EnrollmentResult{}, apperr.Internal("Não foi possível remover as pré-autorizações. Tente novamente em instantes.", err)
+	}
+	var missing []EnrollmentFailure
+	present := make([]string, 0, len(rgms))
+	for _, rgm := range rgms {
+		if enrolled[rgm] {
+			present = append(present, rgm)
+		} else {
+			missing = append(missing, EnrollmentFailure{RGM: rgm, Error: msgNotEnrolled})
+		}
+	}
+	failures := inBatches(present, func(batch []string) error { return s.store.DeleteEnrollments(ctx, batch) })
+	result := EnrollmentResult{Processed: len(present) - len(failures), Failures: append(missing, failures...)}
 
 	s.recordBatch(ctx, "matricula.removido", len(rgms), result,
 		map[string]any{"rgms": rgms, "processados": result.Processed})

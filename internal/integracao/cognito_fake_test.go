@@ -119,6 +119,10 @@ func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.forgotPassword(w, in)
 	case "ConfirmForgotPassword":
 		f.confirmForgotPassword(w, in)
+	case "AdminUpdateUserAttributes":
+		f.adminUpdate(w, in)
+	case "AdminDisableUser", "AdminEnableUser", "AdminUserGlobalSignOut":
+		f.adminState(w, op, in)
 	default:
 		f.fail(w, "InvalidParameterException", "unsupported operation "+op)
 	}
@@ -147,6 +151,8 @@ func (f *fakeCognito) initiateAuth(w http.ResponseWriter, in map[string]any) {
 	switch {
 	case u == nil || u.password != str(params, "PASSWORD"):
 		f.fail(w, "NotAuthorizedException", "Incorrect username or password.")
+	case !u.enabled:
+		f.fail(w, "NotAuthorizedException", "User is disabled.")
 	case !u.confirmed:
 		f.fail(w, "UserNotConfirmedException", "User is not confirmed.")
 	case u.forced:
@@ -256,8 +262,62 @@ func (f *fakeCognito) listUsers(w http.ResponseWriter, in map[string]any) {
 	f.ok(w, map[string]any{"Users": users})
 }
 
+// byUsername accepts the sub, Cognito's username here, or the e-mail alias.
+func (f *fakeCognito) byUsername(name string) *fakeUser {
+	if u := f.users[name]; u != nil {
+		return u
+	}
+	for _, u := range f.users {
+		if u.sub == name {
+			return u
+		}
+	}
+	return nil
+}
+
+func (f *fakeCognito) adminUpdate(w http.ResponseWriter, in map[string]any) {
+	u := f.byUsername(str(in, "Username"))
+	if u == nil {
+		f.fail(w, "UserNotFoundException", "User does not exist.")
+		return
+	}
+	list, _ := in["UserAttributes"].([]any)
+	for _, a := range list {
+		m, _ := a.(map[string]any)
+		u.attrs[str(m, "Name")] = str(m, "Value")
+	}
+	f.ok(w, map[string]any{})
+}
+
+func (f *fakeCognito) adminState(w http.ResponseWriter, op string, in map[string]any) {
+	u := f.byUsername(str(in, "Username"))
+	if u == nil {
+		f.fail(w, "UserNotFoundException", "User does not exist.")
+		return
+	}
+	switch op {
+	case "AdminDisableUser":
+		u.enabled = false
+	case "AdminEnableUser":
+		u.enabled = true
+	}
+	f.ok(w, map[string]any{})
+}
+
 func (f *fakeCognito) adminCreate(w http.ResponseWriter, in map[string]any) {
 	email := str(in, "Username")
+	if str(in, "MessageAction") == "RESEND" {
+		switch u := f.byUsername(email); {
+		case u == nil:
+			f.fail(w, "UserNotFoundException", "User does not exist.")
+		case !u.forced:
+			f.fail(w, "UnsupportedUserStateException", "Resend not possible. User is in CONFIRMED state.")
+		default:
+			u.password = "temporaria"
+			f.ok(w, map[string]any{"User": map[string]any{"Username": u.sub, "Enabled": u.enabled, "UserStatus": "FORCE_CHANGE_PASSWORD"}})
+		}
+		return
+	}
 	if f.users[email] != nil {
 		f.fail(w, "UsernameExistsException", "User account already exists")
 		return

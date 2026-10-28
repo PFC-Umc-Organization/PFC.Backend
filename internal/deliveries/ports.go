@@ -31,6 +31,8 @@ type Store interface {
 	// after the deadline a handed-back one must not come back.
 	PutSubmission(ctx context.Context, s Submission, mustExist bool) error
 	GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error)
+	// SetValidation returns errNotFound when the submission is gone.
+	SetValidation(ctx context.Context, projectID, activityID string, v Validation) (Submission, error)
 	// DeleteSubmission returns what was deleted, so its files can go too.
 	DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error)
 	SubmissionsOfProject(ctx context.Context, projectID string) ([]Submission, error)

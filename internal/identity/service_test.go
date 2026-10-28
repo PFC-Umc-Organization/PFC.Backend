@@ -24,6 +24,28 @@ type fakeDirectory struct {
 	users     []User
 	queried   int
 	created   []NewAccount
+	calls     []string
+}
+
+func (f *fakeDirectory) SetName(_ context.Context, username, name string) error {
+	f.calls = append(f.calls, "name "+username+" "+name)
+	return f.err
+}
+func (f *fakeDirectory) SetRole(_ context.Context, username string, role actor.Role) error {
+	f.calls = append(f.calls, "role "+username+" "+string(role))
+	return f.err
+}
+func (f *fakeDirectory) Disable(_ context.Context, username string) error {
+	f.calls = append(f.calls, "disable "+username)
+	return f.err
+}
+func (f *fakeDirectory) Enable(_ context.Context, username string) error {
+	f.calls = append(f.calls, "enable "+username)
+	return f.err
+}
+func (f *fakeDirectory) ResendInvitation(_ context.Context, email string) error {
+	f.calls = append(f.calls, "resend "+email)
+	return f.err
 }
 
 func (f *fakeDirectory) SignIn(context.Context, string, string) (SignInResult, error) {
@@ -183,13 +205,13 @@ func TestUserFromAttributes(t *testing.T) {
 	}{
 		{"self-registered student: no custom:perfil, RGM from the e-mail",
 			map[string]string{"sub": "s1", "email": "12345678901@alunos.umc.br", "name": "Aluno"}, "s1", true, true,
-			User{ID: "s1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, Status: StatusActive, Confirmed: true, CohortIDs: []string{}, RGM: "12345678901"}},
+			User{ID: "s1", Username: "s1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, Status: StatusActive, Confirmed: true, CohortIDs: []string{}, RGM: "12345678901"}},
 		{"admin has no RGM",
 			map[string]string{"sub": "s2", "email": "coordenacao@umc.br", "name": "Coordenação", "custom:perfil": "ADMIN"}, "s2", true, true,
-			User{ID: "s2", Name: "Coordenação", Email: "coordenacao@umc.br", Role: actor.RoleAdmin, Status: StatusActive, Confirmed: true, CohortIDs: []string{}}},
+			User{ID: "s2", Username: "s2", Name: "Coordenação", Email: "coordenacao@umc.br", Role: actor.RoleAdmin, Status: StatusActive, Confirmed: true, CohortIDs: []string{}}},
 		{"disabled, unconfirmed, id falls back to the username",
 			map[string]string{"email": "22222222@alunos.umc.br", "name": "Fulano"}, "s3", false, false,
-			User{ID: "s3", Name: "Fulano", Email: "22222222@alunos.umc.br", Role: actor.RoleStudent, Status: StatusInactive, CohortIDs: []string{}, RGM: "22222222"}},
+			User{ID: "s3", Username: "s3", Name: "Fulano", Email: "22222222@alunos.umc.br", Role: actor.RoleStudent, Status: StatusInactive, CohortIDs: []string{}, RGM: "22222222"}},
 	}
 	for _, c := range cases {
 		if got := userFromAttributes(c.attrs, c.username, c.enabled, c.confirmed); !reflect.DeepEqual(got, c.want) {
@@ -203,13 +225,126 @@ func TestListUsers(t *testing.T) {
 		{ID: "2", Name: "coord", Email: "coord@umc.br", Role: actor.RoleAdmin},
 		{ID: "1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, RGM: "12345678901"},
 	}}
-	users, err := newTestService(t, d).ListUsers(context.Background())
+	users, err := newTestService(t, d).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin})
 	if err != nil || len(users) != 2 || users[0].Name != "Aluno" || !reflect.DeepEqual(users[0].CohortIDs, []string{"turma-1"}) ||
 		!reflect.DeepEqual(users[1].CohortIDs, []string{}) || users[1].Email != "coord@umc.br" {
 		t.Fatalf("users = %+v, err = %v", users, err)
 	}
-	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background()); err == nil {
+	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin}); err == nil {
 		t.Error("directory failure must fail")
+	}
+}
+
+type advising map[string][]string
+
+func (a advising) MembersAdvisedBy(_ context.Context, sub string) ([]string, error) {
+	return a[sub], nil
+}
+
+func TestListUsersForAnAdvisor(t *testing.T) {
+	d := &fakeDirectory{users: []User{
+		{ID: "a", Name: "Coord", Role: actor.RoleAdmin},
+		{ID: "b", Name: "Outra Prof", Role: actor.RoleAdvisor},
+		{ID: "c", Name: "Orientando", Role: actor.RoleStudent, RGM: "12345678901"},
+		{ID: "d", Name: "Outro aluno", Role: actor.RoleStudent, RGM: "22222222222"},
+	}}
+	svc := newTestService(t, d)
+	svc.UseAdvising(advising{"prof": {"12345678901"}})
+	users, err := svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "prof"})
+	if err != nil || len(users) != 1 || users[0].ID != "c" {
+		t.Fatalf("users = %+v, err = %v", users, err)
+	}
+	users, err = svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "sem-projetos"})
+	if err != nil || len(users) != 0 || users == nil {
+		t.Fatalf("advisor without projects = %#v, err = %v", users, err)
+	}
+}
+
+const (
+	coordSub   = "0c8f5a7e-0000-4000-8000-000000000001"
+	coord2Sub  = "0c8f5a7e-0000-4000-8000-000000000002"
+	profSub    = "0c8f5a7e-0000-4000-8000-000000000003"
+	studentSub = "0c8f5a7e-0000-4000-8000-000000000004"
+	newSub     = "0c8f5a7e-0000-4000-8000-000000000005"
+)
+
+func accounts() *fakeDirectory {
+	return &fakeDirectory{users: []User{
+		{ID: coordSub, Username: coordSub, Name: "Coord", Email: "coord@umc.br", Role: actor.RoleAdmin, Status: StatusActive},
+		{ID: coord2Sub, Username: coord2Sub, Name: "Coord 2", Email: "coord2@umc.br", Role: actor.RoleAdmin, Status: StatusInactive},
+		{ID: profSub, Username: profSub, Name: "Prof", Email: "prof@umc.br", Role: actor.RoleAdvisor, Status: StatusActive},
+		{ID: studentSub, Username: studentSub, Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, Status: StatusActive, RGM: "12345678901"},
+		{ID: newSub, Username: newSub, Name: "Nova", Email: "nova@umc.br", Role: actor.RoleAdvisor, Status: StatusActive, FirstAccessPending: true},
+	}}
+}
+
+func TestAccountManagement(t *testing.T) {
+	ctx := context.Background()
+	me := actor.Actor{Role: actor.RoleAdmin, Sub: coordSub}
+	d := accounts()
+	svc := newTestService(t, d)
+
+	svc.names.put("advisor#"+profSub, "Nome antigo")
+	if err := svc.RenameAccount(ctx, profSub, NameInput{Name: " Profa. Bia "}); err != nil {
+		t.Fatal(err)
+	}
+	if _, cached := svc.names.get("advisor#" + profSub); cached {
+		t.Error("renaming must drop the cached name")
+	}
+	for name, c := range map[string]struct {
+		err  error
+		kind apperr.Kind
+		msg  string
+	}{
+		"blank name":            {svc.RenameAccount(ctx, profSub, NameInput{Name: " "}), apperr.KindInvalid, msgNameRequired},
+		"unknown account":       {svc.RenameAccount(ctx, "nao-e-sub", NameInput{Name: "X"}), apperr.KindNotFound, msgAccountNotFound},
+		"own role":              {svc.ChangeRole(ctx, me, coordSub, RoleInput{Role: actor.RoleAdvisor}), apperr.KindConflict, msgOwnRole},
+		"student role":          {svc.ChangeRole(ctx, me, studentSub, RoleInput{Role: actor.RoleAdvisor}), apperr.KindConflict, msgStudentRole},
+		"to student":            {svc.ChangeRole(ctx, me, profSub, RoleInput{Role: actor.RoleStudent}), apperr.KindInvalid, msgStaffRole},
+		"same role":             {svc.ChangeRole(ctx, me, profSub, RoleInput{Role: actor.RoleAdvisor}), apperr.KindConflict, msgSameRole},
+		"disable myself":        {svc.DisableAccount(ctx, me, coordSub), apperr.KindConflict, msgOwnDisable},
+		"disable disabled":      {svc.DisableAccount(ctx, me, coord2Sub), apperr.KindConflict, msgAlreadyDisabled},
+		"enable enabled":        {svc.EnableAccount(ctx, profSub), apperr.KindConflict, msgAlreadyEnabled},
+		"resend after access":   {svc.ResendInvitation(ctx, profSub), apperr.KindConflict, msgNoPendingInvitation},
+		"resend to student":     {svc.ResendInvitation(ctx, studentSub), apperr.KindConflict, msgInvitationStaffOnly},
+		"last admin by another": {svc.ChangeRole(ctx, actor.Actor{Role: actor.RoleAdmin, Sub: "x"}, coordSub, RoleInput{Role: actor.RoleAdvisor}), apperr.KindConflict, msgLastAdmin},
+		"last admin disabled":   {svc.DisableAccount(ctx, actor.Actor{Role: actor.RoleAdmin, Sub: "x"}, coordSub), apperr.KindConflict, msgLastAdmin},
+	} {
+		e, ok := apperr.As(c.err)
+		if !ok || e.Kind != c.kind || e.Message != c.msg {
+			t.Errorf("%s: err = %v", name, c.err)
+		}
+	}
+
+	if err := svc.ChangeRole(ctx, me, profSub, RoleInput{Role: actor.RoleAdmin}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DisableAccount(ctx, me, studentSub); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.EnableAccount(ctx, coord2Sub); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ResendInvitation(ctx, newSub); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"name " + profSub + " Profa. Bia", "role " + profSub + " ADMIN", "disable " + studentSub, "enable " + coord2Sub, "resend nova@umc.br"}
+	if !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("calls = %q", d.calls)
+	}
+}
+
+func TestLastAdminIgnoresPendingInvitation(t *testing.T) {
+	d := accounts()
+	for i := range d.users {
+		if d.users[i].ID == newSub {
+			d.users[i].Role = actor.RoleAdmin
+		}
+	}
+	svc := newTestService(t, d)
+	err := svc.ChangeRole(context.Background(), actor.Actor{Role: actor.RoleAdmin, Sub: "x"}, coordSub, RoleInput{Role: actor.RoleAdvisor})
+	if e, ok := apperr.As(err); !ok || e.Message != msgLastAdmin {
+		t.Errorf("err = %v", err)
 	}
 }
 

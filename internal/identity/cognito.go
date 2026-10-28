@@ -224,7 +224,73 @@ func toUser(u types.UserType) User {
 	for _, a := range u.Attributes {
 		attrs[aws.ToString(a.Name)] = aws.ToString(a.Value)
 	}
-	return userFromAttributes(attrs, aws.ToString(u.Username), u.Enabled, u.UserStatus == types.UserStatusTypeConfirmed)
+	user := userFromAttributes(attrs, aws.ToString(u.Username), u.Enabled, u.UserStatus == types.UserStatusTypeConfirmed)
+	user.FirstAccessPending = u.UserStatus == types.UserStatusTypeForceChangePassword
+	return user
+}
+
+func classifyAdmin(err error) error {
+	var (
+		missing   *types.UserNotFoundException
+		invalid   *types.InvalidParameterException
+		throttled *types.TooManyRequestsException
+	)
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &missing):
+		return classify(err, errNoAccount)
+	case errors.As(err, &invalid):
+		return classify(err, errInvalidInput)
+	case errors.As(err, &throttled):
+		return classify(err, errThrottled)
+	}
+	return err
+}
+
+func (c *Cognito) setAttribute(ctx context.Context, username, name, value string) error {
+	_, err := c.client.AdminUpdateUserAttributes(ctx, &cip.AdminUpdateUserAttributesInput{
+		UserPoolId:     aws.String(c.userPoolID),
+		Username:       aws.String(username),
+		UserAttributes: []types.AttributeType{{Name: aws.String(name), Value: aws.String(value)}},
+	})
+	return classifyAdmin(err)
+}
+
+func (c *Cognito) SetName(ctx context.Context, username, name string) error {
+	return c.setAttribute(ctx, username, "name", name)
+}
+
+func (c *Cognito) SetRole(ctx context.Context, username string, role actor.Role) error {
+	return c.setAttribute(ctx, username, "custom:perfil", string(role))
+}
+
+func (c *Cognito) Disable(ctx context.Context, username string) error {
+	if _, err := c.client.AdminDisableUser(ctx, &cip.AdminDisableUserInput{
+		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
+	}); err != nil {
+		return classifyAdmin(err)
+	}
+	_, err := c.client.AdminUserGlobalSignOut(ctx, &cip.AdminUserGlobalSignOutInput{
+		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
+	})
+	return classifyAdmin(err)
+}
+
+func (c *Cognito) Enable(ctx context.Context, username string) error {
+	_, err := c.client.AdminEnableUser(ctx, &cip.AdminEnableUserInput{
+		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
+	})
+	return classifyAdmin(err)
+}
+
+func (c *Cognito) ResendInvitation(ctx context.Context, email string) error {
+	_, err := c.client.AdminCreateUser(ctx, &cip.AdminCreateUserInput{
+		UserPoolId:    aws.String(c.userPoolID),
+		Username:      aws.String(email),
+		MessageAction: types.MessageActionTypeResend,
+	})
+	return classifyAdmin(err)
 }
 
 func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]User, error) {

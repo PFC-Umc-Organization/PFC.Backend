@@ -21,6 +21,8 @@ var lambdaPolicy = map[string]bool{
 	"dynamodb:DeleteItem": true, "dynamodb:Query": true,
 	"dynamodb:BatchWriteItem": true, "dynamodb:BatchGetItem": true, "dynamodb:ConditionCheckItem": true,
 	"cognito-idp:ListUsers": true, "cognito-idp:AdminCreateUser": true,
+	"cognito-idp:AdminUpdateUserAttributes": true, "cognito-idp:AdminDisableUser": true,
+	"cognito-idp:AdminEnableUser": true, "cognito-idp:AdminUserGlobalSignOut": true,
 	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true, "s3:ListBucket": true,
 }
 

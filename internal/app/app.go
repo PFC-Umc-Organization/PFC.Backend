@@ -51,6 +51,7 @@ func New(d Deps) *httpapi.Router {
 	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), groupsStore)
 	identitySvc := identity.NewService(identity.NewCognito(d.Cognito, d.Config.CognitoClientID, d.Config.CognitoUserPoolID), academicSvc)
 	groupsSvc := groups.NewService(groupsStore, academicForGroups{academicSvc}, identitySvc)
+	identitySvc.UseAdvising(groupsSvc)
 	catalog := references.NewCatalog(references.CatalogConfig{
 		CrossrefURL:    d.Config.CrossrefURL,
 		OpenAlexURL:    d.Config.OpenAlexURL,
@@ -82,6 +83,15 @@ func New(d Deps) *httpapi.Router {
 // academicForGroups hands groups the cohort in its own type, so neither
 // module imports the other.
 type academicForGroups struct{ *academic.Service }
+
+func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
+	programs, err := a.Service.ListPrograms(ctx)
+	ids := make([]string, 0, len(programs))
+	for _, p := range programs {
+		ids = append(ids, p.ID)
+	}
+	return ids, err
+}
 
 func (a academicForGroups) Cohort(ctx context.Context, id string) (groups.Cohort, bool, error) {
 	c, found, err := a.Service.Cohort(ctx, id)

@@ -175,16 +175,16 @@ const (
 	msgCannotJoin           = "Não foi possível entrar no grupo: ele já atingiu o limite de integrantes ou você já faz parte dele."
 )
 
-func msgAlreadyMember(rgm string) string  { return "O RGM " + rgm + " já é integrante do grupo" }
-func msgNotMember(rgm string) string      { return "O RGM " + rgm + " não é integrante do grupo" }
-func msgInOtherProject(rgm string) string { return "O RGM " + rgm + " já faz parte de outro projeto" }
+func msgAlreadyMember(rgm string) string  { return "O RGM " + rgm + " já é integrante do grupo." }
+func msgNotMember(rgm string) string      { return "O RGM " + rgm + " não é integrante do grupo." }
+func msgInOtherProject(rgm string) string { return "O RGM " + rgm + " já faz parte de outro projeto." }
 func msgNotInCohort(rgm string) string {
-	return "O RGM " + rgm + " não está pré-autorizado na sua turma"
+	return "O RGM " + rgm + " não está pré-autorizado na sua turma. Peça à coordenação a pré-autorização."
 }
 func msgNotInGroupCohort(rgm string) string {
-	return "O RGM " + rgm + " não está pré-autorizado na turma do grupo"
+	return "O RGM " + rgm + " não está pré-autorizado na turma do grupo. Peça à coordenação a pré-autorização."
 }
-func msgAlreadyInvited(rgm string) string { return "O RGM " + rgm + " já tem um convite deste grupo" }
+func msgAlreadyInvited(rgm string) string { return "O RGM " + rgm + " já tem um convite deste grupo." }
 func msgInNamedProject(rgm, name string) string {
-	return "O RGM " + rgm + " já faz parte do projeto \"" + name + "\""
+	return "O RGM " + rgm + " já faz parte do projeto \"" + name + "\"."
 }

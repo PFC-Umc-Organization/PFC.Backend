@@ -19,16 +19,20 @@ const (
 )
 
 // User is an account as the account list shows it. Confirmed=false means
-// the e-mail was never confirmed, so the person cannot log in yet.
+// the e-mail was never confirmed, so the person cannot log in yet;
+// FirstAccessPending, that a staff account still has its temporary password.
+// Username is Cognito's, which the admin calls take.
 type User struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"nome"`
-	Email     string     `json:"email,omitempty"`
-	Role      actor.Role `json:"perfil"`
-	Status    string     `json:"status"`
-	Confirmed bool       `json:"confirmado"`
-	CohortIDs []string   `json:"cursoIds"`
-	RGM       string     `json:"rgm,omitempty"`
+	ID                 string     `json:"id"`
+	Name               string     `json:"nome"`
+	Email              string     `json:"email,omitempty"`
+	Role               actor.Role `json:"perfil"`
+	Status             string     `json:"status"`
+	Confirmed          bool       `json:"confirmado"`
+	FirstAccessPending bool       `json:"aguardandoPrimeiroAcesso,omitempty"`
+	CohortIDs          []string   `json:"cursoIds"`
+	RGM                string     `json:"rgm,omitempty"`
+	Username           string     `json:"-"`
 }
 
 type SessionUser struct {
@@ -97,6 +101,16 @@ type ResendInput struct {
 	Email string `json:"email"`
 }
 
+type NameInput struct {
+	Name string `json:"nome"`
+}
+
+type RoleInput struct {
+	Role actor.Role `json:"perfil"`
+}
+
+const maxAccountNameLen = 150
+
 // NewAccount is for advisors and admins; students only sign themselves up.
 type NewAccount struct {
 	Name  string     `json:"nome"`
@@ -126,6 +140,7 @@ func userFromAttributes(attrs map[string]string, username string, enabled, confi
 	}
 	u := User{
 		ID:        id,
+		Username:  username,
 		Name:      actor.DisplayName(attrs["name"], attrs["email"]),
 		Email:     attrs["email"],
 		Role:      roleOrStudent(attrs["custom:perfil"]),
@@ -202,4 +217,18 @@ const (
 	msgExpiredCode         = "Código expirado. Solicite um novo código."
 	msgConfirmFailed       = "Código incorreto. Confira o e-mail e o código informados. Se a conta já foi confirmada, basta entrar."
 	msgNoSession           = "Sessão expirada. Entre novamente."
+
+	msgAccountNotFound     = "Conta não encontrada."
+	msgNameRequired        = "Informe o nome."
+	msgNameTooLong         = "O nome excede o tamanho máximo permitido."
+	msgStudentRole         = "Contas de aluno não mudam de perfil."
+	msgSameRole            = "A conta já tem este perfil."
+	msgOwnRole             = "Você não pode alterar o próprio perfil. Peça a outra pessoa da coordenação."
+	msgOwnDisable          = "Você não pode desativar a própria conta. Peça a outra pessoa da coordenação."
+	msgLastAdmin           = "Esta é a única conta ativa da coordenação. Promova outra conta à coordenação antes de alterá-la."
+	msgAlreadyDisabled     = "A conta já está desativada."
+	msgAlreadyEnabled      = "A conta já está ativa."
+	msgNoPendingInvitation = "Esta conta já fez o primeiro acesso. Para recuperar a senha, a pessoa pode usar \"Esqueci minha senha\" na tela de entrada."
+	msgInvitationStaffOnly = "Só contas de orientador e da coordenação recebem convite. Alunos se cadastram pela tela de entrada."
+	msgDisabledInvitation  = "Reative a conta antes de reenviar o convite."
 )

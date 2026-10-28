@@ -1,6 +1,6 @@
 POST /auth/login [público]
 > {
-< 400 {"erro":"Corpo da requisição inválido"}
+< 400 {"erro":"Não foi possível ler os dados enviados. Atualize a página e tente novamente."}
 
 POST /auth/login [público]
 > {"email":"coord@umc.br"}
@@ -117,6 +117,109 @@ POST /auth/nova-senha [público]
 POST /auth/login [público]
 > {"email":"nova@umc.br","senha":"Nova#1234"}
 < 200 {"token":"eyJhbGciOiJub25lIn0.eyJjdXN0b206cGVyZmlsIjoiT1JJRU5UQURPUiIsImVtYWlsIjoibm92YUB1bWMuYnIiLCJuYW1lIjoiTm92YSBQcm9mIiwic3ViIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDA5In0.assinatura","usuario":{"cursoIds":[],"email":"nova@umc.br","id":"00000000-0000-4000-8000-000000000009","nome":"Nova Prof","perfil":"ORIENTADOR","status":"ATIVO"}}
+
+POST /admin/usuarios [ADMIN]
+> {"nome":"Outra Prof","email":"outra@umc.br","perfil":"ORIENTADOR"}
+< 201 {"mensagem":"Conta criada. A pessoa receberá por e-mail uma senha temporária de acesso."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/nome [ALUNO]
+> {"nome":"X"}
+< 403 {"erro":"Acesso restrito à coordenação."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/nome [ADMIN]
+> {"nome":" "}
+< 400 {"erro":"Informe o nome."}
+
+PUT /admin/usuarios/inexistente/nome [ADMIN]
+> {"nome":"X"}
+< 404 {"erro":"Conta não encontrada."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000999/nome [ADMIN]
+> {"nome":"X"}
+< 404 {"erro":"Conta não encontrada."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/nome [ADMIN]
+> {"nome":" Nova Professora "}
+< 200 {"mensagem":"Nome atualizado."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000003/nome [ADMIN]
+> {"nome":"Aluno Um da Silva"}
+< 200 {"mensagem":"Nome atualizado."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/perfil [ALUNO]
+> {"perfil":"ADMIN"}
+< 403 {"erro":"Acesso restrito à coordenação."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/perfil [ADMIN]
+> {"perfil":"ALUNO"}
+< 400 {"erro":"Selecione o perfil: orientador ou coordenação."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000001/perfil [ADMIN]
+> {"perfil":"ORIENTADOR"}
+< 409 {"erro":"Você não pode alterar o próprio perfil. Peça a outra pessoa da coordenação."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000003/perfil [ADMIN]
+> {"perfil":"ORIENTADOR"}
+< 409 {"erro":"Contas de aluno não mudam de perfil."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/perfil [ADMIN]
+> {"perfil":"ORIENTADOR"}
+< 409 {"erro":"A conta já tem este perfil."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/perfil [ADMIN]
+> {"perfil":"ADMIN"}
+< 200 {"mensagem":"Perfil alterado. A mudança vale a partir da próxima entrada da pessoa no portal."}
+
+PUT /admin/usuarios/00000000-0000-4000-8000-000000000009/perfil [ADMIN]
+> {"perfil":"ORIENTADOR"}
+< 200 {"mensagem":"Perfil alterado. A mudança vale a partir da próxima entrada da pessoa no portal."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/convite [ALUNO]
+< 403 {"erro":"Acesso restrito à coordenação."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000009/convite [ADMIN]
+< 409 {"erro":"Esta conta já fez o primeiro acesso. Para recuperar a senha, a pessoa pode usar \"Esqueci minha senha\" na tela de entrada."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000003/convite [ADMIN]
+< 409 {"erro":"Só contas de orientador e da coordenação recebem convite. Alunos se cadastram pela tela de entrada."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/convite [ADMIN]
+< 200 {"mensagem":"Convite reenviado. A pessoa receberá por e-mail uma nova senha temporária."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/desativar [ALUNO]
+< 403 {"erro":"Acesso restrito à coordenação."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000001/desativar [ADMIN]
+< 409 {"erro":"Você não pode desativar a própria conta. Peça a outra pessoa da coordenação."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/desativar [ADMIN]
+< 200 {"mensagem":"Conta desativada. A pessoa não consegue mais entrar no portal."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/desativar [ADMIN]
+< 409 {"erro":"A conta já está desativada."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/convite [ADMIN]
+< 409 {"erro":"Reative a conta antes de reenviar o convite."}
+
+POST /auth/login [público]
+> {"email":"outra@umc.br","senha":"temporaria"}
+< 401 {"erro":"E-mail ou senha incorretos."}
+
+GET /usuarios [ADMIN]
+< 200 [{"aguardandoPrimeiroAcesso":true,"confirmado":false,"cursoIds":[],"email":"outra@umc.br","id":"00000000-0000-4000-8000-000000000010","nome":"Outra Prof","perfil":"ORIENTADOR","status":"INATIVO"},{"confirmado":false,"cursoIds":[],"email":"444@alunos.umc.br","id":"00000000-0000-4000-8000-000000000006","nome":"Aluno Quatro","perfil":"ALUNO","rgm":"444","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um da Silva","perfil":"ALUNO","rgm":"111","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"222@alunos.umc.br","id":"00000000-0000-4000-8000-000000000004","nome":"Aluno Dois","perfil":"ALUNO","rgm":"222","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"333@alunos.umc.br","id":"00000000-0000-4000-8000-000000000005","nome":"Aluno Três","perfil":"ALUNO","rgm":"333","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"555@alunos.umc.br","id":"00000000-0000-4000-8000-000000000008","nome":"Aluno Cinco","perfil":"ALUNO","rgm":"555","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"666@alunos.umc.br","id":"00000000-0000-4000-8000-000000000007","nome":"Aluno Sem Matrícula","perfil":"ALUNO","rgm":"666","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"coord@umc.br","id":"00000000-0000-4000-8000-000000000001","nome":"Coordenação","perfil":"ADMIN","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"nova@umc.br","id":"00000000-0000-4000-8000-000000000009","nome":"Nova Professora","perfil":"ORIENTADOR","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"prof@umc.br","id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador","perfil":"ORIENTADOR","status":"ATIVO"}]
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/reativar [ALUNO]
+< 403 {"erro":"Acesso restrito à coordenação."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/reativar [ADMIN]
+< 200 {"mensagem":"Conta reativada."}
+
+POST /admin/usuarios/00000000-0000-4000-8000-000000000010/reativar [ADMIN]
+< 409 {"erro":"A conta já está ativa."}
+
+POST /auth/login [público]
+> {"email":"outra@umc.br","senha":"temporaria"}
+< 200 {"desafio":"NOVA_SENHA","sessao":"sessao-00000000-0000-4000-8000-000000000010"}
 
 POST /auth/esqueci-senha [público]
 > {}
@@ -350,16 +453,16 @@ DELETE /admin/students [ADMIN]
 
 POST /auth/login [público]
 > {"email":"111@alunos.umc.br","senha":"Senha#123"}
-< 200 {"token":"eyJhbGciOiJub25lIn0.eyJjdXN0b206cGVyZmlsIjoiQUxVTk8iLCJlbWFpbCI6IjExMUBhbHVub3MudW1jLmJyIiwibmFtZSI6IkFsdW5vIFVtIiwic3ViIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIn0.assinatura","usuario":{"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um","perfil":"ALUNO","rgm":"111","status":"ATIVO"}}
+< 200 {"token":"eyJhbGciOiJub25lIn0.eyJjdXN0b206cGVyZmlsIjoiQUxVTk8iLCJlbWFpbCI6IjExMUBhbHVub3MudW1jLmJyIiwibmFtZSI6IkFsdW5vIFVtIGRhIFNpbHZhIiwic3ViIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIn0.assinatura","usuario":{"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um da Silva","perfil":"ALUNO","rgm":"111","status":"ATIVO"}}
 
 GET /usuarios [ADMIN]
-< 200 [{"confirmado":false,"cursoIds":["<id4>"],"email":"444@alunos.umc.br","id":"00000000-0000-4000-8000-000000000006","nome":"Aluno Quatro","perfil":"ALUNO","rgm":"444","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um","perfil":"ALUNO","rgm":"111","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"222@alunos.umc.br","id":"00000000-0000-4000-8000-000000000004","nome":"Aluno Dois","perfil":"ALUNO","rgm":"222","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"333@alunos.umc.br","id":"00000000-0000-4000-8000-000000000005","nome":"Aluno Três","perfil":"ALUNO","rgm":"333","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"555@alunos.umc.br","id":"00000000-0000-4000-8000-000000000008","nome":"Aluno Cinco","perfil":"ALUNO","rgm":"555","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"666@alunos.umc.br","id":"00000000-0000-4000-8000-000000000007","nome":"Aluno Sem Matrícula","perfil":"ALUNO","rgm":"666","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"coord@umc.br","id":"00000000-0000-4000-8000-000000000001","nome":"Coordenação","perfil":"ADMIN","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"nova@umc.br","id":"00000000-0000-4000-8000-000000000009","nome":"Nova Prof","perfil":"ORIENTADOR","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"prof@umc.br","id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador","perfil":"ORIENTADOR","status":"ATIVO"}]
+< 200 [{"aguardandoPrimeiroAcesso":true,"confirmado":false,"cursoIds":[],"email":"outra@umc.br","id":"00000000-0000-4000-8000-000000000010","nome":"Outra Prof","perfil":"ORIENTADOR","status":"ATIVO"},{"confirmado":false,"cursoIds":["<id4>"],"email":"444@alunos.umc.br","id":"00000000-0000-4000-8000-000000000006","nome":"Aluno Quatro","perfil":"ALUNO","rgm":"444","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um da Silva","perfil":"ALUNO","rgm":"111","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"222@alunos.umc.br","id":"00000000-0000-4000-8000-000000000004","nome":"Aluno Dois","perfil":"ALUNO","rgm":"222","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"333@alunos.umc.br","id":"00000000-0000-4000-8000-000000000005","nome":"Aluno Três","perfil":"ALUNO","rgm":"333","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"555@alunos.umc.br","id":"00000000-0000-4000-8000-000000000008","nome":"Aluno Cinco","perfil":"ALUNO","rgm":"555","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"666@alunos.umc.br","id":"00000000-0000-4000-8000-000000000007","nome":"Aluno Sem Matrícula","perfil":"ALUNO","rgm":"666","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"coord@umc.br","id":"00000000-0000-4000-8000-000000000001","nome":"Coordenação","perfil":"ADMIN","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"nova@umc.br","id":"00000000-0000-4000-8000-000000000009","nome":"Nova Professora","perfil":"ORIENTADOR","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"prof@umc.br","id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador","perfil":"ORIENTADOR","status":"ATIVO"}]
 
 GET /usuarios [ALUNO]
 < 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
 
 GET /usuarios [ORIENTADOR]
-< 200 [{"confirmado":false,"cursoIds":["<id4>"],"email":"444@alunos.umc.br","id":"00000000-0000-4000-8000-000000000006","nome":"Aluno Quatro","perfil":"ALUNO","rgm":"444","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um","perfil":"ALUNO","rgm":"111","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"222@alunos.umc.br","id":"00000000-0000-4000-8000-000000000004","nome":"Aluno Dois","perfil":"ALUNO","rgm":"222","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"333@alunos.umc.br","id":"00000000-0000-4000-8000-000000000005","nome":"Aluno Três","perfil":"ALUNO","rgm":"333","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"555@alunos.umc.br","id":"00000000-0000-4000-8000-000000000008","nome":"Aluno Cinco","perfil":"ALUNO","rgm":"555","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"666@alunos.umc.br","id":"00000000-0000-4000-8000-000000000007","nome":"Aluno Sem Matrícula","perfil":"ALUNO","rgm":"666","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"coord@umc.br","id":"00000000-0000-4000-8000-000000000001","nome":"Coordenação","perfil":"ADMIN","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"nova@umc.br","id":"00000000-0000-4000-8000-000000000009","nome":"Nova Prof","perfil":"ORIENTADOR","status":"ATIVO"},{"confirmado":true,"cursoIds":[],"email":"prof@umc.br","id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador","perfil":"ORIENTADOR","status":"ATIVO"}]
+< 200 []
 
 POST /programas [ALUNO]
 > {"cursoId":"<id4>"}
@@ -405,7 +508,7 @@ PUT /programas/<id10> [ADMIN]
 < 200 {"mensagem":"Programa atualizado."}
 
 DELETE /turmas/<id4> [ADMIN]
-< 409 {"erro":"Não é possível excluir uma turma com programa de PFC. Exclua o programa primeiro."}
+< 409 {"erro":"Não é possível excluir uma turma com RGMs pré-autorizados. Remova as pré-autorizações da turma em Usuários antes de excluí-la."}
 
 POST /meu-pfc [ADMIN]
 > {"nome":"X"}
@@ -425,7 +528,7 @@ POST /meu-pfc [ALUNO]
 
 POST /meu-pfc [ALUNO]
 > {"nome":"Athena","integrantes":["888"]}
-< 400 {"erro":"O RGM 888 não está pré-autorizado na sua turma"}
+< 400 {"erro":"O RGM 888 não está pré-autorizado na sua turma. Peça à coordenação a pré-autorização."}
 
 POST /meu-pfc [ALUNO]
 > {"nome":" Athena ","descricao":"Portal","integrantes":["222"," 222 ",""]}
@@ -442,7 +545,7 @@ GET /meu-pfc [ALUNO]
 < 200 {"grupo":null,"turma":null}
 
 GET /meu-pfc [ALUNO]
-< 200 {"grupo":{"integrantes":[{"nome":"Aluno Um","rgm":"111"}],"orientador":null,"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}},"programaId":"<id9>","turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
+< 200 {"grupo":{"integrantes":[{"nome":"Aluno Um da Silva","rgm":"111"}],"orientador":null,"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}},"programaId":"<id9>","turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
 
 POST /programas/<id9>/projetos [ALUNO]
 > {"nome":"X"}
@@ -470,7 +573,7 @@ GET /programas/<id9>/projetos [ORIENTADOR]
 < 200 []
 
 GET /projetos/<id12> [ALUNO]
-< 200 {"integrantes":[{"nome":"Aluno Um","rgm":"111"}],"orientador":null,"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
+< 200 {"integrantes":[{"nome":"Aluno Um da Silva","rgm":"111"}],"orientador":null,"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
 
 GET /projetos/<id13> [ALUNO]
 < 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação."}
@@ -534,7 +637,7 @@ GET /programas/<id9>/projetos [ORIENTADOR]
 < 200 [{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","orientadorId":"00000000-0000-4000-8000-000000000002","programaId":"<id9>"}]
 
 GET /projetos/<id12> [ORIENTADOR]
-< 200 {"integrantes":[{"nome":"Aluno Um","rgm":"111"}],"orientador":{"id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador"},"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","orientadorId":"00000000-0000-4000-8000-000000000002","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
+< 200 {"integrantes":[{"nome":"Aluno Um da Silva","rgm":"111"}],"orientador":{"id":"00000000-0000-4000-8000-000000000002","nome":"Prof. Orientador"},"projeto":{"descricao":"Portal","id":"<id12>","integrantes":["111"],"nome":"Athena","orientadorId":"00000000-0000-4000-8000-000000000002","programaId":"<id9>"},"turma":{"id":"<id4>","nome":"Engenharia de Software","periodo":"2026.2","turno":"NOITE"}}
 
 GET /projetos/<id13> [ORIENTADOR]
 < 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação."}
@@ -553,7 +656,7 @@ PUT /projetos/inexistente/integrantes [ADMIN]
 
 PUT /projetos/<id13>/integrantes [ADMIN]
 > {"rgm":"111"}
-< 409 {"erro":"O RGM 111 já faz parte do projeto \"Athena\""}
+< 409 {"erro":"O RGM 111 já faz parte do projeto \"Athena\"."}
 
 PUT /projetos/<id13>/integrantes [ADMIN]
 > {"rgm":"999"}
@@ -565,7 +668,7 @@ PUT /projetos/<id13>/integrantes [ADMIN]
 
 PUT /projetos/<id13>/integrantes [ADMIN]
 > {"rgm":"666"}
-< 409 {"erro":"O RGM 666 já é integrante do grupo"}
+< 409 {"erro":"O RGM 666 já é integrante do grupo."}
 
 DELETE /projetos/<id13>/integrantes [ALUNO]
 > {"rgm":"666"}
@@ -573,7 +676,7 @@ DELETE /projetos/<id13>/integrantes [ALUNO]
 
 DELETE /projetos/<id13>/integrantes [ADMIN]
 > {"rgm":"333"}
-< 404 {"erro":"O RGM 333 não é integrante do grupo"}
+< 404 {"erro":"O RGM 333 não é integrante do grupo."}
 
 DELETE /projetos/inexistente/integrantes [ADMIN]
 > {"rgm":"333"}
@@ -608,15 +711,15 @@ POST /projetos/<id12>/convites [ALUNO]
 
 POST /projetos/<id12>/convites [ALUNO]
 > {"rgm":"111"}
-< 409 {"erro":"O RGM 111 já é integrante do grupo"}
+< 409 {"erro":"O RGM 111 já é integrante do grupo."}
 
 POST /projetos/<id12>/convites [ALUNO]
 > {"rgm":"888"}
-< 400 {"erro":"O RGM 888 não está pré-autorizado na turma do grupo"}
+< 400 {"erro":"O RGM 888 não está pré-autorizado na turma do grupo. Peça à coordenação a pré-autorização."}
 
 POST /projetos/<id12>/convites [ALUNO]
 > {"rgm":"222"}
-< 409 {"erro":"O RGM 222 já tem um convite deste grupo"}
+< 409 {"erro":"O RGM 222 já tem um convite deste grupo."}
 
 POST /projetos/<id12>/convites [ALUNO]
 > {"rgm":"333"}
@@ -661,9 +764,12 @@ POST /projetos/<id12>/convites [ALUNO]
 GET /meus-convites [ALUNO]
 < 200 [{"convidadoPor":"111@alunos.umc.br","criadoEm":"<ts>","projetoId":"<id12>","projetoNome":"Athena","rgm":"444"}]
 
+GET /usuarios [ORIENTADOR]
+< 200 [{"confirmado":true,"cursoIds":["<id4>"],"email":"111@alunos.umc.br","id":"00000000-0000-4000-8000-000000000003","nome":"Aluno Um da Silva","perfil":"ALUNO","rgm":"111","status":"ATIVO"},{"confirmado":true,"cursoIds":["<id4>"],"email":"222@alunos.umc.br","id":"00000000-0000-4000-8000-000000000004","nome":"Aluno Dois","perfil":"ALUNO","rgm":"222","status":"ATIVO"}]
+
 POST /atividades [ALUNO]
 > {"titulo":"Tema","prazo":"2099-11-01T23:59"}
-< 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
 
 POST /atividades [ADMIN]
 > {"titulo":"","prazo":"2099-11-01T23:59"}
@@ -679,6 +785,10 @@ POST /atividades [ADMIN]
 
 POST /atividades [ORIENTADOR]
 > {"titulo":"Definição do Tema","descricao":"d","prazo":"2099-11-01T23:59"}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
+
+POST /atividades [ADMIN]
+> {"titulo":"Definição do Tema","descricao":"d","prazo":"2099-11-01T23:59"}
 < 201 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"d","id":"<id16>","prazo":"2099-11-01T23:59","publicadaEm":"<ts>","titulo":"Definição do Tema"}
 
 POST /atividades [ADMIN]
@@ -690,19 +800,27 @@ GET /atividades [ALUNO]
 
 PUT /atividades/<id16> [ALUNO]
 > {"titulo":"x","prazo":"2099-11-01T23:59"}
-< 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
 
 PUT /atividades/inexistente [ADMIN]
 > {"titulo":"x","prazo":"2099-11-01T23:59"}
 < 404 {"erro":"Atividade não encontrada."}
 
+PUT /atividades/<id16> [ORIENTADOR]
+> {"titulo":"x","prazo":"2099-11-01T23:59"}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
+
 PUT /atividades/<id16> [ADMIN]
 > {"titulo":"Tema final","descricao":"","prazo":"2099-11-02T23:59"}
 < 200 {"campos":[{"id":"<id17>","obrigatorio":true,"rotulo":"Arquivo da entrega","tipo":"ARQUIVO"}],"descricao":"","id":"<id16>","prazo":"2099-11-02T23:59","publicadaEm":"<ts>","titulo":"Tema final"}
 
+POST /atividades/<id16>/campos [ORIENTADOR]
+> {"rotulo":"X","tipo":"TEXTO"}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
+
 POST /atividades/<id16>/campos [ALUNO]
 > {"rotulo":"X","tipo":"TEXTO"}
-< 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
 
 POST /atividades/<id16>/campos [ADMIN]
 > {"rotulo":"X","tipo":"VIDEO"}
@@ -717,7 +835,7 @@ POST /atividades/<id16>/campos [ADMIN]
 < 201 {"id":"<id21>","obrigatorio":false,"rotulo":"Observações","tipo":"TEXTO"}
 
 DELETE /atividades/<id16>/campos/<id21> [ALUNO]
-< 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
 
 DELETE /atividades/<id16>/campos/inexistente [ADMIN]
 < 404 {"erro":"Campo não encontrado."}
@@ -752,14 +870,57 @@ PUT /projetos/<id12>/entregas/<id18> [ALUNO]
 > {"respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}
 < 200 {"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}
 
+PUT /projetos/<id12>/entregas/<id18>/validacao [ALUNO]
+> {"status":"VALIDADA"}
+< 403 {"erro":"Apenas o orientador do projeto pode validar a entrega."}
+
+PUT /projetos/<id12>/entregas/<id18>/validacao [ADMIN]
+> {"status":"VALIDADA"}
+< 403 {"erro":"Apenas o orientador do projeto pode validar a entrega."}
+
+PUT /projetos/<id13>/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"VALIDADA"}
+< 403 {"erro":"Apenas o orientador do projeto pode validar a entrega."}
+
+PUT /projetos/inexistente/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"VALIDADA"}
+< 404 {"erro":"Projeto não encontrado."}
+
+PUT /projetos/<id12>/entregas/<id16>/validacao [ORIENTADOR]
+> {"status":"VALIDADA"}
+< 404 {"erro":"Entrega não encontrada."}
+
+PUT /projetos/<id12>/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"TALVEZ"}
+< 400 {"erro":"Informe se a entrega foi validada ou não validada."}
+
+PUT /projetos/<id12>/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"NAO_VALIDADA","comentario":" "}
+< 400 {"erro":"Informe o comentário para o grupo: o que precisa ser corrigido."}
+
+PUT /projetos/<id12>/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"NAO_VALIDADA","comentario":"Falta o resumo da arquitetura."}
+< 200 {"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"},"validacao":{"comentario":"Falta o resumo da arquitetura.","em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"NAO_VALIDADA"}}
+
 GET /projetos/<id12>/entregas [ALUNO]
-< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}]
+< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"},"validacao":{"comentario":"Falta o resumo da arquitetura.","em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"NAO_VALIDADA"}}]
+
+PUT /projetos/<id12>/entregas/<id18> [ALUNO]
+> {"respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"}}
+< 200 {"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"}}
+
+PUT /projetos/<id12>/entregas/<id18>/validacao [ORIENTADOR]
+> {"status":"VALIDADA"}
+< 200 {"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}
+
+GET /projetos/<id12>/entregas [ALUNO]
+< 200 [{"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}]
 
 GET /projetos/<id12>/entregas [ALUNO]
 < 403 {"erro":"Acesso restrito aos integrantes, ao orientador do projeto e à coordenação."}
 
 GET /projetos/<id12>/entregas [ORIENTADOR]
-< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}]
+< 200 [{"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}]
 
 GET /atividades/<id18>/entregas [ALUNO]
 < 403 {"erro":"Acesso restrito à coordenação."}
@@ -771,16 +932,16 @@ GET /programas/<id9>/entregas [ALUNO]
 < 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
 
 GET /programas/<id9>/entregas [ADMIN]
-< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}]
+< 200 [{"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}]
 
 GET /programas/<id9>/entregas [ORIENTADOR]
-< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}]
+< 200 [{"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}]
 
 DELETE /projetos/<id13>/entregas/<id18> [ORIENTADOR]
 < 403 {"erro":"Apenas a coordenação e o orientador do projeto podem devolver uma entrega."}
 
 GET /atividades/<id18>/entregas [ADMIN]
-< 200 [{"atividadeId":"<id18>","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo"}}]
+< 200 [{"atividadeId":"<id18>","atualizadaEm":"<ts>","atualizadaPor":"222@alunos.umc.br","entregueEm":"<ts>","entreguePor":"222@alunos.umc.br","projetoId":"<id12>","respostas":{"<id19>":"https://github.com/x/y","<id20>":"resumo com a arquitetura"},"validacao":{"em":"<ts>","por":"00000000-0000-4000-8000-000000000002","porNome":"prof@umc.br","status":"VALIDADA"}}]
 
 DELETE /projetos/<id12>/entregas/<id18> [ALUNO]
 < 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
@@ -1034,7 +1195,7 @@ POST /meu-pfc [ALUNO]
 < 201 {"descricao":"","id":"<id29>","integrantes":["111"],"nome":"Recomeço","programaId":"<id9>"}
 
 DELETE /atividades/<id18> [ALUNO]
-< 403 {"erro":"Acesso restrito a orientadores e à coordenação."}
+< 403 {"erro":"Apenas a coordenação cria, altera e exclui atividades."}
 
 DELETE /atividades/<id18> [ADMIN]
 < 200 {"mensagem":"Atividade excluída."}
