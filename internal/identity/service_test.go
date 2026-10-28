@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
@@ -64,9 +63,9 @@ func (f *fakeDirectory) ResendCode(context.Context, string) error             { 
 func (f *fakeDirectory) ListUsers(context.Context) ([]User, error) {
 	return append([]User(nil), f.users...), f.err
 }
-func (f *fakeDirectory) CreateAccount(_ context.Context, name, email string, role actor.Role) error {
+func (f *fakeDirectory) CreateAccount(_ context.Context, name, email string, role actor.Role) (string, error) {
 	f.created = append(f.created, NewAccount{Name: name, Email: email, Role: role})
-	return f.err
+	return "sub-" + email, f.err
 }
 func (f *fakeDirectory) UsersWithEmailPrefix(_ context.Context, prefix string) ([]User, error) {
 	f.queried++
@@ -89,6 +88,35 @@ func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, err
 	return out, nil
 }
 
+type fakeProfiles struct {
+	students map[string]string
+	staff    map[string]StaffProfile
+}
+
+func (f *fakeProfiles) SaveStudent(_ context.Context, rgm, name string) error {
+	f.students[rgm] = name
+	return nil
+}
+func (f *fakeProfiles) SaveStaff(_ context.Context, sub, name string, role actor.Role) error {
+	f.staff[sub] = StaffProfile{Name: name, Role: role}
+	return nil
+}
+func (f *fakeProfiles) StudentNames(_ context.Context, rgms []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, r := range rgms {
+		if n, ok := f.students[r]; ok {
+			out[r] = n
+		}
+	}
+	return out, nil
+}
+func (f *fakeProfiles) Staff(_ context.Context, sub string) (StaffProfile, bool, error) {
+	p, ok := f.staff[sub]
+	return p, ok, nil
+}
+
+func profilesOf(s *Service) *fakeProfiles { return s.profiles.(*fakeProfiles) }
+
 type cohorts map[string]string
 
 func (c cohorts) CohortOf(_ context.Context, rgm string) (string, error) { return c[rgm], nil }
@@ -105,7 +133,7 @@ func (c cohorts) CohortsOf(_ context.Context, rgms []string) (map[string]string,
 func newTestService(t *testing.T, d *fakeDirectory) *Service {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
-	return NewService(d, cohorts{"12345678901": "turma-1"})
+	return NewService(d, cohorts{"12345678901": "turma-1"}, &fakeProfiles{students: map[string]string{}, staff: map[string]StaffProfile{}})
 }
 
 func token(claims map[string]any) string {
@@ -284,12 +312,11 @@ func TestAccountManagement(t *testing.T) {
 	d := accounts()
 	svc := newTestService(t, d)
 
-	svc.names.put("advisor#"+profSub, "Nome antigo")
 	if err := svc.RenameAccount(ctx, profSub, NameInput{Name: " Profa. Bia "}); err != nil {
 		t.Fatal(err)
 	}
-	if _, cached := svc.names.get("advisor#" + profSub); cached {
-		t.Error("renaming must drop the cached name")
+	if p := profilesOf(svc).staff[profSub]; p != (StaffProfile{Name: "Profa. Bia", Role: actor.RoleAdvisor}) {
+		t.Errorf("renamed profile = %+v", p)
 	}
 	for name, c := range map[string]struct {
 		err  error
@@ -318,6 +345,9 @@ func TestAccountManagement(t *testing.T) {
 
 	if err := svc.ChangeRole(ctx, me, profSub, RoleInput{Role: actor.RoleAdmin}); err != nil {
 		t.Fatal(err)
+	}
+	if p := profilesOf(svc).staff[profSub]; p.Role != actor.RoleAdmin {
+		t.Errorf("profile after the role change = %+v", p)
 	}
 	if err := svc.DisableAccount(ctx, me, studentSub); err != nil {
 		t.Fatal(err)
@@ -348,67 +378,63 @@ func TestLastAdminIgnoresPendingInvitation(t *testing.T) {
 	}
 }
 
-func TestStudentAndAdvisorNames(t *testing.T) {
+func TestNamesComeFromTheProfiles(t *testing.T) {
 	ctx := context.Background()
 	sub := "0c8f5a7e-1111-4222-8333-944455556666"
-	d := &fakeDirectory{users: []User{
-		{ID: "s1", Name: "Ana", Role: actor.RoleStudent, RGM: "11111111111"},
-		{ID: "s2", Name: "Prof com RGM", Role: actor.RoleAdvisor, RGM: "22222222222"},
-		{ID: sub, Name: "Orientadora", Role: actor.RoleAdvisor},
-	}}
+	d := &fakeDirectory{}
 	svc := newTestService(t, d)
-	names, err := svc.StudentNames(ctx, []string{"11111111111", "22222222222", "33333333333"})
+	if err := svc.SignUp(ctx, SignUpInput{Name: " Ana ", Email: "11111111111@Alunos.umc.br", Password: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	profilesOf(svc).staff[sub] = StaffProfile{Name: "Orientadora", Role: actor.RoleAdvisor}
+	profilesOf(svc).staff["0c8f5a7e-1111-4222-8333-944455550000"] = StaffProfile{Name: "Coordenação", Role: actor.RoleAdmin}
+
+	names, err := svc.StudentNames(ctx, []string{"11111111111", "33333333333"})
 	if err != nil || !reflect.DeepEqual(names, map[string]string{"11111111111": "Ana"}) {
 		t.Fatalf("names = %v, err = %v", names, err)
 	}
 	if name, ok, err := svc.AdvisorName(ctx, sub); err != nil || !ok || name != "Orientadora" {
 		t.Fatalf("advisor = %q %v %v", name, ok, err)
 	}
+	if _, ok, _ := svc.AdvisorName(ctx, "0c8f5a7e-1111-4222-8333-944455550000"); ok {
+		t.Error("a coordination account is not an advisor")
+	}
 	if _, ok, _ := svc.AdvisorName(ctx, "s1"); ok {
 		t.Error("a malformed sub is not an advisor")
 	}
+	if d.queried != 0 {
+		t.Errorf("names looked up in Cognito %d times", d.queried)
+	}
 }
 
-func TestNamesAreCachedUntilTheTTL(t *testing.T) {
-	ctx := context.Background()
-	sub := "0c8f5a7e-1111-4222-8333-944455556666"
+func TestSyncNames(t *testing.T) {
 	d := &fakeDirectory{users: []User{
 		{ID: "s1", Name: "Ana", Role: actor.RoleStudent, RGM: "11111111111"},
-		{ID: sub, Name: "Orientadora", Role: actor.RoleAdvisor},
+		{ID: "s2", Name: "Sem RGM", Role: actor.RoleStudent},
+		{ID: "p1", Name: "Prof", Role: actor.RoleAdvisor},
 	}}
-	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	svc := newTestService(t, d)
-	svc.names = newNameCache(func() time.Time { return now })
-	lookup := func() {
-		t.Helper()
-		names, err := svc.StudentNames(ctx, []string{"11111111111", "33333333333"})
-		name, _, err2 := svc.AdvisorName(ctx, sub)
-		if err != nil || err2 != nil || names["11111111111"] != "Ana" || name != "Orientadora" {
-			t.Fatalf("names = %v, advisor = %q, err = %v %v", names, name, err, err2)
-		}
+	p := &fakeProfiles{students: map[string]string{}, staff: map[string]StaffProfile{}}
+	if students, staff, err := SyncNames(context.Background(), d, p, false); err != nil || students != 1 || staff != 1 || len(p.students)+len(p.staff) != 0 {
+		t.Fatalf("simulation: %d %d %v, saved %v %v", students, staff, err, p.students, p.staff)
 	}
-	lookup()
-	if d.queried != 3 {
-		t.Fatalf("first lookup made %d queries, want 3", d.queried)
+	if _, _, err := SyncNames(context.Background(), d, p, true); err != nil {
+		t.Fatal(err)
 	}
-	d.users[0].Name = "Ana Souza"
-	lookup()
-	if d.queried != 4 {
-		t.Errorf("a cached name was looked up again, or a missing one was cached (%d queries)", d.queried)
-	}
-	now = now.Add(nameTTL)
-	names, _ := svc.StudentNames(ctx, []string{"11111111111"})
-	if names["11111111111"] != "Ana Souza" {
-		t.Errorf("after the TTL the name is %q", names["11111111111"])
+	if p.students["11111111111"] != "Ana" || p.staff["p1"] != (StaffProfile{Name: "Prof", Role: actor.RoleAdvisor}) {
+		t.Errorf("saved %v %v", p.students, p.staff)
 	}
 }
 
 func TestCreateAccount(t *testing.T) {
 	ctx := context.Background()
 	d := &fakeDirectory{}
-	if err := newTestService(t, d).CreateAccount(ctx, NewAccount{Name: " Prof ", Email: " Prof@UMC.br ", Role: actor.RoleAdvisor}); err != nil ||
+	svc := newTestService(t, d)
+	if err := svc.CreateAccount(ctx, NewAccount{Name: " Prof ", Email: " Prof@UMC.br ", Role: actor.RoleAdvisor}); err != nil ||
 		len(d.created) != 1 || d.created[0] != (NewAccount{Name: "Prof", Email: "prof@umc.br", Role: actor.RoleAdvisor}) {
 		t.Fatalf("created = %+v, err = %v", d.created, err)
+	}
+	if p := profilesOf(svc).staff["sub-prof@umc.br"]; p != (StaffProfile{Name: "Prof", Role: actor.RoleAdvisor}) {
+		t.Errorf("profile = %+v", p)
 	}
 	for name, in := range map[string]NewAccount{
 		"student domain": {Name: "A", Email: "1@alunos.umc.br", Role: actor.RoleAdvisor},

@@ -220,6 +220,7 @@ const (
 
 	msgAccountNotFound     = "Conta não encontrada."
 	msgNameRequired        = "Informe o nome."
+	msgNameNotSaved        = "A conta foi alterada, mas o nome não foi atualizado nas telas. Tente novamente em instantes."
 	msgNameTooLong         = "O nome excede o tamanho máximo permitido."
 	msgStudentRole         = "Contas de aluno não mudam de perfil."
 	msgSameRole            = "A conta já tem este perfil."

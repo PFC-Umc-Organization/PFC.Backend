@@ -124,6 +124,7 @@ func TestContrato(t *testing.T) {
 	cognito.add("333@alunos.umc.br", "Aluno Três", "", true)
 	cognito.add("444@alunos.umc.br", "Aluno Quatro", "ALUNO", false)
 	cognito.add("666@alunos.umc.br", "Aluno Sem Matrícula", "ALUNO", true)
+	copiarNomes(t)
 
 	// auth
 	tr.expect(pub, "POST", "/auth/login", `{`, 400)

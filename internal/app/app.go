@@ -49,7 +49,7 @@ func Load(ctx context.Context) (Deps, error) {
 func New(d Deps) *httpapi.Router {
 	groupsStore := groups.NewDynamoStore(d.Table)
 	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), groupsStore)
-	identitySvc := identity.NewService(identity.NewCognito(d.Cognito, d.Config.CognitoClientID, d.Config.CognitoUserPoolID), academicSvc)
+	identitySvc := identity.NewService(identity.NewCognito(d.Cognito, d.Config.CognitoClientID, d.Config.CognitoUserPoolID), academicSvc, identity.NewDynamoProfiles(d.Table))
 	groupsSvc := groups.NewService(groupsStore, academicForGroups{academicSvc}, identitySvc)
 	identitySvc.UseAdvising(groupsSvc)
 	catalog := references.NewCatalog(references.CatalogConfig{

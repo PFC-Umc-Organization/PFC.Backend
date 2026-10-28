@@ -81,6 +81,8 @@ em rota nenhuma.
 | Referência | `PROJECT#<id>` | `REF#<hash do DOI>` | — | — |
 | Atividade | `ACTIVITY#<id>` | `PROFILE` | `ACTIVITIES` | `ACTIVITY#<id>` |
 | Material | `MATERIAL#<id>` | `PROFILE` | `MATERIAIS` | `MATERIAL#<id>` |
+| Nome do aluno | `ALUNO#<rgm>` | `CONTA` | — | — |
+| Nome da equipe | `EQUIPE#<sub>` | `CONTA` | — | — |
 
 Arquivos ficam no bucket `UPLOADS_BUCKET`, nunca no DynamoDB:
 `entregas/<projeto>/<atividade>/<campo>/<id>/<nome>` (a resposta do campo é a
@@ -289,9 +291,16 @@ matrículas, sem travas nem vínculos) precisa passar uma vez pelo
 `cmd/migrar`. É idempotente e, sem `-aplicar`, só simula:
 
 ```bash
-TABLE_NAME=<tabela> go run ./cmd/migrar            # mostra o que faria
-TABLE_NAME=<tabela> go run ./cmd/migrar -aplicar
+TABLE_NAME=<tabela> COGNITO_USER_POOL_ID=<pool> go run ./cmd/migrar            # mostra o que faria
+TABLE_NAME=<tabela> COGNITO_USER_POOL_ID=<pool> go run ./cmd/migrar -aplicar
 ```
+
+Com `COGNITO_USER_POOL_ID`, a migração também copia o nome de todas as contas
+do Cognito para os itens `ALUNO#`/`EQUIPE#`. As telas leem os nomes da tabela
+(o `ListUsers` do Cognito aceita poucas chamadas por segundo no pool inteiro);
+o cadastro, a criação de conta, a troca de nome e a de perfil gravam o item.
+Conta criada no console do Cognito só aparece com nome depois de rodar a
+migração de novo.
 
 A migração também cria os **cursos** a partir das turmas que vieram antes do
 cadastro de cursos (com a grafia mais usada entre elas), liga cada turma ao

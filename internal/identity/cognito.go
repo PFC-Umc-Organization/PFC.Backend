@@ -195,8 +195,8 @@ func classifyConfirmation(err error) error {
 	return err
 }
 
-func (c *Cognito) CreateAccount(ctx context.Context, name, email string, role actor.Role) error {
-	_, err := c.client.AdminCreateUser(ctx, &cip.AdminCreateUserInput{
+func (c *Cognito) CreateAccount(ctx context.Context, name, email string, role actor.Role) (string, error) {
+	out, err := c.client.AdminCreateUser(ctx, &cip.AdminCreateUserInput{
 		UserPoolId: aws.String(c.userPoolID),
 		Username:   aws.String(email),
 		UserAttributes: []types.AttributeType{
@@ -212,11 +212,13 @@ func (c *Cognito) CreateAccount(ctx context.Context, name, email string, role ac
 	)
 	switch {
 	case errors.As(err, &taken):
-		return classify(err, errEmailTaken)
+		return "", classify(err, errEmailTaken)
 	case errors.As(err, &invalid):
-		return classify(err, errInvalidInput)
+		return "", classify(err, errInvalidInput)
+	case err != nil:
+		return "", err
 	}
-	return err
+	return toUser(*out.User).ID, nil
 }
 
 func toUser(u types.UserType) User {

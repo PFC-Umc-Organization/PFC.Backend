@@ -44,7 +44,7 @@ type Directory interface {
 	ResendCode(ctx context.Context, email string) error
 	// CreateAccount sends Cognito's e-mail invitation with a temporary
 	// password.
-	CreateAccount(ctx context.Context, name, email string, role actor.Role) error
+	CreateAccount(ctx context.Context, name, email string, role actor.Role) (sub string, err error)
 	ListUsers(ctx context.Context) ([]User, error)
 	SetName(ctx context.Context, username, name string) error
 	SetRole(ctx context.Context, username string, role actor.Role) error
@@ -57,6 +57,21 @@ type Directory interface {
 	ResendInvitation(ctx context.Context, email string) error
 	UsersWithEmailPrefix(ctx context.Context, prefix string) ([]User, error)
 	UsersWithSub(ctx context.Context, sub string) ([]User, error)
+}
+
+// Profiles keeps the names the pages show, so that showing a project costs
+// no Cognito call: ListUsers allows a few calls per second for the whole
+// pool. Written on sign-up, staff creation, rename and role change.
+type Profiles interface {
+	SaveStudent(ctx context.Context, rgm, name string) error
+	SaveStaff(ctx context.Context, sub, name string, role actor.Role) error
+	StudentNames(ctx context.Context, rgms []string) (map[string]string, error)
+	Staff(ctx context.Context, sub string) (StaffProfile, bool, error)
+}
+
+type StaffProfile struct {
+	Name string
+	Role actor.Role
 }
 
 // Advising tells which students an advisor follows: the members of the

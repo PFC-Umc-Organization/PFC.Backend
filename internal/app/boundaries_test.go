@@ -33,7 +33,7 @@ var allowed = map[string][]string{
 	"references": append([]string{"groups"}, platform...),
 
 	"app":        {"*"},
-	"integracao": {"app", "platform/dynamo", "platform/httpapi"},
+	"integracao": {"app", "identity", "platform/dynamo", "platform/httpapi"},
 }
 
 var platform = []string{"platform/actor", "platform/apperr", "platform/audit", "platform/dynamo", "platform/httpapi", "platform/parallel", "platform/storage"}

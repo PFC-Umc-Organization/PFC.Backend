@@ -3,10 +3,11 @@
 // and enrollments (these by cohort), the uniqueness locks and links, and
 // courses for cohorts that predate them. It is idempotent; without -aplicar
 // it only reports what it would do. Conflicts are listed for manual repair,
-// since the uniqueness rules would reject them.
+// since the uniqueness rules would reject them. With COGNITO_USER_POOL_ID it
+// also copies the accounts' names from Cognito into the table.
 //
-//	TABLE_NAME=... go run ./cmd/migrar
-//	TABLE_NAME=... go run ./cmd/migrar -aplicar
+//	TABLE_NAME=... COGNITO_USER_POOL_ID=... go run ./cmd/migrar
+//	TABLE_NAME=... COGNITO_USER_POOL_ID=... go run ./cmd/migrar -aplicar
 package main
 
 import (
@@ -21,11 +22,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/identity"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
@@ -89,6 +92,15 @@ func main() {
 	}
 	fmt.Printf("%s: %d itens indexados no GSI1, %d travas/vínculos criados, %d cursos criados, %d turmas ligadas ao curso, %d conflitos\n",
 		mode, m.indexed, m.locks, m.courses, m.linked, m.conflicts)
+
+	if pool := os.Getenv("COGNITO_USER_POOL_ID"); pool != "" {
+		cognito := identity.NewCognito(cognitoidentityprovider.NewFromConfig(cfg), "", pool)
+		students, staff, err := identity.SyncNames(ctx, cognito, identity.NewDynamoProfiles(m.table), *apply)
+		if err != nil {
+			log.Fatalf("nomes: %v", err)
+		}
+		fmt.Printf("%s: nomes de %d alunos e %d contas da equipe copiados do Cognito\n", mode, students, staff)
+	}
 }
 
 func (m *migration) scan(ctx context.Context) ([]dynamo.Item, error) {

@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/app"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/identity"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
@@ -30,6 +31,8 @@ var (
 	table   *dynamo.Table
 	cognito = newFakeCognito()
 	bucket  = newFakeS3()
+	// directory reads the fake Cognito outside the recorder, for setup.
+	directory identity.Directory
 )
 
 func TestMain(m *testing.M) {
@@ -66,6 +69,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	table = deps.Table
+	directory = identity.NewCognito(deps.Cognito, deps.Config.CognitoClientID, deps.Config.CognitoUserPoolID)
 	recorded := deps
 	recorded.Table = &dynamo.Table{
 		Client: dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) { o.APIOptions = append(o.APIOptions, recorder.middleware("dynamodb")) }),
@@ -94,6 +98,15 @@ func resetar(t *testing.T) {
 		t.Fatal(err)
 	}
 	cognito.reset()
+}
+
+// copiarNomes faz o que o cmd/migrar faz em produção: copia para a tabela
+// os nomes das contas criadas direto no Cognito.
+func copiarNomes(t *testing.T) {
+	t.Helper()
+	if _, _, err := identity.SyncNames(context.Background(), directory, identity.NewDynamoProfiles(table), true); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // criarTabela recria a tabela com o mesmo formato da infra: PK/SK e o GSI1

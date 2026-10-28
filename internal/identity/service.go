@@ -6,24 +6,22 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 )
 
 type Service struct {
 	directory Directory
 	academic  Academic
 	advising  Advising
-	names     *nameCache
+	profiles  Profiles
 }
 
-func NewService(directory Directory, academic Academic) *Service {
-	return &Service{directory: directory, academic: academic, names: newNameCache(time.Now)}
+func NewService(directory Directory, academic Academic, profiles Profiles) *Service {
+	return &Service{directory: directory, academic: academic, profiles: profiles}
 }
 
 // UseAdvising is set after construction: groups needs this service first,
@@ -228,6 +226,11 @@ func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 		record(ctx, "auth.cadastro", audit.Failure, message(appErr), &audit.Actor{Email: email})
 		return appErr
 	}
+	// The account exists already: a failure here only leaves the name out of
+	// the pages until cmd/migrar copies it from Cognito.
+	if err := s.profiles.SaveStudent(ctx, actor.RGMFromEmail(email), actor.DisplayName(name, email)); err != nil {
+		slog.ErrorContext(ctx, "student name not saved", "email", email, "error", err)
+	}
 	record(ctx, "auth.cadastro", audit.Success, "", &audit.Actor{Email: email})
 	return nil
 }
@@ -359,12 +362,11 @@ func (s *Service) lastActiveAdmin(ctx context.Context, u User) (bool, error) {
 	return true, nil
 }
 
-func (s *Service) forgetName(u User) {
-	keys := []string{"advisor#" + u.ID}
-	if u.RGM != "" {
-		keys = append(keys, "rgm#"+u.RGM)
+func (s *Service) saveName(ctx context.Context, u User) error {
+	if u.Role == actor.RoleStudent {
+		return s.profiles.SaveStudent(ctx, u.RGM, u.Name)
 	}
-	s.names.drop(keys...)
+	return s.profiles.SaveStaff(ctx, u.ID, u.Name, u.Role)
 }
 
 func adminError(err error) error {
@@ -399,7 +401,10 @@ func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) er
 	if err := s.directory.SetName(ctx, u.Username, name); err != nil {
 		return refuse(ctx, action, id, adminError(err))
 	}
-	s.forgetName(u)
+	u.Name = name
+	if err := s.saveName(ctx, u); err != nil {
+		return apperr.Internal(msgNameNotSaved, err)
+	}
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
 	return nil
 }
@@ -434,9 +439,13 @@ func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, 
 	if err := s.directory.SetRole(ctx, u.Username, in.Role); err != nil {
 		return refuse(ctx, action, id, adminError(err))
 	}
-	s.forgetName(u)
+	from := u.Role
+	u.Role = in.Role
+	if err := s.saveName(ctx, u); err != nil {
+		return apperr.Internal(msgNameNotSaved, err)
+	}
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id),
-		Details: map[string]any{"de": string(u.Role), "para": string(in.Role)}})
+		Details: map[string]any{"de": string(from), "para": string(in.Role)}})
 	return nil
 }
 
@@ -519,7 +528,8 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 		return apperr.Invalid(msgStaffRole)
 	}
 	details := map[string]any{"email": email, "perfil": string(in.Role)}
-	if err := s.directory.CreateAccount(ctx, name, email, in.Role); err != nil {
+	sub, err := s.directory.CreateAccount(ctx, name, email, in.Role)
+	if err != nil {
 		var appErr error
 		switch {
 		case errors.Is(err, errEmailTaken):
@@ -532,6 +542,9 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 		slog.WarnContext(ctx, "account creation failed", "email", email, "error", err)
 		audit.Record(ctx, audit.Event{Action: "usuario.criado", Result: audit.Failure, Reason: message(appErr), Details: details})
 		return appErr
+	}
+	if err := s.profiles.SaveStaff(ctx, sub, name, in.Role); err != nil {
+		slog.ErrorContext(ctx, "staff name not saved", "email", email, "error", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "usuario.criado", Result: audit.Success, Details: details})
 	return nil
@@ -552,55 +565,45 @@ func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 
 // StudentNames maps each RGM with a student account to its name.
 func (s *Service) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
-	names := make(map[string]string, len(rgms))
-	var missing []string
-	for _, rgm := range rgms {
-		if name, ok := s.names.get("rgm#" + rgm); ok {
-			names[rgm] = name
-		} else {
-			missing = append(missing, rgm)
-		}
-	}
-	found, err := parallel.Map(missing, func(rgm string) (User, error) {
-		users, err := s.directory.UsersWithEmailPrefix(ctx, rgm+"@")
-		if err != nil {
-			return User{}, err
-		}
-		i := slices.IndexFunc(users, func(u User) bool { return u.Role == actor.RoleStudent && u.RGM == rgm })
-		if i < 0 {
-			return User{}, nil
-		}
-		return users[i], nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, u := range found {
-		if u.RGM != "" {
-			names[u.RGM] = u.Name
-			s.names.put("rgm#"+u.RGM, u.Name)
-		}
-	}
-	return names, nil
+	return s.profiles.StudentNames(ctx, rgms)
 }
 
 func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, error) {
 	if !subFormat.MatchString(sub) {
 		return "", false, nil
 	}
-	if name, ok := s.names.get("advisor#" + sub); ok {
-		return name, true, nil
-	}
-	users, err := s.directory.UsersWithSub(ctx, sub)
-	if err != nil {
+	p, found, err := s.profiles.Staff(ctx, sub)
+	if err != nil || !found || p.Role != actor.RoleAdvisor {
 		return "", false, err
 	}
-	i := slices.IndexFunc(users, func(u User) bool { return u.ID == sub && u.Role == actor.RoleAdvisor })
-	if i < 0 {
-		return "", false, nil
+	return p.Name, true, nil
+}
+
+// SyncNames copies every account's name from Cognito into the table: for
+// accounts from before the names were kept there and for those created in
+// the console. Without apply it only counts them.
+func SyncNames(ctx context.Context, d Directory, p Profiles, apply bool) (students, staff int, err error) {
+	users, err := d.ListUsers(ctx)
+	if err != nil {
+		return 0, 0, err
 	}
-	s.names.put("advisor#"+sub, users[i].Name)
-	return users[i].Name, true, nil
+	s := &Service{profiles: p}
+	for _, u := range users {
+		if u.Role == actor.RoleStudent {
+			if u.RGM == "" {
+				continue
+			}
+			students++
+		} else {
+			staff++
+		}
+		if apply {
+			if err := s.saveName(ctx, u); err != nil {
+				return students, staff, err
+			}
+		}
+	}
+	return students, staff, nil
 }
 
 func (s *Service) AdvisorExists(ctx context.Context, sub string) (bool, error) {
