@@ -219,7 +219,7 @@ func TestFluxoCompleto(t *testing.T) {
 
 	// --- matrículas ---
 	esperar(t, admin, "POST", "/admin/students", `{"turmaId":"`+turmaEng+`","rgms":["111","222","333","444","abc"]}`, 200)
-	if body := esperar(t, admin, "GET", "/admin/students", "", 200); strings.Count(body, `"rgm"`) != 4 {
+	if body := esperar(t, admin, "GET", "/admin/students?turmaId="+turmaEng, "", 200); strings.Count(body, `"rgm"`) != 4 {
 		t.Fatalf("GET /admin/students: queria 4 RGMs, veio %s", body)
 	}
 

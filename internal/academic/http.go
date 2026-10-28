@@ -92,8 +92,8 @@ func (h handlers) deleteCohort(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Message("Turma excluída.", h.svc.DeleteCohort(ctx, r.Param("turmaId")))
 }
 
-func (h handlers) listEnrollments(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
-	enrollments, err := h.svc.ListEnrollments(ctx)
+func (h handlers) listEnrollments(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	enrollments, err := h.svc.ListEnrollments(ctx, r.Query("turmaId"))
 	return httpapi.Reply(200, enrollments, err)
 }
 

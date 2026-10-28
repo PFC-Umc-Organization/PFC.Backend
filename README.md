@@ -73,7 +73,7 @@ em rota nenhuma.
 | Trava de turma | `TURMA_UNICA#<id do curso>#<turno>#<período>` | `TURMA_UNICA` | — | — |
 | Programa da turma | `CURSO#<id>` | `PROGRAMA` | — | — |
 | Programa | `PROGRAM#<id>` | `PROFILE` | `PROGRAMAS` | `PROGRAM#<id>` |
-| Matrícula | `STUDENT#<rgm>` | `PROFILE` | `MATRICULAS` | `STUDENT#<rgm>` |
+| Matrícula | `STUDENT#<rgm>` | `PROFILE` | `MATRICULAS#<turmaId>` | `STUDENT#<rgm>` |
 | Projeto | `PROJECT#<id>` | `PROFILE` | `PROGRAM#<pid>` | `PROJECT#<id>` |
 | Projeto do aluno | `MEMBRO#<rgm>` | `PROJETO` | — | — |
 | Convite | `PROJECT#<id>` | `CONVITE#<rgm>` | `CONVITE#<rgm>` | `PROJECT#<id>` |

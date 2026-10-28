@@ -332,7 +332,13 @@ GET /admin/students [ALUNO]
 < 403 {"erro":"Acesso restrito à coordenação."}
 
 GET /admin/students [ADMIN]
-< 200 [{"rgm":"111","status":"ATIVO","turmaId":"<id4>"},{"rgm":"222","status":"ATIVO","turmaId":"<id4>"},{"rgm":"333","status":"ATIVO","turmaId":"<id4>"},{"rgm":"444","status":"ATIVO","turmaId":"<id4>"},{"rgm":"777","status":"ATIVO","turmaId":"<id4>"},{"rgm":"888","status":"ATIVO","turmaId":"<id6>"}]
+< 400 {"erro":"Selecione a turma."}
+
+GET /admin/students?turmaId=<id4> [ADMIN]
+< 200 [{"rgm":"111","status":"ATIVO","turmaId":"<id4>"},{"rgm":"222","status":"ATIVO","turmaId":"<id4>"},{"rgm":"333","status":"ATIVO","turmaId":"<id4>"},{"rgm":"444","status":"ATIVO","turmaId":"<id4>"},{"rgm":"777","status":"ATIVO","turmaId":"<id4>"}]
+
+GET /admin/students?turmaId=<id6> [ADMIN]
+< 200 [{"rgm":"888","status":"ATIVO","turmaId":"<id6>"}]
 
 DELETE /admin/students [ADMIN]
 > {"rgms":[]}

@@ -1,9 +1,9 @@
 // Command migrar brings a table written by older versions to the current
 // model (see the README, "Modelagem no DynamoDB"): GSI on cohorts, programs
-// and enrollments, the uniqueness locks and links, and courses for cohorts
-// that predate them. It is idempotent; without -aplicar it only reports what
-// it would do. Conflicts are listed for manual repair, since the uniqueness
-// rules would reject them.
+// and enrollments (these by cohort), the uniqueness locks and links, and
+// courses for cohorts that predate them. It is idempotent; without -aplicar
+// it only reports what it would do. Conflicts are listed for manual repair,
+// since the uniqueness rules would reject them.
 //
 //	TABLE_NAME=... go run ./cmd/migrar
 //	TABLE_NAME=... go run ./cmd/migrar -aplicar
@@ -135,7 +135,12 @@ func (m *migration) migrate(ctx context.Context, it dynamo.Item) {
 		link["programaId"] = dynamo.S(strings.TrimPrefix(pk, "PROGRAM#"))
 		m.lock(ctx, link, "programaId", "segundo programa na turma "+dynamo.String(it, "cursoId"))
 	case strings.HasPrefix(pk, "STUDENT#"):
-		m.index(ctx, it, "MATRICULAS")
+		cohort := dynamo.String(it, "turmaId")
+		if cohort == "" {
+			fmt.Printf("AVISO: matrícula %s sem turma; fica fora das listas até ser refeita\n", pk)
+			return
+		}
+		m.index(ctx, it, academic.EnrollmentsPartition(cohort))
 	case strings.HasPrefix(pk, "PROJECT#"):
 		members, _ := it["integrantes"].(*types.AttributeValueMemberL)
 		if members == nil {
@@ -154,7 +159,7 @@ func (m *migration) migrate(ctx context.Context, it dynamo.Item) {
 }
 
 func (m *migration) index(ctx context.Context, it dynamo.Item, partition string) {
-	if dynamo.String(it, "GSI1PK") != "" {
+	if dynamo.String(it, "GSI1PK") == partition {
 		return
 	}
 	m.indexed++

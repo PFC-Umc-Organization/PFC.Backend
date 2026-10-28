@@ -20,7 +20,7 @@ import (
 //	cohort lock     PK=TURMA_UNICA#<course id>#<shift>#<term> SK=TURMA_UNICA  cursoId
 //	cohort program  PK=CURSO#<id>                         SK=PROGRAMA     programaId
 //	program         PK=PROGRAM#<id>                       SK=PROFILE      GSI1PK=PROGRAMAS   GSI1SK=PROGRAM#<id>  cursoId
-//	enrollment      PK=STUDENT#<rgm>                      SK=PROFILE      GSI1PK=MATRICULAS  GSI1SK=STUDENT#<rgm> status, turmaId
+//	enrollment      PK=STUDENT#<rgm>                      SK=PROFILE      GSI1PK=MATRICULAS#<turmaId> GSI1SK=STUDENT#<rgm> status, turmaId
 //
 // Despite the prefix, CURSO# is a cohort and COURSE# a course: CURSO# predates
 // courses and its keys cannot change. A cohort points to its course by id
@@ -42,10 +42,9 @@ const (
 	enrollmentPrefix = "STUDENT#"
 	profileSK        = "PROFILE"
 
-	coursesPartition     = "COURSES"
-	cohortsPartition     = "TURMAS"
-	programsPartition    = "PROGRAMAS"
-	enrollmentsPartition = "MATRICULAS"
+	coursesPartition  = "COURSES"
+	cohortsPartition  = "TURMAS"
+	programsPartition = "PROGRAMAS"
 
 	enrollmentStatusActive = "ACTIVE"
 )
@@ -414,8 +413,11 @@ func (s *DynamoStore) DeleteProgram(ctx context.Context, p Program) error {
 	return err
 }
 
-func (s *DynamoStore) ListEnrollments(ctx context.Context) ([]Enrollment, error) {
-	items, err := dynamo.QueryIndex[enrollmentItem](ctx, s.table, enrollmentsPartition)
+// EnrollmentsPartition is the GSI1 partition of a cohort's enrollments.
+func EnrollmentsPartition(cohortID string) string { return "MATRICULAS#" + cohortID }
+
+func (s *DynamoStore) ListEnrollments(ctx context.Context, cohortID string) ([]Enrollment, error) {
+	items, err := dynamo.QueryIndex[enrollmentItem](ctx, s.table, EnrollmentsPartition(cohortID))
 	return mapItems(items, func(it enrollmentItem) Enrollment {
 		status := EnrollmentInactive
 		if it.Status == enrollmentStatusActive {
@@ -431,7 +433,7 @@ func (s *DynamoStore) PutEnrollments(ctx context.Context, rgms []string, cohortI
 		writes = append(writes, types.WriteRequest{PutRequest: &types.PutRequest{Item: dynamo.Item{
 			"PK":      dynamo.S(enrollmentPrefix + rgm),
 			"SK":      dynamo.S(profileSK),
-			"GSI1PK":  dynamo.S(enrollmentsPartition),
+			"GSI1PK":  dynamo.S(EnrollmentsPartition(cohortID)),
 			"GSI1SK":  dynamo.S(enrollmentPrefix + rgm),
 			"status":  dynamo.S(enrollmentStatusActive),
 			"turmaId": dynamo.S(cohortID),

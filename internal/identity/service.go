@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
@@ -16,10 +17,11 @@ import (
 type Service struct {
 	directory Directory
 	academic  Academic
+	names     *nameCache
 }
 
 func NewService(directory Directory, academic Academic) *Service {
-	return &Service{directory: directory, academic: academic}
+	return &Service{directory: directory, academic: academic, names: newNameCache(time.Now)}
 }
 
 // cohortsOf returns the cohort the student's RGM was pre-authorized in. A
@@ -336,7 +338,16 @@ func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 
 // StudentNames maps each RGM with a student account to its name.
 func (s *Service) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
-	found, err := parallel.Map(rgms, func(rgm string) (User, error) {
+	names := make(map[string]string, len(rgms))
+	var missing []string
+	for _, rgm := range rgms {
+		if name, ok := s.names.get("rgm#" + rgm); ok {
+			names[rgm] = name
+		} else {
+			missing = append(missing, rgm)
+		}
+	}
+	found, err := parallel.Map(missing, func(rgm string) (User, error) {
 		users, err := s.directory.UsersWithEmailPrefix(ctx, rgm+"@")
 		if err != nil {
 			return User{}, err
@@ -350,10 +361,10 @@ func (s *Service) StudentNames(ctx context.Context, rgms []string) (map[string]s
 	if err != nil {
 		return nil, err
 	}
-	names := make(map[string]string, len(found))
 	for _, u := range found {
 		if u.RGM != "" {
 			names[u.RGM] = u.Name
+			s.names.put("rgm#"+u.RGM, u.Name)
 		}
 	}
 	return names, nil
@@ -363,6 +374,9 @@ func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, er
 	if !subFormat.MatchString(sub) {
 		return "", false, nil
 	}
+	if name, ok := s.names.get("advisor#" + sub); ok {
+		return name, true, nil
+	}
 	users, err := s.directory.UsersWithSub(ctx, sub)
 	if err != nil {
 		return "", false, err
@@ -371,6 +385,7 @@ func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, er
 	if i < 0 {
 		return "", false, nil
 	}
+	s.names.put("advisor#"+sub, users[i].Name)
 	return users[i].Name, true, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
@@ -46,6 +47,7 @@ func (f *fakeDirectory) CreateAccount(_ context.Context, name, email string, rol
 	return f.err
 }
 func (f *fakeDirectory) UsersWithEmailPrefix(_ context.Context, prefix string) ([]User, error) {
+	f.queried++
 	var out []User
 	for _, u := range f.users {
 		if u.RGM != "" && strings.HasPrefix(u.RGM+"@", prefix) {
@@ -229,6 +231,40 @@ func TestStudentAndAdvisorNames(t *testing.T) {
 	}
 	if _, ok, _ := svc.AdvisorName(ctx, "s1"); ok {
 		t.Error("a malformed sub is not an advisor")
+	}
+}
+
+func TestNamesAreCachedUntilTheTTL(t *testing.T) {
+	ctx := context.Background()
+	sub := "0c8f5a7e-1111-4222-8333-944455556666"
+	d := &fakeDirectory{users: []User{
+		{ID: "s1", Name: "Ana", Role: actor.RoleStudent, RGM: "11111111111"},
+		{ID: sub, Name: "Orientadora", Role: actor.RoleAdvisor},
+	}}
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	svc := newTestService(t, d)
+	svc.names = newNameCache(func() time.Time { return now })
+	lookup := func() {
+		t.Helper()
+		names, err := svc.StudentNames(ctx, []string{"11111111111", "33333333333"})
+		name, _, err2 := svc.AdvisorName(ctx, sub)
+		if err != nil || err2 != nil || names["11111111111"] != "Ana" || name != "Orientadora" {
+			t.Fatalf("names = %v, advisor = %q, err = %v %v", names, name, err, err2)
+		}
+	}
+	lookup()
+	if d.queried != 3 {
+		t.Fatalf("first lookup made %d queries, want 3", d.queried)
+	}
+	d.users[0].Name = "Ana Souza"
+	lookup()
+	if d.queried != 4 {
+		t.Errorf("a cached name was looked up again, or a missing one was cached (%d queries)", d.queried)
+	}
+	now = now.Add(nameTTL)
+	names, _ := svc.StudentNames(ctx, []string{"11111111111"})
+	if names["11111111111"] != "Ana Souza" {
+		t.Errorf("after the TTL the name is %q", names["11111111111"])
 	}
 }
 

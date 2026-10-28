@@ -324,8 +324,12 @@ func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Service) ListEnrollments(ctx context.Context) ([]Enrollment, error) {
-	enrollments, err := s.store.ListEnrollments(ctx)
+func (s *Service) ListEnrollments(ctx context.Context, cohortID string) ([]Enrollment, error) {
+	cohortID = strings.TrimSpace(cohortID)
+	if cohortID == "" {
+		return nil, apperr.Invalid(msgEnrollCohortRequired)
+	}
+	enrollments, err := s.store.ListEnrollments(ctx, cohortID)
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar as matrículas. Tente novamente em instantes.", err)
 	}

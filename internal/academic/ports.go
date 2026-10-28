@@ -40,7 +40,7 @@ type Store interface {
 	MoveProgram(ctx context.Context, current Program, cohortID string) error
 	DeleteProgram(ctx context.Context, p Program) error
 
-	ListEnrollments(ctx context.Context) ([]Enrollment, error)
+	ListEnrollments(ctx context.Context, cohortID string) ([]Enrollment, error)
 	PutEnrollments(ctx context.Context, rgms []string, cohortID string) error
 	DeleteEnrollments(ctx context.Context, rgms []string) error
 	EnrollmentExists(ctx context.Context, rgm string) (bool, error)
