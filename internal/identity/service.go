@@ -50,7 +50,6 @@ func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error
 	}
 	result, err := s.directory.SignIn(ctx, email, in.Password)
 	if errors.Is(err, errNotConfirmed) {
-		// The frontend sends the student to the confirmation screen on 403.
 		record(ctx, "auth.login", audit.Failure, "conta ainda não confirmada", &audit.Actor{Email: email})
 		return LoginResult{}, apperr.Forbidden(msgNotConfirmed)
 	}

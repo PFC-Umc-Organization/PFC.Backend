@@ -1,6 +1,3 @@
-// Package identity owns accounts, which live only in Cognito: login,
-// student self sign-up and confirmation, the account list and the accounts
-// an admin creates for advisors and admins.
 package identity
 
 import (
@@ -18,10 +15,7 @@ const (
 	StatusInactive = "INATIVO"
 )
 
-// User is an account as the account list shows it. Confirmed=false means
-// the e-mail was never confirmed, so the person cannot log in yet;
-// FirstAccessPending, that a staff account still has its temporary password.
-// Username is Cognito's, which the admin calls take.
+
 type User struct {
 	ID                 string     `json:"id"`
 	Name               string     `json:"nome"`
@@ -50,9 +44,7 @@ type Session struct {
 	Token string      `json:"token"`
 }
 
-// LoginResult is a Session, or — for an account created by an admin, whose
-// temporary password must be replaced on the first login — the challenge the
-// frontend answers through POST /auth/nova-senha.
+
 type LoginResult struct {
 	User      *SessionUser `json:"usuario,omitempty"`
 	Token     string       `json:"token,omitempty"`
@@ -83,8 +75,7 @@ type Credentials struct {
 	Password string `json:"senha"`
 }
 
-// SignUpInput carries a role because the frontend form has one; it is
-// never trusted: public sign-up always creates a student.
+
 type SignUpInput struct {
 	Name     string     `json:"nome"`
 	Email    string     `json:"email"`
@@ -111,7 +102,6 @@ type RoleInput struct {
 
 const maxAccountNameLen = 150
 
-// NewAccount is for advisors and admins; students only sign themselves up.
 type NewAccount struct {
 	Name  string     `json:"nome"`
 	Email string     `json:"email"`
@@ -120,7 +110,6 @@ type NewAccount struct {
 
 func normalizeEmail(e string) string { return strings.TrimSpace(strings.ToLower(e)) }
 
-// roleOrStudent: self-registered accounts may carry no custom:perfil.
 func roleOrStudent(r string) actor.Role {
 	if r == "" {
 		return actor.RoleStudent
@@ -128,7 +117,6 @@ func roleOrStudent(r string) actor.Role {
 	return actor.Role(r)
 }
 
-// With the e-mail as username, the Cognito username is the sub.
 func userFromAttributes(attrs map[string]string, username string, enabled, confirmed bool) User {
 	id := attrs["sub"]
 	if id == "" {
@@ -154,9 +142,7 @@ func userFromAttributes(attrs map[string]string, username string, enabled, confi
 	return u
 }
 
-// claimsOf decodes the ID token payload without checking the signature:
-// the token was issued by Cognito in this same request. Signatures matter
-// for tokens coming from outside, which the API Gateway authorizer checks.
+
 func claimsOf(idToken string) (map[string]any, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
@@ -190,8 +176,6 @@ func sessionUser(claims map[string]any) SessionUser {
 }
 
 var (
-	// Both values go into a Cognito ListUsers filter: only their exact
-	// formats are accepted, so nobody can build another filter.
 	digitsOnly = regexp.MustCompile(`^\d+$`)
 	subFormat  = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 )
