@@ -12,10 +12,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table):
-//
-//	student name  PK=ALUNO#<rgm>   SK=CONTA  nome
-//	staff name    PK=EQUIPE#<sub>  SK=CONTA  nome, perfil
+
 const (
 	studentNamePrefix = "ALUNO#"
 	staffNamePrefix   = "EQUIPE#"
@@ -53,7 +50,7 @@ func (p *DynamoProfiles) SaveStaff(ctx context.Context, sub, name string, role a
 }
 
 func (p *DynamoProfiles) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
-	// BatchGetItem refuses a request with a repeated key.
+	
 	seen := make(map[string]bool, len(rgms))
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {

@@ -14,15 +14,14 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
-// world is an in-memory store plus academic data. Invitations are keyed
-// "<projectID>|<rgm>".
+
 type world struct {
 	Store
 	projects    map[string]Project
-	taken       map[string]string // rgm -> project id
+	taken       map[string]string 
 	invitations map[string]bool
-	cohorts     map[string]string // rgm -> cohort
-	programs    map[string]string // cohort -> program
+	cohorts     map[string]string 
+	programs    map[string]string 
 	full        bool
 	joined      []string
 }

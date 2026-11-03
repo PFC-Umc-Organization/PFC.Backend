@@ -46,8 +46,7 @@ func staff(h httpapi.Handler) httpapi.Handler {
 	return httpapi.Restrict(httpapi.Policy{Roles: []actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, Message: msgStaffOnly}, h)
 }
 
-// student admits anyone who is not academic staff and has an RGM; students
-// who signed themselves up may carry no role at all.
+
 func student(staffMessage, auditAction string, h httpapi.Handler) httpapi.Handler {
 	deny := func(ctx context.Context, reason, msg string) (httpapi.Response, error) {
 		if auditAction != "" {

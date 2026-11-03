@@ -9,7 +9,7 @@ import (
 
 type handlers struct{ svc *Service }
 
-// The /auth routes have no authorizer: there is no session yet.
+
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 	r.Handle("POST", "/auth/login", h.login)
@@ -49,8 +49,7 @@ func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Respon
 	return httpapi.Reply(200, session, err)
 }
 
-// signUp answers 202: Cognito wants the e-mail code before the first login,
-// so the frontend must not treat the student as signed in.
+
 func (h handlers) signUp(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in SignUpInput
 	if err := r.Decode(&in); err != nil {

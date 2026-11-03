@@ -24,13 +24,10 @@ func NewService(directory Directory, academic Academic, profiles Profiles) *Serv
 	return &Service{directory: directory, academic: academic, profiles: profiles}
 }
 
-// UseAdvising is set after construction: groups needs this service first,
-// for the members' names.
+
 func (s *Service) UseAdvising(a Advising) { s.advising = a }
 
-// cohortsOf returns the cohort the student's RGM was pre-authorized in. A
-// failed lookup must not block a login or the list: it is logged and the
-// list stays empty.
+
 func (s *Service) cohortsOf(ctx context.Context, rgm string) []string {
 	cohort, err := s.academic.CohortOf(ctx, rgm)
 	if err != nil {
@@ -85,8 +82,7 @@ func (s *Service) session(ctx context.Context, token string) (Session, error) {
 	return Session{User: u, Token: token}, nil
 }
 
-// CompleteNewPassword replaces the temporary password of an account created
-// by an admin and signs the person in.
+
 func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) (Session, error) {
 	email := normalizeEmail(in.Email)
 	if email == "" || in.Session == "" || in.Password == "" {
@@ -112,8 +108,7 @@ func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) 
 	return s.session(ctx, token)
 }
 
-// ForgotPassword answers the same whether or not the account exists, so the
-// endpoint does not reveal who is registered.
+
 func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) error {
 	email := normalizeEmail(in.Email)
 	if email == "" {
@@ -161,8 +156,6 @@ func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) erro
 	return appErr
 }
 
-// Me returns the signed-in user as the login does, with the cohort read now:
-// a student pre-authorized after logging in sees it without logging in again.
 func (s *Service) Me(ctx context.Context, who actor.Actor) (SessionUser, error) {
 	if who.Sub == "" {
 		return SessionUser{}, apperr.Unauthorized(msgNoSession)
@@ -194,9 +187,6 @@ func signUpError(err error) error {
 	return apperr.Invalid("Não foi possível concluir o cadastro. Tente novamente em instantes.")
 }
 
-// confirmationError gives a wrong code, an unknown e-mail and an account
-// already confirmed the same answer, so the endpoint does not reveal who is
-// registered.
 func confirmationError(err error) error {
 	switch {
 	case errors.Is(err, errWrongCode), errors.Is(err, errNoAccount), errors.Is(err, errAlreadyConfirmed):
@@ -226,8 +216,7 @@ func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 		record(ctx, "auth.cadastro", audit.Failure, message(appErr), &audit.Actor{Email: email})
 		return appErr
 	}
-	// The account exists already: a failure here only leaves the name out of
-	// the pages until cmd/migrar copies it from Cognito.
+	
 	if err := s.profiles.SaveStudent(ctx, actor.RGMFromEmail(email), actor.DisplayName(name, email)); err != nil {
 		slog.ErrorContext(ctx, "student name not saved", "email", email, "error", err)
 	}
@@ -271,9 +260,7 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	return nil
 }
 
-// ListUsers gives the coordination every account and an advisor only the
-// students of the projects they advise; students get their group's names
-// from the project itself.
+
 func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
@@ -290,7 +277,7 @@ func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, er
 			rgms = append(rgms, u.RGM)
 		}
 	}
-	// Like cohortsOf, a failed lookup leaves the cohorts empty.
+
 	cohorts, err := s.academic.CohortsOf(ctx, rgms)
 	if err != nil {
 		slog.WarnContext(ctx, "cohort lookup failed", "error", err)
@@ -342,10 +329,7 @@ func (s *Service) account(ctx context.Context, id string) (User, error) {
 	return u, nil
 }
 
-// lastActiveAdmin tells whether u is the only enabled admin account that can
-// log in, which must stay: without it nobody manages accounts or cohorts. An
-// admin still on the temporary password does not count, since the invite may
-// never be accepted.
+
 func (s *Service) lastActiveAdmin(ctx context.Context, u User) (bool, error) {
 	if u.Role != actor.RoleAdmin || u.Status != StatusActive {
 		return false, nil
@@ -384,7 +368,6 @@ func refuse(ctx context.Context, action, id string, err error) error {
 	return err
 }
 
-// RenameAccount fixes the name of any account, students included.
 func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) error {
 	const action = "usuario.nome_alterado"
 	name := strings.TrimSpace(in.Name)
@@ -409,8 +392,7 @@ func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) er
 	return nil
 }
 
-// ChangeRole moves a staff account between advisor and coordination. The
-// person's current token keeps the old role until it expires.
+
 func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, in RoleInput) error {
 	const action = "usuario.perfil_alterado"
 	if in.Role != actor.RoleAdvisor && in.Role != actor.RoleAdmin {
@@ -449,7 +431,6 @@ func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, 
 	return nil
 }
 
-// DisableAccount blocks the sign-in and ends the person's sessions.
 func (s *Service) DisableAccount(ctx context.Context, admin actor.Actor, id string) error {
 	const action = "usuario.desativado"
 	if id == admin.Sub {
@@ -492,8 +473,7 @@ func (s *Service) EnableAccount(ctx context.Context, id string) error {
 	return nil
 }
 
-// ResendInvitation is for a staff account still on its temporary password,
-// which Cognito expires after a few days.
+
 func (s *Service) ResendInvitation(ctx context.Context, id string) error {
 	const action = "usuario.convite_reenviado"
 	u, err := s.account(ctx, id)
@@ -550,8 +530,7 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 	return nil
 }
 
-// StudentExists accepts as group member an RGM that owns a student account
-// even outside the allowlist (created before it, or removed later).
+
 func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 	if !digitsOnly.MatchString(rgm) {
 		return false, nil
@@ -579,9 +558,7 @@ func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, er
 	return p.Name, true, nil
 }
 
-// SyncNames copies every account's name from Cognito into the table: for
-// accounts from before the names were kept there and for those created in
-// the console. Without apply it only counts them.
+
 func SyncNames(ctx context.Context, d Directory, p Profiles, apply bool) (students, staff int, err error) {
 	users, err := d.ListUsers(ctx)
 	if err != nil {

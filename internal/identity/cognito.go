@@ -12,11 +12,9 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 )
 
-// ListUsers returns at most 60 accounts per page.
 const pageSize = 60
 
-// Cognito is the Directory. ListUsers and AdminCreateUser are IAM-authorized
-// admin calls, which is why they need the user pool id.
+
 type Cognito struct {
 	client     *cip.Client
 	clientID   string
@@ -299,8 +297,6 @@ func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]
 	users := []User{}
 	var token *string
 	for {
-		// No AttributesToGet on purpose: Cognito rejects "name" there
-		// (InvalidParameterException) even with it in the schema.
 		in := &cip.ListUsersInput{UserPoolId: aws.String(c.userPoolID), Limit: aws.Int32(limit), PaginationToken: token}
 		if filter != "" {
 			in.Filter = aws.String(filter)
@@ -323,8 +319,7 @@ func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
 	return c.listUsers(ctx, "", pageSize)
 }
 
-// UsersWithEmailPrefix uses ^= ("starts with") to match <rgm>@ on any
-// domain.
+
 func (c *Cognito) UsersWithEmailPrefix(ctx context.Context, prefix string) ([]User, error) {
 	return c.listUsers(ctx, fmt.Sprintf(`email ^= "%s"`, prefix), pageSize)
 }

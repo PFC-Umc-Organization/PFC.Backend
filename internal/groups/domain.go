@@ -1,5 +1,3 @@
-// Package groups owns PFC projects: members, advisor and the invitations
-// students send to classmates.
 package groups
 
 import (
@@ -16,7 +14,7 @@ const (
 	MaxMembers        = 10
 )
 
-// Members holds RGMs; the advisor is a Cognito sub.
+
 type Project struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"nome"`
@@ -26,8 +24,7 @@ type Project struct {
 	AdvisorID   string   `json:"orientadorId,omitempty"`
 }
 
-// ProjectInput.Members is only read on POST /meu-pfc, where it lists the
-// classmates to invite.
+
 type ProjectInput struct {
 	Name        string   `json:"nome"`
 	Description string   `json:"descricao"`
@@ -60,9 +57,7 @@ type AdvisorInput struct {
 	AdvisorID string `json:"orientadorId"`
 }
 
-// Invitation is pending until the student accepts or declines it; only
-// then the RGM joins Members. Name is the guest's, filled in when the group
-// lists its invitations and the RGM has an account.
+
 type Invitation struct {
 	ProjectID   string `json:"projetoId"`
 	ProjectName string `json:"projetoNome"`
@@ -74,8 +69,7 @@ type Invitation struct {
 
 func isStaff(a actor.Actor) bool { return a.HasRole(actor.RoleAdmin, actor.RoleAdvisor) }
 
-// IsMember never holds for staff: admins and advisors follow a project
-// without belonging to it.
+
 func IsMember(a actor.Actor, p Project) bool {
 	if isStaff(a) {
 		return false
@@ -84,19 +78,16 @@ func IsMember(a actor.Actor, p Project) bool {
 	return rgm != "" && slices.Contains(p.Members, rgm)
 }
 
-// Advises holds for the advisor assigned to the project; advisors only follow
-// their own groups.
+
 func Advises(a actor.Actor, p Project) bool {
 	return a.HasRole(actor.RoleAdvisor) && a.Sub != "" && p.AdvisorID == a.Sub
 }
 
-// CanReview is who may hand a submission back: the coordination and the
-// project's advisor.
+
 func CanReview(a actor.Actor, p Project) bool { return a.HasRole(actor.RoleAdmin) || Advises(a, p) }
 
 func CanView(a actor.Actor, p Project) bool { return CanReview(a, p) || IsMember(a, p) }
 
-// Member.Name is null when the RGM has no account yet.
 type Member struct {
 	RGM  string  `json:"rgm"`
 	Name *string `json:"nome"`
@@ -114,7 +105,6 @@ type Cohort struct {
 	Term   string `json:"periodo"`
 }
 
-// Detail is the project as the screens show it, names included.
 type Detail struct {
 	Project Project  `json:"projeto"`
 	Members []Member `json:"integrantes"`
@@ -122,8 +112,7 @@ type Detail struct {
 	Cohort  *Cohort  `json:"turma"`
 }
 
-// MyPFC is GET /meu-pfc: the student's group or, without one, what decides
-// whether they can create it.
+
 type MyPFC struct {
 	Cohort    *Cohort `json:"turma"`
 	ProgramID string  `json:"programaId,omitempty"`

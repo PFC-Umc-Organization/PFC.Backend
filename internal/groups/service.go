@@ -23,11 +23,9 @@ type Service struct {
 	accounts Accounts
 	newID    func() string
 	now      func() time.Time
-	// notify is the e-mail hook for invitations. There is no e-mail
-	// provider yet: students answer invitations in the app.
+	
 	notify func(context.Context, Invitation)
-	// deleted runs after a project is gone, so other modules clean up what
-	// they keep for it.
+	
 	deleted []func(ctx context.Context, projectID string)
 }
 
@@ -76,8 +74,7 @@ func (s *Service) load(ctx context.Context, id string) (Project, error) {
 	return p, nil
 }
 
-// CreateProject is the academic team's path; members join afterwards
-// through AddMember, which validates each RGM.
+
 func (s *Service) CreateProject(ctx context.Context, programID string, in ProjectInput) (Project, error) {
 	exists, err := s.academic.ProgramExists(ctx, programID)
 	if err != nil {
@@ -98,7 +95,7 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 	return p, nil
 }
 
-// ProjectsOfProgram gives an advisor only the projects they advise.
+
 func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
@@ -110,9 +107,7 @@ func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, pro
 	return slices.DeleteFunc(projects, func(p Project) bool { return !Advises(viewer, p) }), nil
 }
 
-// MembersAdvisedBy lists the RGMs of every project the advisor advises. There
-// is no index by advisor: it reads the projects program by program, a few
-// per term.
+
 func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]string, error) {
 	if advisorSub == "" {
 		return []string{}, nil
@@ -145,8 +140,7 @@ func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (De
 	return s.detail(ctx, p), nil
 }
 
-// detail fills in names and cohort. They only decorate the project: a failed
-// lookup is logged and leaves the field empty instead of failing the page.
+
 func (s *Service) detail(ctx context.Context, p Project) Detail {
 	d := Detail{Project: p, Members: make([]Member, 0, len(p.Members))}
 	var names map[string]string
@@ -205,8 +199,7 @@ func (s *Service) cohort(ctx context.Context, id string) (*Cohort, error) {
 	return &c, nil
 }
 
-// MyPFC reads the cohort from the allowlist, not from the session: a student
-// pre-authorized after signing in sees it without signing in again.
+
 func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error) {
 	rgm := student.RGM()
 	p, found, err := s.store.ProjectOfMember(ctx, rgm)
@@ -315,8 +308,7 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 	if err != nil {
 		return apperr.Internal("Não foi possível validar a matrícula. Tente novamente em instantes.", err)
 	}
-	// An RGM outside the allowlist may still own a student account (created
-	// before the list, or removed from it later): that is a real student.
+	
 	if !enrolled {
 		hasAccount, err := s.accounts.StudentExists(ctx, rgm)
 		if err != nil {
@@ -368,9 +360,7 @@ func (s *Service) RemoveMember(ctx context.Context, id string, in MemberInput) e
 	return nil
 }
 
-// CreateOwnProject is POST /meu-pfc: a pre-authorized student creates the
-// group's project in their cohort's program. Only the creator joins now;
-// classmates get invitations and join when they accept.
+
 func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in ProjectInput) (Project, error) {
 	fail := func(reason string) { failure(ctx, "projeto.criado_pelo_aluno", reason, nil, nil) }
 	rgm := student.RGM()
@@ -429,8 +419,7 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 		return Project{}, apperr.Internal("Não foi possível criar o projeto. Tente novamente em instantes.", err)
 	}
 
-	// A failed invitation does not undo the project: the group can invite
-	// again through POST /projetos/:projetoId/convites.
+	
 	invited := []string{}
 	for _, classmate := range members[1:] {
 		inv, err := s.invite(ctx, p, classmate, student.Name)
@@ -465,9 +454,7 @@ func (s *Service) InvitationsOf(ctx context.Context, rgm string) ([]Invitation, 
 	return invitations, nil
 }
 
-// AcceptInvitation re-checks the /meu-pfc rules, since they may have
-// changed since the invitation: the student must be free and in the
-// group's cohort.
+
 func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (Project, error) {
 	fail := func(reason string) { failure(ctx, "convite.aceito", reason, projectResource(projectID), nil) }
 
@@ -522,8 +509,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 		return Project{}, apperr.Internal("Não foi possível entrar no grupo. Tente novamente em instantes.", err)
 	}
 
-	// One project per student: the other invitations lost their purpose.
-	// Failing to clean them up does not undo the join.
+	
 	pending, err := s.store.InvitationsOfStudent(ctx, rgm)
 	if err != nil {
 		slog.WarnContext(ctx, "invitations not cleaned up", "rgm", rgm, "error", err)
@@ -579,8 +565,7 @@ func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, 
 	return invitations, nil
 }
 
-// Invite follows the /meu-pfc rules; pending invitations count towards the
-// group limit.
+
 func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID string, in MemberInput) (Invitation, error) {
 	p, err := s.load(ctx, projectID)
 	if err != nil {
