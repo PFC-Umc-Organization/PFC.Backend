@@ -23,9 +23,9 @@ type Service struct {
 	accounts Accounts
 	newID    func() string
 	now      func() time.Time
-	
+
 	notify func(context.Context, Invitation)
-	
+
 	deleted []func(ctx context.Context, projectID string)
 }
 
@@ -74,7 +74,6 @@ func (s *Service) load(ctx context.Context, id string) (Project, error) {
 	return p, nil
 }
 
-
 func (s *Service) CreateProject(ctx context.Context, programID string, in ProjectInput) (Project, error) {
 	exists, err := s.academic.ProgramExists(ctx, programID)
 	if err != nil {
@@ -95,7 +94,6 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 	return p, nil
 }
 
-
 func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
@@ -106,7 +104,6 @@ func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, pro
 	}
 	return slices.DeleteFunc(projects, func(p Project) bool { return !Advises(viewer, p) }), nil
 }
-
 
 func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]string, error) {
 	if advisorSub == "" {
@@ -139,7 +136,6 @@ func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (De
 	}
 	return s.detail(ctx, p), nil
 }
-
 
 func (s *Service) detail(ctx context.Context, p Project) Detail {
 	d := Detail{Project: p, Members: make([]Member, 0, len(p.Members))}
@@ -198,7 +194,6 @@ func (s *Service) cohort(ctx context.Context, id string) (*Cohort, error) {
 	}
 	return &c, nil
 }
-
 
 func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error) {
 	rgm := student.RGM()
@@ -308,7 +303,7 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 	if err != nil {
 		return apperr.Internal("Não foi possível validar a matrícula. Tente novamente em instantes.", err)
 	}
-	
+
 	if !enrolled {
 		hasAccount, err := s.accounts.StudentExists(ctx, rgm)
 		if err != nil {
@@ -359,7 +354,6 @@ func (s *Service) RemoveMember(ctx context.Context, id string, in MemberInput) e
 	success(ctx, "projeto.integrante_removido", projectResource(id), map[string]any{"rgm": rgm})
 	return nil
 }
-
 
 func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in ProjectInput) (Project, error) {
 	fail := func(reason string) { failure(ctx, "projeto.criado_pelo_aluno", reason, nil, nil) }
@@ -419,7 +413,6 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 		return Project{}, apperr.Internal("Não foi possível criar o projeto. Tente novamente em instantes.", err)
 	}
 
-	
 	invited := []string{}
 	for _, classmate := range members[1:] {
 		inv, err := s.invite(ctx, p, classmate, student.Name)
@@ -453,7 +446,6 @@ func (s *Service) InvitationsOf(ctx context.Context, rgm string) ([]Invitation, 
 	}
 	return invitations, nil
 }
-
 
 func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (Project, error) {
 	fail := func(reason string) { failure(ctx, "convite.aceito", reason, projectResource(projectID), nil) }
@@ -509,7 +501,6 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 		return Project{}, apperr.Internal("Não foi possível entrar no grupo. Tente novamente em instantes.", err)
 	}
 
-	
 	pending, err := s.store.InvitationsOfStudent(ctx, rgm)
 	if err != nil {
 		slog.WarnContext(ctx, "invitations not cleaned up", "rgm", rgm, "error", err)
@@ -564,7 +555,6 @@ func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, 
 	}
 	return invitations, nil
 }
-
 
 func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID string, in MemberInput) (Invitation, error) {
 	p, err := s.load(ctx, projectID)

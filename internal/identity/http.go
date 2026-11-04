@@ -9,7 +9,6 @@ import (
 
 type handlers struct{ svc *Service }
 
-
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 	r.Handle("POST", "/auth/login", h.login)
@@ -48,7 +47,6 @@ func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Respon
 	session, err := h.svc.Login(ctx, in)
 	return httpapi.Reply(200, session, err)
 }
-
 
 func (h handlers) signUp(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in SignUpInput

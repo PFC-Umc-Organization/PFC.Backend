@@ -12,7 +12,6 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-
 const (
 	studentNamePrefix = "ALUNO#"
 	staffNamePrefix   = "EQUIPE#"
@@ -50,7 +49,7 @@ func (p *DynamoProfiles) SaveStaff(ctx context.Context, sub, name string, role a
 }
 
 func (p *DynamoProfiles) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
-	
+
 	seen := make(map[string]bool, len(rgms))
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {

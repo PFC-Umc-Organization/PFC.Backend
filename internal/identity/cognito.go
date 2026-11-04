@@ -14,7 +14,6 @@ import (
 
 const pageSize = 60
 
-
 type Cognito struct {
 	client     *cip.Client
 	clientID   string
@@ -318,7 +317,6 @@ func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]
 func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
 	return c.listUsers(ctx, "", pageSize)
 }
-
 
 func (c *Cognito) UsersWithEmailPrefix(ctx context.Context, prefix string) ([]User, error) {
 	return c.listUsers(ctx, fmt.Sprintf(`email ^= "%s"`, prefix), pageSize)

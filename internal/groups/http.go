@@ -46,7 +46,6 @@ func staff(h httpapi.Handler) httpapi.Handler {
 	return httpapi.Restrict(httpapi.Policy{Roles: []actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, Message: msgStaffOnly}, h)
 }
 
-
 func student(staffMessage, auditAction string, h httpapi.Handler) httpapi.Handler {
 	deny := func(ctx context.Context, reason, msg string) (httpapi.Response, error) {
 		if auditAction != "" {

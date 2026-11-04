@@ -14,14 +14,13 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
-
 type world struct {
 	Store
 	projects    map[string]Project
-	taken       map[string]string 
+	taken       map[string]string
 	invitations map[string]bool
-	cohorts     map[string]string 
-	programs    map[string]string 
+	cohorts     map[string]string
+	programs    map[string]string
 	full        bool
 	joined      []string
 }

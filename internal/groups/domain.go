@@ -14,7 +14,6 @@ const (
 	MaxMembers        = 10
 )
 
-
 type Project struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"nome"`
@@ -23,7 +22,6 @@ type Project struct {
 	Members     []string `json:"integrantes"`
 	AdvisorID   string   `json:"orientadorId,omitempty"`
 }
-
 
 type ProjectInput struct {
 	Name        string   `json:"nome"`
@@ -57,7 +55,6 @@ type AdvisorInput struct {
 	AdvisorID string `json:"orientadorId"`
 }
 
-
 type Invitation struct {
 	ProjectID   string `json:"projetoId"`
 	ProjectName string `json:"projetoNome"`
@@ -69,7 +66,6 @@ type Invitation struct {
 
 func isStaff(a actor.Actor) bool { return a.HasRole(actor.RoleAdmin, actor.RoleAdvisor) }
 
-
 func IsMember(a actor.Actor, p Project) bool {
 	if isStaff(a) {
 		return false
@@ -78,11 +74,9 @@ func IsMember(a actor.Actor, p Project) bool {
 	return rgm != "" && slices.Contains(p.Members, rgm)
 }
 
-
 func Advises(a actor.Actor, p Project) bool {
 	return a.HasRole(actor.RoleAdvisor) && a.Sub != "" && p.AdvisorID == a.Sub
 }
-
 
 func CanReview(a actor.Actor, p Project) bool { return a.HasRole(actor.RoleAdmin) || Advises(a, p) }
 
@@ -111,7 +105,6 @@ type Detail struct {
 	Advisor *Advisor `json:"orientador"`
 	Cohort  *Cohort  `json:"turma"`
 }
-
 
 type MyPFC struct {
 	Cohort    *Cohort `json:"turma"`

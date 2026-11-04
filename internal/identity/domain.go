@@ -15,7 +15,6 @@ const (
 	StatusInactive = "INATIVO"
 )
 
-
 type User struct {
 	ID                 string     `json:"id"`
 	Name               string     `json:"nome"`
@@ -43,7 +42,6 @@ type Session struct {
 	User  SessionUser `json:"usuario"`
 	Token string      `json:"token"`
 }
-
 
 type LoginResult struct {
 	User      *SessionUser `json:"usuario,omitempty"`
@@ -74,7 +72,6 @@ type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"senha"`
 }
-
 
 type SignUpInput struct {
 	Name     string     `json:"nome"`
@@ -141,7 +138,6 @@ func userFromAttributes(attrs map[string]string, username string, enabled, confi
 	}
 	return u
 }
-
 
 func claimsOf(idToken string) (map[string]any, error) {
 	parts := strings.Split(idToken, ".")
