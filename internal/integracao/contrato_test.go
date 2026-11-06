@@ -382,7 +382,7 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "POST", "/atividades", `{"titulo":"Sem campos","prazo":"2099-11-01T23:59","campos":[]}`, 201)
 	tr.expect(prof, "POST", "/atividades", `{"titulo":"Definição do Tema","descricao":"d","prazo":"2099-11-01T23:59"}`, 403)
 	a1 := id(t, tr.expect(admin, "POST", "/atividades", `{"titulo":"Definição do Tema","descricao":"d","prazo":"2099-11-01T23:59"}`, 201))
-	a2body := tr.expect(admin, "POST", "/atividades", `{"titulo":"Revisão","prazo":"2099-12-01T23:59","campos":[{"rotulo":"Repositório","tipo":"LINK","obrigatorio":true},{"rotulo":"Resumo","tipo":"TEXTO_LONGO"}]}`, 201)
+	a2body := tr.expect(admin, "POST", "/atividades", `{"titulo":"Revisão","prazo":"2099-10-01T23:59","campos":[{"rotulo":"Repositório","tipo":"LINK","obrigatorio":true},{"rotulo":"Resumo","tipo":"TEXTO_LONGO"}]}`, 201)
 	a2 := id(t, a2body)
 	linkField, summaryField := jsonField(t, a2body, "campos", 0, "id"), jsonField(t, a2body, "campos", 1, "id")
 	tr.expect(aluno("111"), "GET", "/atividades", "", 200)
