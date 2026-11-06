@@ -133,9 +133,27 @@ func (f fakeProjects) ProjectsOfProgram(context.Context, actor.Actor, string) ([
 func newTestService(t *testing.T, store *fakeStore) *Service {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
-	svc := NewService(store, testProjects, nil)
+	svc := NewService(store, testProjects, nil, fakeCohorts{
+		project: map[string]string{"p1": "t1", "p2": "t1"},
+		student: map[string]string{"111": "t1", "222": "t1"},
+	})
 	svc.now = func() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) }
 	return svc
+}
+
+// fakeCohorts maps projects and RGMs to a cohort; t1 and t2 exist.
+type fakeCohorts struct{ project, student map[string]string }
+
+func (f fakeCohorts) OfProject(_ context.Context, p groups.Project) (string, error) {
+	return f.project[p.ID], nil
+}
+
+func (f fakeCohorts) OfStudent(_ context.Context, rgm string) (string, error) {
+	return f.student[rgm], nil
+}
+
+func (f fakeCohorts) Exists(_ context.Context, id string) (bool, error) {
+	return id == "t1" || id == "t2", nil
 }
 
 var testProjects = fakeProjects{
@@ -483,4 +501,112 @@ func kind(err error) apperr.Kind {
 		return e.Kind
 	}
 	return 0
+}
+
+func TestSubmitOrder(t *testing.T) {
+	fields := tcc.Fields
+	store := &fakeStore{activities: map[string]Activity{
+		"overdue": {ID: "overdue", Title: "Vencida", Deadline: "2026-10-10T23:59", Fields: fields},
+		"first":   {ID: "first", Title: "Primeira", Deadline: "2026-10-20T23:59", Fields: fields},
+		"second":  {ID: "second", Title: "Segunda", Deadline: "2026-11-20T23:59", Fields: fields},
+		"third":   {ID: "third", Title: "Terceira", Deadline: "2026-12-20T23:59", Fields: fields},
+	}}
+	svc := newTestService(t, store)
+	ctx := context.Background()
+	ana := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	file := SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}
+
+	// The overdue activity does not hold anything back; the nearest open one does.
+	if _, err := svc.Submit(ctx, ana, "p1", "second", file); message(err) != msgBlockedBy("Primeira") {
+		t.Fatalf("second before first: err = %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "third", file); message(err) != msgBlockedBy("Primeira") {
+		t.Fatalf("third before first: err = %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "first", file); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "third", file); message(err) != msgBlockedBy("Segunda") {
+		t.Fatalf("third before second: err = %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "second", file); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "third", file); err != nil {
+		t.Fatalf("third: %v", err)
+	}
+	// Editing what was already submitted is not held back.
+	if _, err := svc.Submit(ctx, ana, "p1", "first", file); err != nil {
+		t.Fatalf("editing first: %v", err)
+	}
+}
+
+func TestActivitiesByCohort(t *testing.T) {
+	fields := tcc.Fields
+	store := &fakeStore{activities: map[string]Activity{
+		"old":   {ID: "old", Title: "Antiga", Deadline: "2026-12-01T10:00", Fields: fields},
+		"mine":  {ID: "mine", Title: "Da turma", Deadline: "2026-12-02T10:00", Fields: fields, CohortID: "t1"},
+		"other": {ID: "other", Title: "Da outra", Deadline: "2026-12-03T10:00", Fields: fields, CohortID: "t2"},
+	}}
+	svc := newTestService(t, store)
+	ctx := context.Background()
+	ana := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	admin := actor.Actor{Role: actor.RoleAdmin}
+	ids := func(list []Activity) []string {
+		out := []string{}
+		for _, a := range list {
+			out = append(out, a.ID)
+		}
+		slices.Sort(out)
+		return out
+	}
+
+	mineAndOld, err := svc.ListActivitiesFor(ctx, ana)
+	if err != nil || !slices.Equal(ids(mineAndOld), []string{"mine", "old"}) {
+		t.Fatalf("student sees %v, err = %v", ids(mineAndOld), err)
+	}
+	all, err := svc.ListActivitiesFor(ctx, admin)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("staff sees %v, err = %v", ids(all), err)
+	}
+
+	file := SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}
+	if _, err := svc.Submit(ctx, ana, "p1", "other", file); message(err) != msgActivityNotFound {
+		t.Errorf("submitting another cohort's activity: err = %v", err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "mine", file); message(err) != msgBlockedBy("Antiga") {
+		t.Errorf("an old activity that applies to all still holds the order back: err = %v", err)
+	}
+
+	in := ActivityInput{Title: "Nova", Deadline: "2026-12-10T10:00", CohortID: "t9"}
+	if _, err := svc.CreateActivity(ctx, in); message(err) != msgCohortNotFound {
+		t.Errorf("unknown cohort: err = %v", err)
+	}
+	in.CohortID = "t2"
+	created, err := svc.CreateActivity(ctx, in)
+	if err != nil || created.CohortID != "t2" {
+		t.Errorf("created = %+v, err = %v", created, err)
+	}
+}
+
+func TestOrderAndPenaltiesIgnoreOtherCohorts(t *testing.T) {
+	fields := tcc.Fields
+	store := &fakeStore{activities: map[string]Activity{
+		// Open and earlier, but of another cohort: it must not hold anything back.
+		"elsewhere": {ID: "elsewhere", Title: "Da outra", Deadline: "2026-10-18T10:00", Fields: fields, CohortID: "t2"},
+		// Overdue, of another cohort: it must not cost the group a penalty.
+		"missed": {ID: "missed", Title: "Perdida", Deadline: "2026-10-01T10:00", Fields: fields, CohortID: "t2"},
+		"mine":   {ID: "mine", Title: "Da turma", Deadline: "2026-10-20T10:00", Fields: fields, CohortID: "t1"},
+	}}
+	svc := newTestService(t, store)
+	ctx := context.Background()
+	ana := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+
+	penalties, err := svc.PenaltiesOfProject(ctx, ana, "p1")
+	if err != nil || penalties.Active != 0 || len(penalties.Items) != 0 {
+		t.Fatalf("penalties = %+v, err = %v", penalties, err)
+	}
+	if _, err := svc.Submit(ctx, ana, "p1", "mine", SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
 }

@@ -55,15 +55,24 @@ type Activity struct {
 	Deadline    string  `json:"prazo"`
 	PublishedAt string  `json:"publicadaEm"`
 	Fields      []Field `json:"campos"`
+	// CohortID is the cohort the activity belongs to. Empty is an activity
+	// from before cohorts had their own, which applies to every cohort.
+	CohortID string `json:"turmaId,omitempty"`
 }
 
-// ActivityInput.Fields is only read on creation; empty means the default
-// file field.
+// appliesTo tells whether a group of the cohort has to deliver the activity.
+func (a Activity) appliesTo(cohortID string) bool {
+	return a.CohortID == "" || a.CohortID == cohortID
+}
+
+// ActivityInput.Fields and CohortID are only read on creation; empty Fields
+// means the default file field. The cohort of an activity never changes.
 type ActivityInput struct {
 	Title       string       `json:"titulo"`
 	Description string       `json:"descricao"`
 	Deadline    string       `json:"prazo"`
 	Fields      []FieldInput `json:"campos"`
+	CohortID    string       `json:"turmaId"`
 }
 
 // Answers are keyed by field id. SubmittedAt is the first submission, the
@@ -155,6 +164,7 @@ func (in ActivityInput) normalized() ActivityInput {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
 	in.Deadline = strings.TrimSpace(in.Deadline)
+	in.CohortID = strings.TrimSpace(in.CohortID)
 	return in
 }
 
@@ -258,6 +268,7 @@ const (
 	msgFieldLimit         = "A atividade já atingiu o número máximo de campos."
 	msgSubmissionNotFound = "Entrega não encontrada."
 	msgProjectNotFound    = "Projeto não encontrado."
+	msgCohortNotFound     = "Turma não encontrada. Escolha uma turma cadastrada para a atividade."
 	msgDeadlinePassed     = "O prazo desta atividade está encerrado e ela não recebe mais entregas."
 	msgGroupFailed        = "O grupo foi reprovado por atingir o limite de penalidades, e o envio de entregas está encerrado."
 	msgPenaltyReviewers   = "Apenas a coordenação e o orientador do projeto podem administrar penalidades."
@@ -272,3 +283,7 @@ const (
 	msgCommentRequired     = "Informe o comentário para o grupo: o que precisa ser corrigido."
 	msgCommentTooLong      = "O comentário excede o tamanho máximo permitido."
 )
+
+func msgBlockedBy(title string) string {
+	return fmt.Sprintf("Esta entrega ainda não está liberada. Antes, envie a atividade %q.", title)
+}

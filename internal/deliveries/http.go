@@ -57,8 +57,8 @@ func restrict(roles []actor.Role, message, auditAction, activityParam string, h 
 	return httpapi.Restrict(p, h)
 }
 
-func (h handlers) listActivities(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
-	activities, err := h.svc.ListActivities(ctx)
+func (h handlers) listActivities(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	activities, err := h.svc.ListActivitiesFor(ctx, r.Actor)
 	return httpapi.Reply(200, activities, err)
 }
 

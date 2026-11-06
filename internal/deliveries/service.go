@@ -23,6 +23,7 @@ type Service struct {
 	store    Store
 	projects Projects
 	files    Files
+	cohorts  Cohorts
 	newID    func() string
 	now      func() time.Time
 }
@@ -32,8 +33,8 @@ const (
 	downloadTTL = 5 * time.Minute
 )
 
-func NewService(store Store, projects Projects, files Files) *Service {
-	return &Service{store: store, projects: projects, files: files, newID: uuid.NewString, now: time.Now}
+func NewService(store Store, projects Projects, files Files, cohorts Cohorts) *Service {
+	return &Service{store: store, projects: projects, files: files, cohorts: cohorts, newID: uuid.NewString, now: time.Now}
 }
 
 func activityResource(id string) *audit.Resource { return &audit.Resource{Type: "atividade", ID: id} }
@@ -49,10 +50,61 @@ func (s *Service) ListActivities(ctx context.Context) ([]Activity, error) {
 	return activities, nil
 }
 
+// ListActivitiesFor is what a viewer has to deliver: the staff reads every
+// activity, a student only those of their cohort and the old ones that apply to all.
+func (s *Service) ListActivitiesFor(ctx context.Context, viewer actor.Actor) ([]Activity, error) {
+	activities, err := s.ListActivities(ctx)
+	if err != nil || viewer.HasRole(actor.RoleAdmin, actor.RoleAdvisor) {
+		return activities, err
+	}
+	cohort, err := s.cohorts.OfStudent(ctx, viewer.RGM())
+	if err != nil {
+		return nil, apperr.Internal("Não foi possível carregar as atividades. Tente novamente em instantes.", err)
+	}
+	return slices.DeleteFunc(activities, func(a Activity) bool { return !a.appliesTo(cohort) }), nil
+}
+
+// activitiesOf lists the activities a project's group has to deliver.
+func (s *Service) activitiesOf(ctx context.Context, p groups.Project) ([]Activity, error) {
+	cohort, err := s.cohorts.OfProject(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	activities, err := s.store.ListActivities(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(activities, func(a Activity) bool { return !a.appliesTo(cohort) }), nil
+}
+
+// inCohort refuses an activity that belongs to another cohort than the group's.
+func (s *Service) inCohort(ctx context.Context, p groups.Project, a Activity) error {
+	if a.CohortID == "" {
+		return nil
+	}
+	cohort, err := s.cohorts.OfProject(ctx, p)
+	if err != nil {
+		return apperr.Internal("Não foi possível carregar a turma do grupo. Tente novamente em instantes.", err)
+	}
+	if cohort != a.CohortID {
+		return apperr.NotFound(msgActivityNotFound)
+	}
+	return nil
+}
+
 func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activity, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
 		return Activity{}, apperr.Invalid(msg)
+	}
+	if in.CohortID != "" {
+		exists, err := s.cohorts.Exists(ctx, in.CohortID)
+		if err != nil {
+			return Activity{}, apperr.Internal("Não foi possível conferir a turma. Tente novamente em instantes.", err)
+		}
+		if !exists {
+			return Activity{}, apperr.Invalid(msgCohortNotFound)
+		}
 	}
 	inputs, msg := normalizedFields(in.Fields)
 	if msg != "" {
@@ -65,6 +117,7 @@ func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activit
 		Deadline:    in.Deadline,
 		PublishedAt: s.timestamp(),
 		Fields:      make([]Field, 0, len(inputs)),
+		CohortID:    in.CohortID,
 	}
 	for _, f := range inputs {
 		a.Fields = append(a.Fields, Field{ID: s.newID(), Label: f.Label, Type: f.Type, Required: f.Required})
@@ -218,7 +271,7 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 			Resource: &audit.Resource{Type: "projeto", ID: p.ID}})
 		return Submission{}, apperr.Forbidden(msgMembersOnly)
 	}
-	if err := s.failed(ctx, p.ID, activityID); err != nil {
+	if err := s.failed(ctx, p, activityID); err != nil {
 		return Submission{}, err
 	}
 	a, found, err := s.store.GetActivity(ctx, activityID)
@@ -227,6 +280,9 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	}
 	if !found {
 		return Submission{}, apperr.NotFound(msgActivityNotFound)
+	}
+	if err := s.inCohort(ctx, p, a); err != nil {
+		return Submission{}, err
 	}
 	answers, msg := validAnswers(a.Fields, in.Answers)
 	if msg != "" {
@@ -239,6 +295,11 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	closed := a.closed(s.now())
 	if closed && !found {
 		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
+	}
+	if !found {
+		if err := s.checkOrder(ctx, p, a); err != nil {
+			return Submission{}, err
+		}
 	}
 	if err := s.checkFiles(ctx, p.ID, a, answers, previous.Answers); err != nil {
 		return Submission{}, err
@@ -326,6 +387,45 @@ func (s *Service) Validate(ctx context.Context, advisor actor.Actor, projectID, 
 	return sub, nil
 }
 
+// checkOrder holds back the group's first submission of an activity while an
+// earlier one is still open: not submitted and with time left. An earlier
+// activity already past its deadline does not hold anything back, since it
+// can no longer be submitted. Editing a submission is never held back.
+func (s *Service) checkOrder(ctx context.Context, p groups.Project, a Activity) error {
+	deadline, ok := deadlineOf(a.Deadline)
+	if !ok {
+		return nil
+	}
+	activities, err := s.activitiesOf(ctx, p)
+	if err != nil {
+		return apperr.Internal("Não foi possível carregar as atividades. Tente novamente em instantes.", err)
+	}
+	submissions, err := s.store.SubmissionsOfProject(ctx, p.ID)
+	if err != nil {
+		return apperr.Internal("Não foi possível carregar as entregas do grupo. Tente novamente em instantes.", err)
+	}
+	done := make(map[string]bool, len(submissions))
+	for _, sub := range submissions {
+		done[sub.ActivityID] = true
+	}
+	now := s.now()
+	var blocker *Activity
+	var blockerDeadline time.Time
+	for i, other := range activities {
+		d, ok := deadlineOf(other.Deadline)
+		if other.ID == a.ID || done[other.ID] || !ok || !d.Before(deadline) || other.closed(now) {
+			continue
+		}
+		if blocker == nil || d.Before(blockerDeadline) {
+			blocker, blockerDeadline = &activities[i], d
+		}
+	}
+	if blocker != nil {
+		return apperr.Conflict(msgBlockedBy(blocker.Title))
+	}
+	return nil
+}
+
 // RequestUpload lets a member send one file for a file field. The answer
 // only changes when the group submits the form with the returned key.
 func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, projectID, activityID string, in UploadRequest) (UploadTicket, error) {
@@ -339,7 +439,7 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	if !groups.IsMember(member, p) {
 		return UploadTicket{}, apperr.Forbidden(msgMembersOnly)
 	}
-	if err := s.failed(ctx, p.ID, activityID); err != nil {
+	if err := s.failed(ctx, p, activityID); err != nil {
 		return UploadTicket{}, err
 	}
 	a, found, err := s.store.GetActivity(ctx, activityID)
@@ -349,13 +449,19 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	if !found {
 		return UploadTicket{}, apperr.NotFound(msgActivityNotFound)
 	}
-	if a.closed(s.now()) {
-		_, submitted, err := s.store.GetSubmission(ctx, p.ID, a.ID)
-		if err != nil {
-			return UploadTicket{}, apperr.Internal("Não foi possível carregar a entrega. Tente novamente em instantes.", err)
-		}
-		if !submitted {
+	if err := s.inCohort(ctx, p, a); err != nil {
+		return UploadTicket{}, err
+	}
+	_, submitted, err := s.store.GetSubmission(ctx, p.ID, a.ID)
+	if err != nil {
+		return UploadTicket{}, apperr.Internal("Não foi possível carregar a entrega. Tente novamente em instantes.", err)
+	}
+	if !submitted {
+		if a.closed(s.now()) {
 			return UploadTicket{}, apperr.Conflict(msgDeadlinePassed)
+		}
+		if err := s.checkOrder(ctx, p, a); err != nil {
+			return UploadTicket{}, err
 		}
 	}
 	i := slices.IndexFunc(a.Fields, func(f Field) bool { return f.ID == in.FieldID })
@@ -474,20 +580,20 @@ func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectI
 }
 
 // groupPenalties reads what the penalties are computed from, at once.
-func (s *Service) groupPenalties(ctx context.Context, projectID string) (Penalties, error) {
+func (s *Service) groupPenalties(ctx context.Context, p groups.Project) (Penalties, error) {
 	var activities []Activity
 	var activitiesErr error
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		activities, activitiesErr = s.store.ListActivities(ctx)
+		activities, activitiesErr = s.activitiesOf(ctx, p)
 	}()
-	p, err := s.projectPenalties(ctx, projectID)
+	src, err := s.projectPenalties(ctx, p.ID)
 	<-done
 	if err := errors.Join(activitiesErr, err); err != nil {
 		return Penalties{}, err
 	}
-	return penaltiesOf(projectID, activities, p.submissions, p.records, s.now()), nil
+	return penaltiesOf(p.ID, activities, src.submissions, src.records, s.now()), nil
 }
 
 type penaltySources struct {
@@ -510,8 +616,8 @@ func (s *Service) projectPenalties(ctx context.Context, projectID string) (penal
 }
 
 // failed refuses a member of a group that reached MaxPenalties.
-func (s *Service) failed(ctx context.Context, projectID, activityID string) error {
-	penalties, err := s.groupPenalties(ctx, projectID)
+func (s *Service) failed(ctx context.Context, p groups.Project, activityID string) error {
+	penalties, err := s.groupPenalties(ctx, p)
 	if err != nil {
 		return apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
@@ -519,7 +625,7 @@ func (s *Service) failed(ctx context.Context, projectID, activityID string) erro
 		return nil
 	}
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgGroupFailed,
-		Resource: activityResource(activityID), Details: map[string]any{"projetoId": projectID}})
+		Resource: activityResource(activityID), Details: map[string]any{"projetoId": p.ID}})
 	return apperr.Conflict(msgGroupFailed)
 }
 
@@ -531,7 +637,7 @@ func (s *Service) PenaltiesOfProject(ctx context.Context, viewer actor.Actor, pr
 	if !groups.CanView(viewer, p) {
 		return Penalties{}, apperr.Forbidden(msgMembersAndStaff)
 	}
-	penalties, err := s.groupPenalties(ctx, p.ID)
+	penalties, err := s.groupPenalties(ctx, p)
 	if err != nil {
 		return Penalties{}, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
@@ -545,7 +651,11 @@ func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, pr
 	if err != nil {
 		return nil, err
 	}
-	activities, err := s.store.ListActivities(ctx)
+	if len(projects) == 0 {
+		return []Penalties{}, nil
+	}
+	// A program belongs to one cohort, so its groups share the activities.
+	activities, err := s.activitiesOf(ctx, projects[0])
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
@@ -613,7 +723,7 @@ func (s *Service) WaivePenalty(ctx context.Context, reviewer actor.Actor, projec
 	if msg != "" {
 		return Penalties{}, apperr.Invalid(msg)
 	}
-	current, err := s.groupPenalties(ctx, p.ID)
+	current, err := s.groupPenalties(ctx, p)
 	if err != nil {
 		return Penalties{}, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}

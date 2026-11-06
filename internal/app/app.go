@@ -72,7 +72,7 @@ func New(d Deps) *httpapi.Router {
 	identity.Routes(r, identitySvc)
 	academic.Routes(r, academicSvc)
 	groups.Routes(r, groupsSvc)
-	deliveriesSvc := deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc, deliveryFiles)
+	deliveriesSvc := deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc, deliveryFiles, deliveriesCohorts{academicSvc})
 	groupsSvc.OnProjectDeleted(deliveriesSvc.ProjectDeleted)
 	deliveries.Routes(r, deliveriesSvc)
 	materials.Routes(r, materials.NewService(materials.NewDynamoStore(d.Table), academicSvc, materialFiles))
@@ -96,4 +96,22 @@ func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
 func (a academicForGroups) Cohort(ctx context.Context, id string) (groups.Cohort, bool, error) {
 	c, found, err := a.Service.Cohort(ctx, id)
 	return groups.Cohort{ID: c.ID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
+}
+
+// deliveriesCohorts answers deliveries' cohort questions from the academic
+// module, so neither imports the other.
+type deliveriesCohorts struct{ *academic.Service }
+
+func (c deliveriesCohorts) OfProject(ctx context.Context, p groups.Project) (string, error) {
+	id, _, err := c.Service.CohortOfProgram(ctx, p.ProgramID)
+	return id, err
+}
+
+func (c deliveriesCohorts) OfStudent(ctx context.Context, rgm string) (string, error) {
+	return c.Service.CohortOf(ctx, rgm)
+}
+
+func (c deliveriesCohorts) Exists(ctx context.Context, id string) (bool, error) {
+	_, found, err := c.Service.Cohort(ctx, id)
+	return found, err
 }

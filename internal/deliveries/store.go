@@ -55,6 +55,7 @@ type activityItem struct {
 	Deadline    string      `dynamodbav:"prazo"`
 	PublishedAt string      `dynamodbav:"publicadaEm"`
 	Fields      []fieldItem `dynamodbav:"campos"`
+	CohortID    string      `dynamodbav:"turmaId,omitempty"`
 }
 
 func (it activityItem) activity() Activity {
@@ -68,6 +69,7 @@ func (it activityItem) activity() Activity {
 		Description: it.Description,
 		Deadline:    it.Deadline,
 		PublishedAt: it.PublishedAt,
+		CohortID:    it.CohortID,
 		Fields:      fields,
 	}
 }
@@ -135,7 +137,7 @@ func (s *DynamoStore) CreateActivity(ctx context.Context, a Activity) error {
 	}
 	return s.put(ctx, activityItem{
 		PK: activityPrefix + a.ID, SK: profileSK, GSI1PK: activitiesPartition, GSI1SK: activityPrefix + a.ID,
-		Title: a.Title, Description: a.Description, Deadline: a.Deadline, PublishedAt: a.PublishedAt, Fields: fields,
+		Title: a.Title, Description: a.Description, Deadline: a.Deadline, PublishedAt: a.PublishedAt, Fields: fields, CohortID: a.CohortID,
 	})
 }
 

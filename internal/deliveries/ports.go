@@ -58,3 +58,13 @@ type Projects interface {
 	Project(ctx context.Context, id string) (groups.Project, bool, error)
 	ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]groups.Project, error)
 }
+
+// Cohorts is how deliveries learns the cohort of a group and of a student, and
+// whether a cohort exists; the composition root adapts the academic module.
+type Cohorts interface {
+	// OfProject is empty when the group's program has no known cohort.
+	OfProject(ctx context.Context, p groups.Project) (string, error)
+	// OfStudent is empty when the RGM is not enrolled in any cohort.
+	OfStudent(ctx context.Context, rgm string) (string, error)
+	Exists(ctx context.Context, id string) (bool, error)
+}
