@@ -53,6 +53,13 @@ func (f *fakeStore) GetActivity(_ context.Context, id string) (Activity, bool, e
 	a, ok := f.activities[id]
 	return a, ok, nil
 }
+func (f *fakeStore) CreateActivity(_ context.Context, a Activity) error {
+	if f.activities == nil {
+		f.activities = map[string]Activity{}
+	}
+	f.activities[a.ID] = a
+	return nil
+}
 func (f *fakeStore) ListActivities(context.Context) ([]Activity, error) {
 	out := []Activity{}
 	for _, a := range f.activities {
