@@ -52,6 +52,8 @@ func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error
 		return LoginResult{}, apperr.Forbidden(msgNotConfirmed)
 	}
 	if err != nil {
+		// Any Cognito refusal reads as "wrong password" to the user; the log says which one it was.
+		slog.WarnContext(ctx, "sign-in failed", "email", email, "error", err)
 		record(ctx, "auth.login", audit.Failure, "credenciais inválidas", &audit.Actor{Email: email})
 		return LoginResult{}, apperr.Unauthorized(msgBadCredentials)
 	}
