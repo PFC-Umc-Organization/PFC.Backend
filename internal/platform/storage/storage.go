@@ -79,8 +79,41 @@ func (b *Bucket) Size(ctx context.Context, key string) (size int64, found bool, 
 }
 
 func (b *Bucket) Delete(ctx context.Context, key string) error {
-	_, err := b.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(b.name), Key: aws.String(key)})
-	return err
+	return b.DeleteKeys(ctx, []string{key})
+}
+
+// maxDeleteBatch is the S3 limit of keys per DeleteObjects call.
+const maxDeleteBatch = 1000
+
+// DeleteKeys deletes the given objects in batches of up to 1000 keys.
+func (b *Bucket) DeleteKeys(ctx context.Context, keys []string) error {
+	for len(keys) > 0 {
+		n := min(len(keys), maxDeleteBatch)
+		ids := make([]types.ObjectIdentifier, n)
+		for i, k := range keys[:n] {
+			ids[i] = types.ObjectIdentifier{Key: aws.String(k)}
+		}
+		if err := b.deleteBatch(ctx, ids); err != nil {
+			return err
+		}
+		keys = keys[n:]
+	}
+	return nil
+}
+
+func (b *Bucket) deleteBatch(ctx context.Context, ids []types.ObjectIdentifier) error {
+	out, err := b.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		Bucket: aws.String(b.name),
+		Delete: &types.Delete{Objects: ids, Quiet: aws.Bool(true)},
+	})
+	if err != nil {
+		return err
+	}
+	if len(out.Errors) > 0 {
+		first := out.Errors[0]
+		return fmt.Errorf("%d objects not deleted, %s: %s", len(out.Errors), aws.ToString(first.Key), aws.ToString(first.Message))
+	}
+	return nil
 }
 
 // DeletePrefix deletes every object under prefix. Listing needs
@@ -100,16 +133,8 @@ func (b *Bucket) DeletePrefix(ctx context.Context, prefix string) error {
 		for i, o := range page.Contents {
 			ids[i] = types.ObjectIdentifier{Key: o.Key}
 		}
-		out, err := b.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-			Bucket: aws.String(b.name),
-			Delete: &types.Delete{Objects: ids, Quiet: aws.Bool(true)},
-		})
-		if err != nil {
+		if err := b.deleteBatch(ctx, ids); err != nil {
 			return err
-		}
-		if len(out.Errors) > 0 {
-			first := out.Errors[0]
-			return fmt.Errorf("%d objects not deleted, %s: %s", len(out.Errors), aws.ToString(first.Key), aws.ToString(first.Message))
 		}
 	}
 	return nil

@@ -551,13 +551,11 @@ func replaced(before, after map[string]string) []string {
 // deleteFiles is best effort: a file left behind costs little and must not
 // undo the submission.
 func (s *Service) deleteFiles(ctx context.Context, keys []string) {
-	if s.files == nil {
+	if s.files == nil || len(keys) == 0 {
 		return
 	}
-	for _, k := range keys {
-		if err := s.files.Delete(ctx, k); err != nil {
-			slog.WarnContext(ctx, "file not deleted", "key", k, "error", err)
-		}
+	if err := s.files.DeleteKeys(ctx, keys); err != nil {
+		slog.WarnContext(ctx, "files not deleted", "count", len(keys), "firstKey", keys[0], "error", err)
 	}
 }
 

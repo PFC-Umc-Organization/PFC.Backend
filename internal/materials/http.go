@@ -3,7 +3,6 @@ package materials
 import (
 	"context"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
@@ -13,18 +12,10 @@ func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
 	r.Handle("GET", "/materiais", h.list)
-	r.Handle("POST", "/materiais", staff("material.publicado", h.create))
-	r.Handle("DELETE", "/materiais/:materialId", staff("material.removido", h.remove))
-	r.Handle("POST", "/materiais/arquivos", staff("", h.requestUpload))
+	r.Handle("POST", "/materiais", httpapi.Staff(msgStaffOnly, h.create, httpapi.Audit("material.publicado")))
+	r.Handle("DELETE", "/materiais/:materialId", httpapi.Staff(msgStaffOnly, h.remove, httpapi.Audit("material.removido")))
+	r.Handle("POST", "/materiais/arquivos", httpapi.Staff(msgStaffOnly, h.requestUpload))
 	r.Handle("GET", "/materiais/:materialId/arquivo", h.download)
-}
-
-func staff(auditAction string, h httpapi.Handler) httpapi.Handler {
-	return httpapi.Restrict(httpapi.Policy{
-		Roles:       []actor.Role{actor.RoleAdmin, actor.RoleAdvisor},
-		Message:     msgStaffOnly,
-		AuditAction: auditAction,
-	}, h)
 }
 
 func (h handlers) list(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

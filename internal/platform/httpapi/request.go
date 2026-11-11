@@ -23,7 +23,7 @@ type Request struct {
 	query  map[string]string
 }
 
-func newRequest(ev events.APIGatewayProxyRequest) *Request {
+func newRequest(ev events.APIGatewayProxyRequest, params map[string]string) *Request {
 	return &Request{
 		Method:    ev.HTTPMethod,
 		Path:      ev.Path,
@@ -31,7 +31,7 @@ func newRequest(ev events.APIGatewayProxyRequest) *Request {
 		Actor:     actorOf(ev),
 		SourceIP:  ev.RequestContext.Identity.SourceIP,
 		RequestID: ev.RequestContext.RequestID,
-		params:    ev.PathParameters,
+		params:    params,
 		query:     ev.QueryStringParameters,
 	}
 }

@@ -54,7 +54,7 @@ type Files interface {
 	PresignUpload(ctx context.Context, key, contentType string, maxBytes int64, ttl time.Duration) (storage.Upload, error)
 	PresignDownload(ctx context.Context, key, fileName string, ttl time.Duration) (string, error)
 	Size(ctx context.Context, key string) (int64, bool, error)
-	Delete(ctx context.Context, key string) error
+	DeleteKeys(ctx context.Context, keys []string) error
 	DeletePrefix(ctx context.Context, prefix string) error
 }
 

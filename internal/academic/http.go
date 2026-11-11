@@ -3,7 +3,6 @@ package academic
 import (
 	"context"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
@@ -12,32 +11,24 @@ type handlers struct{ svc *Service }
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
-	r.Handle("POST", "/cursos", admin("curso.criado", h.createCourse))
+	r.Handle("POST", "/cursos", httpapi.Admin(msgAdminOnly, h.createCourse, httpapi.Audit("curso.criado")))
 	r.Handle("GET", "/cursos", h.listCourses)
-	r.Handle("PUT", "/cursos/:cursoId", admin("curso.atualizado", h.updateCourse))
-	r.Handle("DELETE", "/cursos/:cursoId", admin("curso.removido", h.deleteCourse))
+	r.Handle("PUT", "/cursos/:cursoId", httpapi.Admin(msgAdminOnly, h.updateCourse, httpapi.Audit("curso.atualizado")))
+	r.Handle("DELETE", "/cursos/:cursoId", httpapi.Admin(msgAdminOnly, h.deleteCourse, httpapi.Audit("curso.removido")))
 
-	r.Handle("POST", "/turmas", admin("turma.criada", h.createCohort))
+	r.Handle("POST", "/turmas", httpapi.Admin(msgAdminOnly, h.createCohort, httpapi.Audit("turma.criada")))
 	r.Handle("GET", "/turmas", h.listCohorts)
-	r.Handle("PUT", "/turmas/:turmaId", admin("turma.atualizada", h.updateCohort))
-	r.Handle("DELETE", "/turmas/:turmaId", admin("turma.removida", h.deleteCohort))
+	r.Handle("PUT", "/turmas/:turmaId", httpapi.Admin(msgAdminOnly, h.updateCohort, httpapi.Audit("turma.atualizada")))
+	r.Handle("DELETE", "/turmas/:turmaId", httpapi.Admin(msgAdminOnly, h.deleteCohort, httpapi.Audit("turma.removida")))
 
-	r.Handle("GET", "/admin/students", admin("", h.listEnrollments))
-	r.Handle("POST", "/admin/students", admin("matricula.provisionado", h.enroll))
-	r.Handle("DELETE", "/admin/students", admin("matricula.removido", h.unenroll))
+	r.Handle("GET", "/admin/students", httpapi.Admin(msgAdminOnly, h.listEnrollments))
+	r.Handle("POST", "/admin/students", httpapi.Admin(msgAdminOnly, h.enroll, httpapi.Audit("matricula.provisionado")))
+	r.Handle("DELETE", "/admin/students", httpapi.Admin(msgAdminOnly, h.unenroll, httpapi.Audit("matricula.removido")))
 
-	r.Handle("POST", "/programas", admin("programa.criado", h.createProgram))
+	r.Handle("POST", "/programas", httpapi.Admin(msgAdminOnly, h.createProgram, httpapi.Audit("programa.criado")))
 	r.Handle("GET", "/programas", h.listPrograms)
-	r.Handle("PUT", "/programas/:programaId", admin("programa.atualizado", h.updateProgram))
-	r.Handle("DELETE", "/programas/:programaId", admin("programa.removido", h.deleteProgram))
-}
-
-func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
-	return httpapi.Restrict(httpapi.Policy{
-		Roles:       []actor.Role{actor.RoleAdmin},
-		Message:     msgAdminOnly,
-		AuditAction: auditAction,
-	}, h)
+	r.Handle("PUT", "/programas/:programaId", httpapi.Admin(msgAdminOnly, h.updateProgram, httpapi.Audit("programa.atualizado")))
+	r.Handle("DELETE", "/programas/:programaId", httpapi.Admin(msgAdminOnly, h.deleteProgram, httpapi.Audit("programa.removido")))
 }
 
 func (h handlers) createCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

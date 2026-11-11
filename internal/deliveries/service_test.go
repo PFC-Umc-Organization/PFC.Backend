@@ -2,6 +2,7 @@ package deliveries
 
 import (
 	"context"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -311,7 +312,7 @@ func TestWritesAreStaffOnly(t *testing.T) {
 		{"DELETE", "/projetos/p1/entregas/a1"},
 	} {
 		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: route[0], Path: route[1],
-			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": "ALUNO"}}}})
+			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ALUNO"}}}})
 		if resp.StatusCode != 403 {
 			t.Errorf("%s %s: student got %d", route[0], route[1], resp.StatusCode)
 		}
@@ -329,7 +330,7 @@ func TestActivitiesAreCoordinationOnly(t *testing.T) {
 		{"DELETE", "/atividades/a1/campos/f1"},
 	} {
 		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: route[0], Path: route[1],
-			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": "ORIENTADOR"}}}})
+			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ORIENTADOR"}}}})
 		if resp.StatusCode != 403 {
 			t.Errorf("%s %s: advisor got %d", route[0], route[1], resp.StatusCode)
 		}
@@ -422,6 +423,9 @@ type fakeFiles struct {
 	sizes   map[string]int64
 	deleted []string
 	folders []string
+
+	calls     int
+	deleteErr error
 }
 
 func (f *fakeFiles) PresignUpload(_ context.Context, key, contentType string, maxBytes int64, _ time.Duration) (storage.Upload, error) {
@@ -434,9 +438,10 @@ func (f *fakeFiles) Size(_ context.Context, key string) (int64, bool, error) {
 	n, ok := f.sizes[key]
 	return n, ok, nil
 }
-func (f *fakeFiles) Delete(_ context.Context, key string) error {
-	f.deleted = append(f.deleted, key)
-	return nil
+func (f *fakeFiles) DeleteKeys(_ context.Context, keys []string) error {
+	f.calls++
+	f.deleted = append(f.deleted, keys...)
+	return f.deleteErr
 }
 func (f *fakeFiles) DeletePrefix(_ context.Context, prefix string) error {
 	f.folders = append(f.folders, prefix)
@@ -686,4 +691,19 @@ func TestSubmitConcurrency(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+func TestDeleteFilesBatchedAndBestEffort(t *testing.T) {
+	files := &fakeFiles{sizes: map[string]int64{}, deleteErr: errors.New("s3 down")}
+	svc := newTestService(t, &fakeStore{})
+	svc.files = files
+
+	svc.deleteFiles(context.Background(), []string{"a", "b", "c"})
+	if files.calls != 1 || !slices.Equal(files.deleted, []string{"a", "b", "c"}) {
+		t.Fatalf("calls %d, deleted %v: want one batch", files.calls, files.deleted)
+	}
+	svc.deleteFiles(context.Background(), nil)
+	if files.calls != 1 {
+		t.Fatal("no keys must not call storage")
+	}
 }

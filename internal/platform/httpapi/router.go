@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -17,6 +18,8 @@ type Handler func(ctx context.Context, r *Request) (Response, error)
 
 type route struct {
 	segments []string
+	nParams  int
+	public   bool
 	handler  Handler
 }
 
@@ -28,9 +31,27 @@ func NewRouter() *Router {
 	return &Router{routes: map[string][]route{}}
 }
 
-// Handle registers a route; segments starting with ":" are parameters.
+// Handle registers a route that requires an authenticated caller; segments
+// starting with ":" are parameters. A request that reaches it without
+// authorizer claims is refused with 401 before the handler runs.
 func (rt *Router) Handle(method, pattern string, h Handler) {
-	rt.routes[method] = append(rt.routes[method], route{segments: split(pattern), handler: h})
+	rt.add(method, pattern, h, false)
+}
+
+// Public registers a route that is served without authentication.
+func (rt *Router) Public(method, pattern string, h Handler) {
+	rt.add(method, pattern, h, true)
+}
+
+func (rt *Router) add(method, pattern string, h Handler, public bool) {
+	segments := split(pattern)
+	n := 0
+	for _, seg := range segments {
+		if strings.HasPrefix(seg, ":") {
+			n++
+		}
+	}
+	rt.routes[method] = append(rt.routes[method], route{segments: segments, nParams: n, public: public, handler: h})
 }
 
 func (rt *Router) Lambda(ctx context.Context, ev events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -42,26 +63,28 @@ func (rt *Router) Lambda(ctx context.Context, ev events.APIGatewayProxyRequest) 
 
 func (rt *Router) serve(ctx context.Context, ev events.APIGatewayProxyRequest) Response {
 	path := split(ev.Path)
+	if slices.Contains(path, "") {
+		return Error(404, msgNotFound)
+	}
 	for _, rte := range rt.routes[ev.HTTPMethod] {
-		params, ok := match(rte.segments, path)
-		if !ok {
+		if !match(rte.segments, path) {
 			continue
 		}
-		if ev.PathParameters == nil {
-			ev.PathParameters = map[string]string{}
+		req := newRequest(ev, params(rte, path, ev.PathParameters))
+		if !rte.public && req.Actor.Sub == "" {
+			slog.WarnContext(ctx, "unauthenticated request reached lambda", "method", req.Method, "path", req.Path, "requestId", req.RequestID)
+			return Error(401, "Sessão expirada. Entre novamente.")
 		}
-		for k, v := range params {
-			ev.PathParameters[k] = v
-		}
-		req := newRequest(ev)
 		ctx = audit.WithOrigin(ctx, audit.Origin{
 			Actor:     audit.Actor{Sub: req.Actor.Sub, Role: string(req.Actor.Role), Email: req.Actor.Email, IP: req.SourceIP},
 			RequestID: req.RequestID,
 		})
 		return run(ctx, rte.handler, req)
 	}
-	return Error(404, "Endereço não encontrado.")
+	return Error(404, msgNotFound)
 }
+
+const msgNotFound = "Endereço não encontrado."
 
 func run(ctx context.Context, h Handler, req *Request) (resp Response) {
 	defer func() {
@@ -112,17 +135,32 @@ func split(path string) []string {
 	return strings.Split(trimmed, "/")
 }
 
-func match(pattern, actual []string) (map[string]string, bool) {
+func match(pattern, actual []string) bool {
 	if len(pattern) != len(actual) {
-		return nil, false
+		return false
 	}
-	params := map[string]string{}
 	for i, seg := range pattern {
-		if name, ok := strings.CutPrefix(seg, ":"); ok {
-			params[name] = actual[i]
-		} else if seg != actual[i] {
-			return nil, false
+		if !strings.HasPrefix(seg, ":") && seg != actual[i] {
+			return false
 		}
 	}
-	return params, true
+	return true
+}
+
+// params extracts the path parameters of the winning route. Parameters
+// supplied by the API Gateway are kept; the route's own take precedence.
+func params(rte route, actual []string, gateway map[string]string) map[string]string {
+	if rte.nParams == 0 {
+		return gateway
+	}
+	out := make(map[string]string, rte.nParams+len(gateway))
+	for k, v := range gateway {
+		out[k] = v
+	}
+	for i, seg := range rte.segments {
+		if name, ok := strings.CutPrefix(seg, ":"); ok {
+			out[name] = actual[i]
+		}
+	}
+	return out
 }

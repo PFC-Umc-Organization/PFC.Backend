@@ -3,7 +3,6 @@ package identity
 import (
 	"context"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
@@ -11,32 +10,21 @@ type handlers struct{ svc *Service }
 
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
-	r.Handle("POST", "/auth/login", h.login)
-	r.Handle("POST", "/auth/registrar", h.signUp)
-	r.Handle("POST", "/auth/confirmar", h.confirm)
-	r.Handle("POST", "/auth/reenviar-codigo", h.resendCode)
-	r.Handle("POST", "/auth/nova-senha", h.completeNewPassword)
-	r.Handle("POST", "/auth/esqueci-senha", h.forgotPassword)
-	r.Handle("POST", "/auth/redefinir-senha", h.resetPassword)
+	r.Public("POST", "/auth/login", h.login)
+	r.Public("POST", "/auth/registrar", h.signUp)
+	r.Public("POST", "/auth/confirmar", h.confirm)
+	r.Public("POST", "/auth/reenviar-codigo", h.resendCode)
+	r.Public("POST", "/auth/nova-senha", h.completeNewPassword)
+	r.Public("POST", "/auth/esqueci-senha", h.forgotPassword)
+	r.Public("POST", "/auth/redefinir-senha", h.resetPassword)
 	r.Handle("GET", "/me", h.me)
-	r.Handle("GET", "/usuarios", httpapi.Restrict(httpapi.Policy{
-		Roles:   []actor.Role{actor.RoleAdmin, actor.RoleAdvisor},
-		Message: msgStaffOnly,
-	}, h.listUsers))
-	r.Handle("POST", "/admin/usuarios", admin("usuario.criado", h.createAccount))
-	r.Handle("PUT", "/admin/usuarios/:usuarioId/nome", admin("usuario.nome_alterado", h.renameAccount))
-	r.Handle("PUT", "/admin/usuarios/:usuarioId/perfil", admin("usuario.perfil_alterado", h.changeRole))
-	r.Handle("POST", "/admin/usuarios/:usuarioId/desativar", admin("usuario.desativado", h.disableAccount))
-	r.Handle("POST", "/admin/usuarios/:usuarioId/reativar", admin("usuario.reativado", h.enableAccount))
-	r.Handle("POST", "/admin/usuarios/:usuarioId/convite", admin("usuario.convite_reenviado", h.resendInvitation))
-}
-
-func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
-	return httpapi.Restrict(httpapi.Policy{
-		Roles:       []actor.Role{actor.RoleAdmin},
-		Message:     msgAdminOnly,
-		AuditAction: auditAction,
-	}, h)
+	r.Handle("GET", "/usuarios", httpapi.Staff(msgStaffOnly, h.listUsers))
+	r.Handle("POST", "/admin/usuarios", httpapi.Admin(msgAdminOnly, h.createAccount, httpapi.Audit("usuario.criado")))
+	r.Handle("PUT", "/admin/usuarios/:usuarioId/nome", httpapi.Admin(msgAdminOnly, h.renameAccount, httpapi.Audit("usuario.nome_alterado")))
+	r.Handle("PUT", "/admin/usuarios/:usuarioId/perfil", httpapi.Admin(msgAdminOnly, h.changeRole, httpapi.Audit("usuario.perfil_alterado")))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/desativar", httpapi.Admin(msgAdminOnly, h.disableAccount, httpapi.Audit("usuario.desativado")))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/reativar", httpapi.Admin(msgAdminOnly, h.enableAccount, httpapi.Audit("usuario.reativado")))
+	r.Handle("POST", "/admin/usuarios/:usuarioId/convite", httpapi.Admin(msgAdminOnly, h.resendInvitation, httpapi.Audit("usuario.convite_reenviado")))
 }
 
 func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
