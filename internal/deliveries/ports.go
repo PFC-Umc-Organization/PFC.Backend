@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	errNotFound = errors.New("not found")
-	errFull     = errors.New("field limit reached")
-	errStale    = errors.New("item changed since it was read")
+	errNotFound  = errors.New("not found")
+	errFull      = errors.New("field limit reached")
+	errStale     = errors.New("item changed since it was read")
+	errDuplicate = errors.New("already exists")
 )
 
 type Store interface {
@@ -27,9 +28,12 @@ type Store interface {
 	AddField(ctx context.Context, activityID string, f Field) error
 	RemoveField(ctx context.Context, activityID string, position int, fieldID string) error
 
-	// PutSubmission with mustExist only replaces a submission still there:
-	// after the deadline a handed-back one must not come back.
-	PutSubmission(ctx context.Context, s Submission, mustExist bool) error
+	// PutSubmission creates the submission when expected is nil and replaces
+	// it only if it is still the one that was read (expected), so a
+	// concurrent change, or a hand-back after the deadline, is never
+	// overwritten. It returns errStale when the stored submission is not
+	// the expected one and errNotFound when the project is gone.
+	PutSubmission(ctx context.Context, s Submission, expected *Submission) error
 	GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error)
 	// SetValidation returns errNotFound when the submission is gone.
 	SetValidation(ctx context.Context, projectID, activityID string, v Validation) (Submission, error)

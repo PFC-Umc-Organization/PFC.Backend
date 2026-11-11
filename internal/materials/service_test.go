@@ -13,9 +13,18 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
-type memStore struct{ items map[string]Material }
+type memStore struct {
+	items     map[string]Material
+	createErr error
+}
 
-func (m *memStore) Create(_ context.Context, x Material) error { m.items[x.ID] = x; return nil }
+func (m *memStore) Create(_ context.Context, x Material) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	m.items[x.ID] = x
+	return nil
+}
 func (m *memStore) Get(_ context.Context, id string) (Material, bool, error) {
 	x, ok := m.items[id]
 	return x, ok, nil
@@ -197,5 +206,14 @@ func TestAdminRemovesAny(t *testing.T) {
 	m, _ := svc.Create(ctx, advisor, MaterialInput{Title: "Guia", Kind: KindLink, URL: "https://x"})
 	if err := svc.Delete(ctx, admin, m.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCreateDuplicateIDIsConflict(t *testing.T) {
+	svc, store := newService(t, nil)
+	store.createErr = errDuplicate
+	_, err := svc.Create(context.Background(), advisor, MaterialInput{Title: "Geral", Kind: KindLink, URL: "https://x"})
+	if kind(err) != apperr.KindConflict {
+		t.Errorf("err = %v", err)
 	}
 }

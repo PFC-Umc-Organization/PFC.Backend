@@ -24,12 +24,19 @@ type fakeStore struct {
 	saved      []Submission
 	removed    []int
 	penalties  map[string][]penaltyRecord
+	createErr  error
+	// beforePut runs when a save starts, to play a concurrent writer.
+	beforePut func(*fakeStore)
+	putErr    error
 }
 
 func (f *fakeStore) PenaltiesOfProject(_ context.Context, projectID string) ([]penaltyRecord, error) {
 	return f.penalties[projectID], nil
 }
 func (f *fakeStore) AddPenalty(_ context.Context, projectID string, r penaltyRecord) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	if f.penalties == nil {
 		f.penalties = map[string][]penaltyRecord{}
 	}
@@ -54,6 +61,9 @@ func (f *fakeStore) GetActivity(_ context.Context, id string) (Activity, bool, e
 	return a, ok, nil
 }
 func (f *fakeStore) CreateActivity(_ context.Context, a Activity) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	if f.activities == nil {
 		f.activities = map[string]Activity{}
 	}
@@ -71,15 +81,24 @@ func (f *fakeStore) RemoveField(_ context.Context, _ string, position int, _ str
 	f.removed = append(f.removed, position)
 	return nil
 }
-func (f *fakeStore) PutSubmission(_ context.Context, s Submission, mustExist bool) error {
+func (f *fakeStore) PutSubmission(_ context.Context, s Submission, expected *Submission) error {
+	if f.beforePut != nil {
+		f.beforePut(f)
+	}
+	if f.putErr != nil {
+		return f.putErr
+	}
 	for i, old := range f.saved {
 		if old.ProjectID == s.ProjectID && old.ActivityID == s.ActivityID {
+			if expected == nil || old.SubmittedAt != expected.SubmittedAt || old.UpdatedAt != expected.UpdatedAt {
+				return errStale
+			}
 			f.saved[i] = s
 			return nil
 		}
 	}
-	if mustExist {
-		return errNotFound
+	if expected != nil {
+		return errStale
 	}
 	f.saved = append(f.saved, s)
 	return nil
@@ -616,4 +635,55 @@ func TestOrderAndPenaltiesIgnoreOtherCohorts(t *testing.T) {
 	if _, err := svc.Submit(ctx, ana, "p1", "mine", SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
+}
+
+func TestDuplicateIDsAreConflicts(t *testing.T) {
+	svc := newTestService(t, &fakeStore{createErr: errDuplicate, activities: map[string]Activity{"a1": tcc}})
+	ctx := context.Background()
+	in := ActivityInput{Title: "Nova", Deadline: "2026-12-10T10:00", Fields: []FieldInput{{Label: "Link", Type: FieldLink}}}
+	_, err := svc.CreateActivity(ctx, in)
+	if e, ok := apperr.As(err); !ok || e.Kind != apperr.KindConflict {
+		t.Errorf("create activity: err = %v", err)
+	}
+}
+
+func TestSubmitConcurrency(t *testing.T) {
+	member := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	in := SubmissionInput{Answers: map[string]string{"f1": "tema.pdf"}}
+	ctx := context.Background()
+	conflict := func(t *testing.T, err error) {
+		t.Helper()
+		if e, ok := apperr.As(err); !ok || e.Kind != apperr.KindConflict || e.Message != msgSubmissionChanged {
+			t.Fatalf("err = %v", err)
+		}
+	}
+
+	t.Run("two first submissions", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
+		store.beforePut = func(f *fakeStore) {
+			f.beforePut = nil
+			f.saved = append(f.saved, Submission{ProjectID: "p1", ActivityID: "a1", SubmittedAt: "x", SubmittedBy: "Bia"})
+		}
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		conflict(t, err)
+		if len(store.saved) != 1 || store.saved[0].SubmittedBy != "Bia" {
+			t.Errorf("the first writer must stay: %+v", store.saved)
+		}
+	})
+
+	t.Run("edit over a newer edit", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc},
+			saved: []Submission{{ProjectID: "p1", ActivityID: "a1", SubmittedAt: "t0", SubmittedBy: "Ana"}}}
+		store.beforePut = func(f *fakeStore) { f.saved[0].UpdatedAt = "t1" }
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		conflict(t, err)
+	})
+
+	t.Run("project deleted meanwhile", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc}, putErr: errNotFound}
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		if message(err) != msgProjectNotFound {
+			t.Fatalf("err = %v", err)
+		}
+	})
 }

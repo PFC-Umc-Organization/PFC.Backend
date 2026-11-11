@@ -97,7 +97,9 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 		}
 		m.fileKey, m.File = in.File, path.Base(in.File)
 	}
-	if err := s.store.Create(ctx, m); err != nil {
+	if err := s.store.Create(ctx, m); errors.Is(err, errDuplicate) {
+		return Material{}, apperr.Conflict("Já existe um material com este identificador. Tente novamente.")
+	} else if err != nil {
 		return Material{}, apperr.Internal("Não foi possível publicar o material. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "material.publicado", Result: audit.Success, Resource: resource(m.ID),

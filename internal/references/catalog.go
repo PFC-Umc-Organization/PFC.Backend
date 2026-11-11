@@ -56,7 +56,7 @@ func (c *Catalog) getJSON(ctx context.Context, endpoint string, dst any) error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUnavailable, err)
+		return fmt.Errorf("%w: %w", errUnavailable, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
@@ -66,7 +66,7 @@ func (c *Catalog) getJSON(ctx context.Context, endpoint string, dst any) error {
 		return fmt.Errorf("%w: status %d", errUnavailable, resp.StatusCode)
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(dst); err != nil {
-		return fmt.Errorf("%w: invalid response: %v", errUnavailable, err)
+		return fmt.Errorf("%w: invalid response: %w", errUnavailable, err)
 	}
 	return nil
 }

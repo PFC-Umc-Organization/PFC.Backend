@@ -4,9 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
@@ -63,17 +61,14 @@ func (it item) material() Material {
 func key(id string) dynamo.Item { return dynamo.Key(materialPrefix+id, profileSK) }
 
 func (s *DynamoStore) Create(ctx context.Context, m Material) error {
-	av, err := attributevalue.MarshalMap(item{
+	err := dynamo.PutStruct(ctx, s.table, item{
 		PK: materialPrefix + m.ID, SK: profileSK, GSI1PK: partition, GSI1SK: materialPrefix + m.ID,
 		Title: m.Title, Description: m.Description, Kind: m.Kind, URL: m.URL, FileKey: m.fileKey, File: m.File,
 		CohortID: m.CohortID, PublishedAt: m.PublishedAt, PublishedBy: m.PublishedBy, AuthorSub: m.AuthorID,
-	})
-	if err != nil {
-		return err
+	}, dynamo.Write{Condition: "attribute_not_exists(PK)"})
+	if dynamo.ConditionFailed(err) {
+		return errDuplicate
 	}
-	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(s.table.Name), Item: av, ConditionExpression: aws.String("attribute_not_exists(PK)"),
-	})
 	return err
 }
 
@@ -95,12 +90,7 @@ func (s *DynamoStore) List(ctx context.Context) ([]Material, error) {
 }
 
 func (s *DynamoStore) Delete(ctx context.Context, id string) (Material, error) {
-	out, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 key(id),
-		ConditionExpression: aws.String("attribute_exists(PK)"),
-		ReturnValues:        types.ReturnValueAllOld,
-	})
+	old, err := s.table.DeleteItem(ctx, key(id), dynamo.Write{Condition: "attribute_exists(PK)", Return: types.ReturnValueAllOld})
 	if dynamo.ConditionFailed(err) {
 		return Material{}, errNotFound
 	}
@@ -108,7 +98,7 @@ func (s *DynamoStore) Delete(ctx context.Context, id string) (Material, error) {
 		return Material{}, err
 	}
 	var it item
-	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+	if err := attributevalue.UnmarshalMap(old, &it); err != nil {
 		return Material{}, err
 	}
 	return it.material(), nil

@@ -122,7 +122,9 @@ func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activit
 	for _, f := range inputs {
 		a.Fields = append(a.Fields, Field{ID: s.newID(), Label: f.Label, Type: f.Type, Required: f.Required})
 	}
-	if err := s.store.CreateActivity(ctx, a); err != nil {
+	if err := s.store.CreateActivity(ctx, a); errors.Is(err, errDuplicate) {
+		return Activity{}, apperr.Conflict("Já existe uma atividade com este identificador. Tente novamente.")
+	} else if err != nil {
 		return Activity{}, apperr.Internal("Não foi possível criar a atividade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.criada", Result: audit.Success, Resource: activityResource(a.ID),
@@ -249,7 +251,7 @@ func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, 
 	if err != nil {
 		return nil, err
 	}
-	perProject, err := parallel.Map(projects, func(p groups.Project) ([]Submission, error) {
+	perProject, err := parallel.Map(ctx, projects, func(ctx context.Context, p groups.Project) ([]Submission, error) {
 		return s.store.SubmissionsOfProject(ctx, p.ID)
 	})
 	if err != nil {
@@ -309,9 +311,17 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 		sub.SubmittedAt, sub.SubmittedBy = previous.SubmittedAt, previous.SubmittedBy
 		sub.UpdatedAt, sub.UpdatedBy = s.timestamp(), member.Name
 	}
-	switch err := s.store.PutSubmission(ctx, sub, closed); {
+	var expected *Submission
+	if found {
+		expected = &previous
+	}
+	switch err := s.store.PutSubmission(ctx, sub, expected); {
 	case errors.Is(err, errNotFound):
-		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
+		audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgProjectNotFound,
+			Resource: activityResource(a.ID), Details: map[string]any{"projetoId": p.ID}})
+		return Submission{}, apperr.NotFound(msgProjectNotFound)
+	case errors.Is(err, errStale):
+		return Submission{}, s.submissionChanged(ctx, p.ID, a, closed)
 	case err != nil:
 		return Submission{}, apperr.Internal("Não foi possível salvar a entrega. Tente novamente em instantes.", err)
 	}
@@ -319,6 +329,19 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Success, Resource: activityResource(a.ID),
 		Details: map[string]any{"projetoId": p.ID}})
 	return sub, nil
+}
+
+// submissionChanged explains a rejected write: a submission handed back
+// after the deadline is final, anything else is a concurrent change.
+func (s *Service) submissionChanged(ctx context.Context, projectID string, a Activity, closed bool) error {
+	if closed {
+		if _, found, err := s.store.GetSubmission(ctx, projectID, a.ID); err == nil && !found {
+			return s.deadlinePassed(ctx, projectID, a.ID)
+		}
+	}
+	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgSubmissionChanged,
+		Resource: activityResource(a.ID), Details: map[string]any{"projetoId": projectID}})
+	return apperr.Conflict(msgSubmissionChanged)
 }
 
 func (s *Service) deadlinePassed(ctx context.Context, projectID, activityID string) error {
@@ -659,7 +682,7 @@ func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, pr
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
 	}
-	out, err := parallel.Map(projects, func(p groups.Project) (Penalties, error) {
+	out, err := parallel.Map(ctx, projects, func(ctx context.Context, p groups.Project) (Penalties, error) {
 		src, err := s.projectPenalties(ctx, p.ID)
 		return penaltiesOf(p.ID, activities, src.submissions, src.records, s.now()), err
 	})
@@ -704,7 +727,9 @@ func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projec
 		}
 	}
 	r := penaltyRecord{ID: manualPenaltyPrefix + s.newID(), ActivityID: activityID, Reason: reason, AppliedAt: s.timestamp(), AppliedBy: reviewer.Name}
-	if err := s.store.AddPenalty(ctx, p.ID, r); err != nil {
+	if err := s.store.AddPenalty(ctx, p.ID, r); errors.Is(err, errDuplicate) {
+		return Penalties{}, apperr.Conflict("Já existe uma penalidade com este identificador. Tente novamente.")
+	} else if err != nil {
 		return Penalties{}, apperr.Internal("Não foi possível aplicar a penalidade. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "penalidade.aplicada", Result: audit.Success, Resource: &audit.Resource{Type: "projeto", ID: p.ID},

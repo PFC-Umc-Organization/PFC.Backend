@@ -63,3 +63,11 @@ func TestSignUpAttributesAlwaysStudent(t *testing.T) {
 		t.Errorf("attributes = %v", values)
 	}
 }
+
+func TestClassifyKeepsTheOriginalError(t *testing.T) {
+	err := classify(&types.UserNotConfirmedException{}, errNotConfirmed)
+	var original *types.UserNotConfirmedException
+	if !errors.Is(err, errNotConfirmed) || !errors.As(err, &original) {
+		t.Fatalf("both the class and the SDK exception must stay reachable: %v", err)
+	}
+}

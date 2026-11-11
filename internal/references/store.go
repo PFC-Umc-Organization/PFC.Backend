@@ -4,10 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
@@ -53,19 +49,11 @@ func (it referenceItem) reference() Reference {
 }
 
 func (s *DynamoStore) PutReference(ctx context.Context, r Reference, addedByID string) error {
-	item, err := attributevalue.MarshalMap(referenceItem{
+	err := dynamo.PutStruct(ctx, s.table, referenceItem{
 		PK: projectPrefix + r.ProjectID, SK: referencePrefix + r.ID,
 		DOI: r.DOI, Title: r.Title, Year: r.Year, ABNT: r.ABNT, ABNTHTML: r.ABNTHTML,
 		AddedByID: addedByID, AddedBy: r.AddedBy, AddedAt: r.AddedAt,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(s.table.Name),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(SK)"),
-	})
+	}, dynamo.Write{Condition: "attribute_not_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
 		return errDuplicate
 	}
@@ -85,11 +73,7 @@ func (s *DynamoStore) ReferencesOf(ctx context.Context, projectID string) ([]Ref
 }
 
 func (s *DynamoStore) DeleteReference(ctx context.Context, projectID, id string) error {
-	_, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 dynamo.Key(projectPrefix+projectID, referencePrefix+id),
-		ConditionExpression: aws.String("attribute_exists(SK)"),
-	})
+	_, err := s.table.DeleteItem(ctx, dynamo.Key(projectPrefix+projectID, referencePrefix+id), dynamo.Write{Condition: "attribute_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
 		return errNotFound
 	}

@@ -100,7 +100,95 @@ func (t *Table) Exists(ctx context.Context, key Item) (bool, error) {
 	return found, err
 }
 
+var ErrConditionFailed = errors.New("dynamo: condition failed")
+
+// ConditionFailedError carries the stored item when the write asked for
+// ReturnValuesOnConditionCheckFailure=ALL_OLD.
+type ConditionFailedError struct {
+	Old   Item
+	cause error
+}
+
+func (e *ConditionFailedError) Error() string        { return ErrConditionFailed.Error() }
+func (e *ConditionFailedError) Is(target error) bool { return target == ErrConditionFailed }
+func (e *ConditionFailedError) Unwrap() error        { return e.cause }
+
+// Write holds the optional parts of a single-item write.
+type Write struct {
+	Condition string
+	Values    Item
+	Return    types.ReturnValue
+	OldOnFail bool
+}
+
+func (w Write) failureReturn() types.ReturnValuesOnConditionCheckFailure {
+	if w.OldOnFail {
+		return types.ReturnValuesOnConditionCheckFailureAllOld
+	}
+	return ""
+}
+
+func conditionError(err error) error {
+	var c *types.ConditionalCheckFailedException
+	if errors.As(err, &c) {
+		return &ConditionFailedError{Old: c.Item, cause: err}
+	}
+	return err
+}
+
+func (t *Table) PutItem(ctx context.Context, item Item, w Write) error {
+	_, err := t.Client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:                           aws.String(t.Name),
+		Item:                                item,
+		ConditionExpression:                 optional(w.Condition),
+		ExpressionAttributeValues:           optionalValues(w.Values),
+		ReturnValuesOnConditionCheckFailure: w.failureReturn(),
+	})
+	return conditionError(err)
+}
+
+// UpdateItem returns the attributes selected by w.Return, if any.
+func (t *Table) UpdateItem(ctx context.Context, key Item, expression string, w Write) (Item, error) {
+	out, err := t.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                           aws.String(t.Name),
+		Key:                                 key,
+		UpdateExpression:                    aws.String(expression),
+		ConditionExpression:                 optional(w.Condition),
+		ExpressionAttributeValues:           optionalValues(w.Values),
+		ReturnValues:                        w.Return,
+		ReturnValuesOnConditionCheckFailure: w.failureReturn(),
+	})
+	if err != nil {
+		return nil, conditionError(err)
+	}
+	return out.Attributes, nil
+}
+
+// DeleteItem returns the attributes selected by w.Return, if any.
+func (t *Table) DeleteItem(ctx context.Context, key Item, w Write) (Item, error) {
+	out, err := t.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:                           aws.String(t.Name),
+		Key:                                 key,
+		ConditionExpression:                 optional(w.Condition),
+		ExpressionAttributeValues:           optionalValues(w.Values),
+		ReturnValues:                        w.Return,
+		ReturnValuesOnConditionCheckFailure: w.failureReturn(),
+	})
+	if err != nil {
+		return nil, conditionError(err)
+	}
+	return out.Attributes, nil
+}
+
+func PutStruct(ctx context.Context, t *Table, v any, w Write) error {
+	item, err := attributevalue.MarshalMap(v)
+	if err != nil {
+		return err
+	}
+	return t.PutItem(ctx, item, w)
+}
+
 func ConditionFailed(err error) bool {
 	var c *types.ConditionalCheckFailedException
-	return errors.As(err, &c)
+	return errors.Is(err, ErrConditionFailed) || errors.As(err, &c)
 }

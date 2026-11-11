@@ -24,7 +24,7 @@ func NewCognito(client *cip.Client, clientID, userPoolID string) *Cognito {
 	return &Cognito{client: client, clientID: clientID, userPoolID: userPoolID}
 }
 
-func classify(err error, target error) error { return fmt.Errorf("%w: %v", target, err) }
+func classify(err error, target error) error { return fmt.Errorf("%w: %w", target, err) }
 
 func (c *Cognito) SignIn(ctx context.Context, email, password string) (SignInResult, error) {
 	out, err := c.client.InitiateAuth(ctx, &cip.InitiateAuthInput{

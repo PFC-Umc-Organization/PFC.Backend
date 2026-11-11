@@ -269,6 +269,7 @@ const (
 	msgSubmissionNotFound = "Entrega não encontrada."
 	msgProjectNotFound    = "Projeto não encontrado."
 	msgCohortNotFound     = "Turma não encontrada. Escolha uma turma cadastrada para a atividade."
+	msgSubmissionChanged  = "Outro integrante alterou esta entrega agora há pouco. Recarregue a página e confira antes de enviar de novo."
 	msgDeadlinePassed     = "O prazo desta atividade está encerrado e ela não recebe mais entregas."
 	msgGroupFailed        = "O grupo foi reprovado por atingir o limite de penalidades, e o envio de entregas está encerrado."
 	msgPenaltyReviewers   = "Apenas a coordenação e o orientador do projeto podem administrar penalidades."

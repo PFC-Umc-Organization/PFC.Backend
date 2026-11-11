@@ -199,16 +199,7 @@ func (s *DynamoStore) ProjectsOfMembers(ctx context.Context, rgms []string) (map
 }
 
 func (s *DynamoStore) update(ctx context.Context, id, expression string, values dynamo.Item) error {
-	in := &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 projectKey(id),
-		UpdateExpression:    aws.String(expression),
-		ConditionExpression: aws.String(present),
-	}
-	if len(values) > 0 {
-		in.ExpressionAttributeValues = values
-	}
-	_, err := s.table.Client.UpdateItem(ctx, in)
+	_, err := s.table.UpdateItem(ctx, projectKey(id), expression, dynamo.Write{Condition: present, Values: values})
 	if dynamo.ConditionFailed(err) {
 		return errNotFound
 	}
@@ -332,19 +323,11 @@ func (s *DynamoStore) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (s *DynamoStore) CreateInvitation(ctx context.Context, inv Invitation) error {
-	item, err := attributevalue.MarshalMap(invitationItem{
+	err := dynamo.PutStruct(ctx, s.table, invitationItem{
 		PK: projectPrefix + inv.ProjectID, SK: invitationPrefix + inv.RGM,
 		GSI1PK: invitationPrefix + inv.RGM, GSI1SK: projectPrefix + inv.ProjectID,
 		ProjectName: inv.ProjectName, InvitedBy: inv.InvitedBy, CreatedAt: inv.CreatedAt,
-	})
-	if err != nil {
-		return err
-	}
-	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(s.table.Name),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(SK)"),
-	})
+	}, dynamo.Write{Condition: "attribute_not_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
 		return errDuplicate
 	}
@@ -376,11 +359,7 @@ func invitations(items []invitationItem, err error) ([]Invitation, error) {
 }
 
 func (s *DynamoStore) DeleteInvitation(ctx context.Context, projectID, rgm string) error {
-	_, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 invitationKey(projectID, rgm),
-		ConditionExpression: aws.String("attribute_exists(SK)"),
-	})
+	_, err := s.table.DeleteItem(ctx, invitationKey(projectID, rgm), dynamo.Write{Condition: "attribute_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
 		return errNotFound
 	}
