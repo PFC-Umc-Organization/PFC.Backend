@@ -2,6 +2,7 @@ package deliveries
 
 import (
 	"context"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -24,12 +25,19 @@ type fakeStore struct {
 	saved      []Submission
 	removed    []int
 	penalties  map[string][]penaltyRecord
+	createErr  error
+	// beforePut runs when a save starts, to play a concurrent writer.
+	beforePut func(*fakeStore)
+	putErr    error
 }
 
 func (f *fakeStore) PenaltiesOfProject(_ context.Context, projectID string) ([]penaltyRecord, error) {
 	return f.penalties[projectID], nil
 }
 func (f *fakeStore) AddPenalty(_ context.Context, projectID string, r penaltyRecord) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	if f.penalties == nil {
 		f.penalties = map[string][]penaltyRecord{}
 	}
@@ -54,6 +62,9 @@ func (f *fakeStore) GetActivity(_ context.Context, id string) (Activity, bool, e
 	return a, ok, nil
 }
 func (f *fakeStore) CreateActivity(_ context.Context, a Activity) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	if f.activities == nil {
 		f.activities = map[string]Activity{}
 	}
@@ -71,15 +82,24 @@ func (f *fakeStore) RemoveField(_ context.Context, _ string, position int, _ str
 	f.removed = append(f.removed, position)
 	return nil
 }
-func (f *fakeStore) PutSubmission(_ context.Context, s Submission, mustExist bool) error {
+func (f *fakeStore) PutSubmission(_ context.Context, s Submission, expected *Submission) error {
+	if f.beforePut != nil {
+		f.beforePut(f)
+	}
+	if f.putErr != nil {
+		return f.putErr
+	}
 	for i, old := range f.saved {
 		if old.ProjectID == s.ProjectID && old.ActivityID == s.ActivityID {
+			if expected == nil || old.SubmittedAt != expected.SubmittedAt || old.UpdatedAt != expected.UpdatedAt {
+				return errStale
+			}
 			f.saved[i] = s
 			return nil
 		}
 	}
-	if mustExist {
-		return errNotFound
+	if expected != nil {
+		return errStale
 	}
 	f.saved = append(f.saved, s)
 	return nil
@@ -292,7 +312,7 @@ func TestWritesAreStaffOnly(t *testing.T) {
 		{"DELETE", "/projetos/p1/entregas/a1"},
 	} {
 		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: route[0], Path: route[1],
-			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": "ALUNO"}}}})
+			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ALUNO"}}}})
 		if resp.StatusCode != 403 {
 			t.Errorf("%s %s: student got %d", route[0], route[1], resp.StatusCode)
 		}
@@ -310,7 +330,7 @@ func TestActivitiesAreCoordinationOnly(t *testing.T) {
 		{"DELETE", "/atividades/a1/campos/f1"},
 	} {
 		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: route[0], Path: route[1],
-			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": "ORIENTADOR"}}}})
+			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ORIENTADOR"}}}})
 		if resp.StatusCode != 403 {
 			t.Errorf("%s %s: advisor got %d", route[0], route[1], resp.StatusCode)
 		}
@@ -403,6 +423,9 @@ type fakeFiles struct {
 	sizes   map[string]int64
 	deleted []string
 	folders []string
+
+	calls     int
+	deleteErr error
 }
 
 func (f *fakeFiles) PresignUpload(_ context.Context, key, contentType string, maxBytes int64, _ time.Duration) (storage.Upload, error) {
@@ -415,9 +438,10 @@ func (f *fakeFiles) Size(_ context.Context, key string) (int64, bool, error) {
 	n, ok := f.sizes[key]
 	return n, ok, nil
 }
-func (f *fakeFiles) Delete(_ context.Context, key string) error {
-	f.deleted = append(f.deleted, key)
-	return nil
+func (f *fakeFiles) DeleteKeys(_ context.Context, keys []string) error {
+	f.calls++
+	f.deleted = append(f.deleted, keys...)
+	return f.deleteErr
 }
 func (f *fakeFiles) DeletePrefix(_ context.Context, prefix string) error {
 	f.folders = append(f.folders, prefix)
@@ -615,5 +639,71 @@ func TestOrderAndPenaltiesIgnoreOtherCohorts(t *testing.T) {
 	}
 	if _, err := svc.Submit(ctx, ana, "p1", "mine", SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}); err != nil {
 		t.Fatalf("submit: %v", err)
+	}
+}
+
+func TestDuplicateIDsAreConflicts(t *testing.T) {
+	svc := newTestService(t, &fakeStore{createErr: errDuplicate, activities: map[string]Activity{"a1": tcc}})
+	ctx := context.Background()
+	in := ActivityInput{Title: "Nova", Deadline: "2026-12-10T10:00", Fields: []FieldInput{{Label: "Link", Type: FieldLink}}}
+	_, err := svc.CreateActivity(ctx, in)
+	if e, ok := apperr.As(err); !ok || e.Kind != apperr.KindConflict {
+		t.Errorf("create activity: err = %v", err)
+	}
+}
+
+func TestSubmitConcurrency(t *testing.T) {
+	member := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
+	in := SubmissionInput{Answers: map[string]string{"f1": "tema.pdf"}}
+	ctx := context.Background()
+	conflict := func(t *testing.T, err error) {
+		t.Helper()
+		if e, ok := apperr.As(err); !ok || e.Kind != apperr.KindConflict || e.Message != msgSubmissionChanged {
+			t.Fatalf("err = %v", err)
+		}
+	}
+
+	t.Run("two first submissions", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
+		store.beforePut = func(f *fakeStore) {
+			f.beforePut = nil
+			f.saved = append(f.saved, Submission{ProjectID: "p1", ActivityID: "a1", SubmittedAt: "x", SubmittedBy: "Bia"})
+		}
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		conflict(t, err)
+		if len(store.saved) != 1 || store.saved[0].SubmittedBy != "Bia" {
+			t.Errorf("the first writer must stay: %+v", store.saved)
+		}
+	})
+
+	t.Run("edit over a newer edit", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc},
+			saved: []Submission{{ProjectID: "p1", ActivityID: "a1", SubmittedAt: "t0", SubmittedBy: "Ana"}}}
+		store.beforePut = func(f *fakeStore) { f.saved[0].UpdatedAt = "t1" }
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		conflict(t, err)
+	})
+
+	t.Run("project deleted meanwhile", func(t *testing.T) {
+		store := &fakeStore{activities: map[string]Activity{"a1": tcc}, putErr: errNotFound}
+		_, err := newTestService(t, store).Submit(ctx, member, "p1", "a1", in)
+		if message(err) != msgProjectNotFound {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}
+
+func TestDeleteFilesBatchedAndBestEffort(t *testing.T) {
+	files := &fakeFiles{sizes: map[string]int64{}, deleteErr: errors.New("s3 down")}
+	svc := newTestService(t, &fakeStore{})
+	svc.files = files
+
+	svc.deleteFiles(context.Background(), []string{"a", "b", "c"})
+	if files.calls != 1 || !slices.Equal(files.deleted, []string{"a", "b", "c"}) {
+		t.Fatalf("calls %d, deleted %v: want one batch", files.calls, files.deleted)
+	}
+	svc.deleteFiles(context.Background(), nil)
+	if files.calls != 1 {
+		t.Fatal("no keys must not call storage")
 	}
 }

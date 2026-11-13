@@ -121,24 +121,19 @@ func submissionKey(projectID, activityID string) dynamo.Item {
 	return dynamo.Key(projectPrefix+projectID, submissionPrefix+activityID)
 }
 
-func (s *DynamoStore) put(ctx context.Context, v any) error {
-	item, err := attributevalue.MarshalMap(v)
-	if err != nil {
-		return err
-	}
-	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(s.table.Name), Item: item})
-	return err
-}
-
 func (s *DynamoStore) CreateActivity(ctx context.Context, a Activity) error {
 	fields := make([]fieldItem, 0, len(a.Fields))
 	for _, f := range a.Fields {
 		fields = append(fields, fieldItem(f))
 	}
-	return s.put(ctx, activityItem{
+	err := dynamo.PutStruct(ctx, s.table, activityItem{
 		PK: activityPrefix + a.ID, SK: profileSK, GSI1PK: activitiesPartition, GSI1SK: activityPrefix + a.ID,
 		Title: a.Title, Description: a.Description, Deadline: a.Deadline, PublishedAt: a.PublishedAt, Fields: fields, CohortID: a.CohortID,
-	})
+	}, dynamo.Write{Condition: "attribute_not_exists(PK)"})
+	if dynamo.ConditionFailed(err) {
+		return errDuplicate
+	}
+	return err
 }
 
 func (s *DynamoStore) GetActivity(ctx context.Context, id string) (Activity, bool, error) {
@@ -163,15 +158,12 @@ func (s *DynamoStore) ListActivities(ctx context.Context) ([]Activity, error) {
 
 // UpdateActivity returns the updated item (ALL_NEW), saving a second read.
 func (s *DynamoStore) UpdateActivity(ctx context.Context, id string, in ActivityInput) (Activity, error) {
-	out, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 activityKey(id),
-		UpdateExpression:    aws.String("SET titulo = :t, descricao = :d, prazo = :p"),
-		ConditionExpression: aws.String("attribute_exists(PK)"),
-		ExpressionAttributeValues: dynamo.Item{
+	attrs, err := s.table.UpdateItem(ctx, activityKey(id), "SET titulo = :t, descricao = :d, prazo = :p", dynamo.Write{
+		Condition: "attribute_exists(PK)",
+		Values: dynamo.Item{
 			":t": dynamo.S(in.Title), ":d": dynamo.S(in.Description), ":p": dynamo.S(in.Deadline),
 		},
-		ReturnValues: types.ReturnValueAllNew,
+		Return: types.ReturnValueAllNew,
 	})
 	if dynamo.ConditionFailed(err) {
 		return Activity{}, errNotFound
@@ -180,18 +172,14 @@ func (s *DynamoStore) UpdateActivity(ctx context.Context, id string, in Activity
 		return Activity{}, err
 	}
 	var it activityItem
-	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+	if err := attributevalue.UnmarshalMap(attrs, &it); err != nil {
 		return Activity{}, err
 	}
 	return it.activity(), nil
 }
 
 func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) ([]string, error) {
-	_, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 activityKey(id),
-		ConditionExpression: aws.String("attribute_exists(PK)"),
-	})
+	_, err := s.table.DeleteItem(ctx, activityKey(id), dynamo.Write{Condition: "attribute_exists(PK)"})
 	if dynamo.ConditionFailed(err) {
 		return nil, errNotFound
 	}
@@ -223,22 +211,19 @@ func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) 
 	if err != nil {
 		return err
 	}
-	_, err = s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 activityKey(activityID),
-		UpdateExpression:    aws.String("SET campos = list_append(campos, :f)"),
-		ConditionExpression: aws.String("attribute_exists(PK) AND size(campos) < :max"),
-		ExpressionAttributeValues: dynamo.Item{
+	_, err = s.table.UpdateItem(ctx, activityKey(activityID), "SET campos = list_append(campos, :f)", dynamo.Write{
+		Condition: "attribute_exists(PK) AND size(campos) < :max",
+		Values: dynamo.Item{
 			":f":   &types.AttributeValueMemberL{Value: []types.AttributeValue{value}},
 			":max": dynamo.N(maxFields),
 		},
 		// On rejection DynamoDB returns the item as it was, which tells a
 		// missing activity from a full one without a second read.
-		ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
+		OldOnFail: true,
 	})
-	var rejected *types.ConditionalCheckFailedException
+	var rejected *dynamo.ConditionFailedError
 	if errors.As(err, &rejected) {
-		if len(rejected.Item) > 0 {
+		if len(rejected.Old) > 0 {
 			return errFull
 		}
 		return errNotFound
@@ -249,12 +234,9 @@ func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) 
 // RemoveField conditions on the field still being at position, so a
 // concurrent change surfaces as errStale.
 func (s *DynamoStore) RemoveField(ctx context.Context, activityID string, position int, fieldID string) error {
-	_, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:                 aws.String(s.table.Name),
-		Key:                       activityKey(activityID),
-		UpdateExpression:          aws.String(fmt.Sprintf("REMOVE campos[%d]", position)),
-		ConditionExpression:       aws.String(fmt.Sprintf("size(campos) > :one AND campos[%d].id = :id", position)),
-		ExpressionAttributeValues: dynamo.Item{":one": dynamo.N(1), ":id": dynamo.S(fieldID)},
+	_, err := s.table.UpdateItem(ctx, activityKey(activityID), fmt.Sprintf("REMOVE campos[%d]", position), dynamo.Write{
+		Condition: fmt.Sprintf("size(campos) > :one AND campos[%d].id = :id", position),
+		Values:    dynamo.Item{":one": dynamo.N(1), ":id": dynamo.S(fieldID)},
 	})
 	if dynamo.ConditionFailed(err) {
 		return errStale
@@ -262,7 +244,11 @@ func (s *DynamoStore) RemoveField(ctx context.Context, activityID string, positi
 	return err
 }
 
-func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, mustExist bool) error {
+// projectProfileSK mirrors the project item's sort key in groups/store.go;
+// deliveries cannot import that package's store.
+const projectProfileSK = "PROFILE"
+
+func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, expected *Submission) error {
 	item, err := attributevalue.MarshalMap(submissionItem{
 		PK: projectPrefix + sub.ProjectID, SK: submissionPrefix + sub.ActivityID,
 		GSI1PK: submissionsPrefix + sub.ActivityID, GSI1SK: projectPrefix + sub.ProjectID,
@@ -272,13 +258,24 @@ func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, mustExi
 	if err != nil {
 		return err
 	}
-	in := &dynamodb.PutItemInput{TableName: aws.String(s.table.Name), Item: item}
-	if mustExist {
-		in.ConditionExpression = aws.String("attribute_exists(PK)")
+	condition, values := "attribute_not_exists(PK)", dynamo.Item(nil)
+	if expected != nil {
+		condition = "attribute_exists(PK) AND entregueEm = :sentAt AND attribute_not_exists(atualizadaEm)"
+		values = dynamo.Item{":sentAt": dynamo.S(expected.SubmittedAt)}
+		if expected.UpdatedAt != "" {
+			condition = "attribute_exists(PK) AND entregueEm = :sentAt AND atualizadaEm = :updatedAt"
+			values[":updatedAt"] = dynamo.S(expected.UpdatedAt)
+		}
 	}
-	_, err = s.table.Client.PutItem(ctx, in)
-	if dynamo.ConditionFailed(err) {
+	err = s.table.Transact(ctx,
+		s.table.Check(dynamo.Key(projectPrefix+sub.ProjectID, projectProfileSK), "attribute_exists(PK)", nil),
+		s.table.Put(item, condition, values),
+	)
+	switch {
+	case dynamo.FailedAt(err, 0):
 		return errNotFound
+	case dynamo.FailedAt(err, 1):
+		return errStale
 	}
 	return err
 }
@@ -290,13 +287,10 @@ func (s *DynamoStore) SetValidation(ctx context.Context, projectID, activityID s
 	if err != nil {
 		return Submission{}, err
 	}
-	out, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:                 aws.String(s.table.Name),
-		Key:                       submissionKey(projectID, activityID),
-		UpdateExpression:          aws.String("SET validacao = :v"),
-		ConditionExpression:       aws.String("attribute_exists(PK)"),
-		ExpressionAttributeValues: dynamo.Item{":v": value},
-		ReturnValues:              types.ReturnValueAllNew,
+	attrs, err := s.table.UpdateItem(ctx, submissionKey(projectID, activityID), "SET validacao = :v", dynamo.Write{
+		Condition: "attribute_exists(PK)",
+		Values:    dynamo.Item{":v": value},
+		Return:    types.ReturnValueAllNew,
 	})
 	if dynamo.ConditionFailed(err) {
 		return Submission{}, errNotFound
@@ -305,7 +299,7 @@ func (s *DynamoStore) SetValidation(ctx context.Context, projectID, activityID s
 		return Submission{}, err
 	}
 	var it submissionItem
-	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+	if err := attributevalue.UnmarshalMap(attrs, &it); err != nil {
 		return Submission{}, err
 	}
 	return it.submission(), nil
@@ -320,12 +314,7 @@ func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID s
 }
 
 func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error) {
-	out, err := s.table.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 submissionKey(projectID, activityID),
-		ConditionExpression: aws.String("attribute_exists(PK)"),
-		ReturnValues:        types.ReturnValueAllOld,
-	})
+	old, err := s.table.DeleteItem(ctx, submissionKey(projectID, activityID), dynamo.Write{Condition: "attribute_exists(PK)", Return: types.ReturnValueAllOld})
 	if dynamo.ConditionFailed(err) {
 		return Submission{}, errNotFound
 	}
@@ -333,7 +322,7 @@ func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityI
 		return Submission{}, err
 	}
 	var it submissionItem
-	if err := attributevalue.UnmarshalMap(out.Attributes, &it); err != nil {
+	if err := attributevalue.UnmarshalMap(old, &it); err != nil {
 		return Submission{}, err
 	}
 	return it.submission(), nil
@@ -397,31 +386,26 @@ func (s *DynamoStore) PenaltiesOfProject(ctx context.Context, projectID string) 
 }
 
 func (s *DynamoStore) AddPenalty(ctx context.Context, projectID string, r penaltyRecord) error {
-	item, err := attributevalue.MarshalMap(penaltyItem{
+	err := dynamo.PutStruct(ctx, s.table, penaltyItem{
 		PK: projectPrefix + projectID, SK: penaltyPrefix + r.ID,
 		ActivityID: r.ActivityID, Reason: r.Reason, AppliedAt: r.AppliedAt, AppliedBy: r.AppliedBy,
-	})
-	if err != nil {
-		return err
+	}, dynamo.Write{Condition: "attribute_not_exists(PK)"})
+	if dynamo.ConditionFailed(err) {
+		return errDuplicate
 	}
-	_, err = s.table.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(s.table.Name), Item: item, ConditionExpression: aws.String("attribute_not_exists(PK)"),
-	})
 	return err
 }
 
 // WaivePenalty creates the item for a deadline penalty, which is not stored
 // until waived.
 func (s *DynamoStore) WaivePenalty(ctx context.Context, projectID, penaltyID string, w Waiver) error {
-	_, err := s.table.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName:           aws.String(s.table.Name),
-		Key:                 dynamo.Key(projectPrefix+projectID, penaltyPrefix+penaltyID),
-		UpdateExpression:    aws.String("SET perdaoMotivo = :motivo, perdoadaPor = :por, perdoadaEm = :em"),
-		ConditionExpression: aws.String("attribute_not_exists(perdoadaEm)"),
-		ExpressionAttributeValues: dynamo.Item{
-			":motivo": dynamo.S(w.Reason), ":por": dynamo.S(w.By), ":em": dynamo.S(w.At),
-		},
-	})
+	_, err := s.table.UpdateItem(ctx, dynamo.Key(projectPrefix+projectID, penaltyPrefix+penaltyID),
+		"SET perdaoMotivo = :motivo, perdoadaPor = :por, perdoadaEm = :em", dynamo.Write{
+			Condition: "attribute_not_exists(perdoadaEm)",
+			Values: dynamo.Item{
+				":motivo": dynamo.S(w.Reason), ":por": dynamo.S(w.By), ":em": dynamo.S(w.At),
+			},
+		})
 	if dynamo.ConditionFailed(err) {
 		return errStale
 	}

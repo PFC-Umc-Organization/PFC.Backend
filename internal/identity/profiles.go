@@ -4,10 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
@@ -31,21 +27,12 @@ type profileItem struct {
 	Role actor.Role `dynamodbav:"perfil,omitempty"`
 }
 
-func (p *DynamoProfiles) put(ctx context.Context, it profileItem) error {
-	av, err := attributevalue.MarshalMap(it)
-	if err != nil {
-		return err
-	}
-	_, err = p.table.Client.PutItem(ctx, &dynamodb.PutItemInput{TableName: aws.String(p.table.Name), Item: av})
-	return err
-}
-
 func (p *DynamoProfiles) SaveStudent(ctx context.Context, rgm, name string) error {
-	return p.put(ctx, profileItem{PK: studentNamePrefix + rgm, SK: accountSK, Name: name})
+	return dynamo.PutStruct(ctx, p.table, profileItem{PK: studentNamePrefix + rgm, SK: accountSK, Name: name}, dynamo.Write{})
 }
 
 func (p *DynamoProfiles) SaveStaff(ctx context.Context, sub, name string, role actor.Role) error {
-	return p.put(ctx, profileItem{PK: staffNamePrefix + sub, SK: accountSK, Name: name, Role: role})
+	return dynamo.PutStruct(ctx, p.table, profileItem{PK: staffNamePrefix + sub, SK: accountSK, Name: name, Role: role}, dynamo.Write{})
 }
 
 func (p *DynamoProfiles) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {

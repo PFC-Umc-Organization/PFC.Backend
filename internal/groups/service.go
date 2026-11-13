@@ -113,7 +113,7 @@ func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]st
 	if err != nil {
 		return nil, err
 	}
-	perProgram, err := parallel.Map(programs, func(id string) ([]Project, error) { return s.store.ProjectsOfProgram(ctx, id) })
+	perProgram, err := parallel.Map(ctx, programs, func(ctx context.Context, id string) ([]Project, error) { return s.store.ProjectsOfProgram(ctx, id) })
 	if err != nil {
 		return nil, err
 	}

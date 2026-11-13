@@ -8,7 +8,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
-var errNotFound = errors.New("not found")
+var (
+	errNotFound  = errors.New("not found")
+	errDuplicate = errors.New("already exists")
+)
 
 type Store interface {
 	Create(ctx context.Context, m Material) error

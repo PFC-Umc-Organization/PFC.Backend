@@ -3,8 +3,6 @@ package deliveries
 import (
 	"context"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
@@ -14,47 +12,24 @@ func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
 	r.Handle("GET", "/atividades", h.listActivities)
-	r.Handle("POST", "/atividades", coordination("atividade.criada", "", h.createActivity))
-	r.Handle("PUT", "/atividades/:atividadeId", coordination("atividade.atualizada", "atividadeId", h.updateActivity))
-	r.Handle("DELETE", "/atividades/:atividadeId", coordination("atividade.removida", "atividadeId", h.deleteActivity))
-	r.Handle("POST", "/atividades/:atividadeId/campos", coordination("atividade.campo_adicionado", "atividadeId", h.addField))
-	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", coordination("atividade.campo_removido", "atividadeId", h.removeField))
-	r.Handle("GET", "/atividades/:atividadeId/entregas", httpapi.Restrict(httpapi.Policy{
-		Roles:   []actor.Role{actor.RoleAdmin},
-		Message: msgAdminOnly,
-	}, h.submissionsOfActivity))
-	r.Handle("GET", "/programas/:programaId/entregas", staff("", "", h.submissionsOfProgram))
+	r.Handle("POST", "/atividades", httpapi.Admin(msgActivitiesAdminOnly, h.createActivity, httpapi.Audit("atividade.criada")))
+	r.Handle("PUT", "/atividades/:atividadeId", httpapi.Admin(msgActivitiesAdminOnly, h.updateActivity, httpapi.Audit("atividade.atualizada"), httpapi.AuditParam("atividade", "atividadeId")))
+	r.Handle("DELETE", "/atividades/:atividadeId", httpapi.Admin(msgActivitiesAdminOnly, h.deleteActivity, httpapi.Audit("atividade.removida"), httpapi.AuditParam("atividade", "atividadeId")))
+	r.Handle("POST", "/atividades/:atividadeId/campos", httpapi.Admin(msgActivitiesAdminOnly, h.addField, httpapi.Audit("atividade.campo_adicionado"), httpapi.AuditParam("atividade", "atividadeId")))
+	r.Handle("DELETE", "/atividades/:atividadeId/campos/:campoId", httpapi.Admin(msgActivitiesAdminOnly, h.removeField, httpapi.Audit("atividade.campo_removido"), httpapi.AuditParam("atividade", "atividadeId")))
+	r.Handle("GET", "/atividades/:atividadeId/entregas", httpapi.Admin(msgAdminOnly, h.submissionsOfActivity))
+	r.Handle("GET", "/programas/:programaId/entregas", httpapi.Staff(msgStaffOnly, h.submissionsOfProgram))
 	r.Handle("GET", "/projetos/:projetoId/entregas", h.submissionsOfProject)
 	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId", h.submit)
-	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", staff("entrega.removida", "atividadeId", h.removeSubmission))
+	r.Handle("DELETE", "/projetos/:projetoId/entregas/:atividadeId", httpapi.Staff(msgStaffOnly, h.removeSubmission, httpapi.Audit("entrega.removida"), httpapi.AuditParam("atividade", "atividadeId")))
 	r.Handle("PUT", "/projetos/:projetoId/entregas/:atividadeId/validacao", h.validate)
 	r.Handle("POST", "/projetos/:projetoId/entregas/:atividadeId/arquivos", h.requestUpload)
 	r.Handle("GET", "/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId", h.downloadFile)
 
-	r.Handle("GET", "/programas/:programaId/penalidades", staff("", "", h.penaltiesOfProgram))
+	r.Handle("GET", "/programas/:programaId/penalidades", httpapi.Staff(msgStaffOnly, h.penaltiesOfProgram))
 	r.Handle("GET", "/projetos/:projetoId/penalidades", h.penaltiesOfProject)
-	r.Handle("POST", "/projetos/:projetoId/penalidades", staff("penalidade.aplicada", "", h.applyPenalty))
-	r.Handle("POST", "/projetos/:projetoId/penalidades/:penalidadeId/perdao", staff("penalidade.perdoada", "", h.waivePenalty))
-}
-
-// staff admits admins and advisors. A denial is audited under auditAction,
-// about the activity in the activityParam path parameter when given.
-func staff(auditAction, activityParam string, h httpapi.Handler) httpapi.Handler {
-	return restrict([]actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, msgStaffOnly, auditAction, activityParam, h)
-}
-
-// coordination guards the activities: they are global, so changing one
-// changes every group's deliverables and deadline penalties.
-func coordination(auditAction, activityParam string, h httpapi.Handler) httpapi.Handler {
-	return restrict([]actor.Role{actor.RoleAdmin}, msgActivitiesAdminOnly, auditAction, activityParam, h)
-}
-
-func restrict(roles []actor.Role, message, auditAction, activityParam string, h httpapi.Handler) httpapi.Handler {
-	p := httpapi.Policy{Roles: roles, Message: message, AuditAction: auditAction}
-	if activityParam != "" {
-		p.AuditResource = func(r *httpapi.Request) *audit.Resource { return activityResource(r.Param(activityParam)) }
-	}
-	return httpapi.Restrict(p, h)
+	r.Handle("POST", "/projetos/:projetoId/penalidades", httpapi.Staff(msgStaffOnly, h.applyPenalty, httpapi.Audit("penalidade.aplicada")))
+	r.Handle("POST", "/projetos/:projetoId/penalidades/:penalidadeId/perdao", httpapi.Staff(msgStaffOnly, h.waivePenalty, httpapi.Audit("penalidade.perdoada")))
 }
 
 func (h handlers) listActivities(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

@@ -17,14 +17,14 @@ func TestStudentGuard(t *testing.T) {
 	t.Cleanup(audit.SetOutput(&buf))
 	called := false
 	r := httpapi.NewRouter()
-	r.Handle("POST", "/x", student(msgStudentsOnlyCreate, "projeto.criado_pelo_aluno", func(context.Context, *httpapi.Request) (httpapi.Response, error) {
+	r.Handle("POST", "/x", httpapi.Student(msgStudentsOnlyCreate, func(context.Context, *httpapi.Request) (httpapi.Response, error) {
 		called = true
 		return httpapi.JSON(201, "ok"), nil
-	}))
+	}, httpapi.Audit("projeto.criado_pelo_aluno"), httpapi.NeedRGM(msgNoRGM)))
 	call := func(role, email string) int {
 		resp, _ := r.Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: "POST", Path: "/x",
 			RequestContext: events.APIGatewayProxyRequestContext{Authorizer: map[string]any{
-				"claims": map[string]any{"custom:perfil": role, "email": email},
+				"claims": map[string]any{"sub": "s1", "custom:perfil": role, "email": email},
 			}}})
 		return resp.StatusCode
 	}

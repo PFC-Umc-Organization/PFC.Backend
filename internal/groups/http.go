@@ -3,9 +3,6 @@ package groups
 import (
 	"context"
 
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
-	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
@@ -14,54 +11,24 @@ type handlers struct{ svc *Service }
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
-	r.Handle("GET", "/meu-pfc", student(msgStudentsOnly, "", h.myPFC))
-	r.Handle("POST", "/meu-pfc", student(msgStudentsOnlyCreate, "projeto.criado_pelo_aluno", h.createOwnProject))
-	r.Handle("POST", "/programas/:programaId/projetos", admin("projeto.criado", h.createProject))
-	r.Handle("GET", "/programas/:programaId/projetos", staff(h.projectsOfProgram))
+	r.Handle("GET", "/meu-pfc", httpapi.Student(msgStudentsOnly, h.myPFC, httpapi.NeedRGM(msgNoRGM)))
+	r.Handle("POST", "/meu-pfc", httpapi.Student(msgStudentsOnlyCreate, h.createOwnProject, httpapi.Audit("projeto.criado_pelo_aluno"), httpapi.NeedRGM(msgNoRGM)))
+	r.Handle("POST", "/programas/:programaId/projetos", httpapi.Admin(msgAdminOnly, h.createProject, httpapi.Audit("projeto.criado")))
+	r.Handle("GET", "/programas/:programaId/projetos", httpapi.Staff(msgStaffOnly, h.projectsOfProgram))
 	r.Handle("GET", "/projetos/:projetoId", h.projectDetail)
-	r.Handle("PUT", "/projetos/:projetoId", admin("projeto.atualizado", h.updateProject))
-	r.Handle("DELETE", "/projetos/:projetoId", admin("projeto.removido", h.deleteProject))
-	r.Handle("PUT", "/projetos/:projetoId/orientador", admin("projeto.orientador_associado", h.assignAdvisor))
-	r.Handle("DELETE", "/projetos/:projetoId/orientador", admin("projeto.orientador_removido", h.removeAdvisor))
-	r.Handle("PUT", "/projetos/:projetoId/integrantes", admin("projeto.integrante_adicionado", h.addMember))
-	r.Handle("DELETE", "/projetos/:projetoId/integrantes", admin("projeto.integrante_removido", h.removeMember))
+	r.Handle("PUT", "/projetos/:projetoId", httpapi.Admin(msgAdminOnly, h.updateProject, httpapi.Audit("projeto.atualizado")))
+	r.Handle("DELETE", "/projetos/:projetoId", httpapi.Admin(msgAdminOnly, h.deleteProject, httpapi.Audit("projeto.removido")))
+	r.Handle("PUT", "/projetos/:projetoId/orientador", httpapi.Admin(msgAdminOnly, h.assignAdvisor, httpapi.Audit("projeto.orientador_associado")))
+	r.Handle("DELETE", "/projetos/:projetoId/orientador", httpapi.Admin(msgAdminOnly, h.removeAdvisor, httpapi.Audit("projeto.orientador_removido")))
+	r.Handle("PUT", "/projetos/:projetoId/integrantes", httpapi.Admin(msgAdminOnly, h.addMember, httpapi.Audit("projeto.integrante_adicionado")))
+	r.Handle("DELETE", "/projetos/:projetoId/integrantes", httpapi.Admin(msgAdminOnly, h.removeMember, httpapi.Audit("projeto.integrante_removido")))
 
-	r.Handle("GET", "/meus-convites", student(msgStudentsOnly, "", h.myInvitations))
-	r.Handle("POST", "/meus-convites/:projetoId/aceitar", student(msgStudentsOnly, "", h.acceptInvitation))
-	r.Handle("POST", "/meus-convites/:projetoId/recusar", student(msgStudentsOnly, "", h.declineInvitation))
+	r.Handle("GET", "/meus-convites", httpapi.Student(msgStudentsOnly, h.myInvitations, httpapi.NeedRGM(msgNoRGM)))
+	r.Handle("POST", "/meus-convites/:projetoId/aceitar", httpapi.Student(msgStudentsOnly, h.acceptInvitation, httpapi.NeedRGM(msgNoRGM)))
+	r.Handle("POST", "/meus-convites/:projetoId/recusar", httpapi.Student(msgStudentsOnly, h.declineInvitation, httpapi.NeedRGM(msgNoRGM)))
 	r.Handle("GET", "/projetos/:projetoId/convites", h.projectInvitations)
 	r.Handle("POST", "/projetos/:projetoId/convites", h.invite)
 	r.Handle("DELETE", "/projetos/:projetoId/convites/:rgm", h.cancelInvitation)
-}
-
-func admin(auditAction string, h httpapi.Handler) httpapi.Handler {
-	return httpapi.Restrict(httpapi.Policy{
-		Roles:       []actor.Role{actor.RoleAdmin},
-		Message:     msgAdminOnly,
-		AuditAction: auditAction,
-	}, h)
-}
-
-func staff(h httpapi.Handler) httpapi.Handler {
-	return httpapi.Restrict(httpapi.Policy{Roles: []actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, Message: msgStaffOnly}, h)
-}
-
-func student(staffMessage, auditAction string, h httpapi.Handler) httpapi.Handler {
-	deny := func(ctx context.Context, reason, msg string) (httpapi.Response, error) {
-		if auditAction != "" {
-			audit.Record(ctx, audit.Event{Action: auditAction, Result: audit.Failure, Reason: reason})
-		}
-		return httpapi.Response{}, apperr.Forbidden(msg)
-	}
-	return func(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-		if isStaff(r.Actor) {
-			return deny(ctx, "rota exclusiva de aluno", staffMessage)
-		}
-		if r.Actor.RGM() == "" {
-			return deny(ctx, "conta sem RGM", msgNoRGM)
-		}
-		return h(ctx, r)
-	}
 }
 
 func (h handlers) createOwnProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {

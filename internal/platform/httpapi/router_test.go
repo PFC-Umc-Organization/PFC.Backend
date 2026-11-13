@@ -64,6 +64,86 @@ func TestRouting(t *testing.T) {
 	}
 }
 
+func authed(method, path string) events.APIGatewayProxyRequest {
+	return events.APIGatewayProxyRequest{HTTPMethod: method, Path: path, RequestContext: events.APIGatewayProxyRequestContext{
+		Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ALUNO"}},
+	}}
+}
+
+func TestRoutingEdgeCases(t *testing.T) {
+	rt := NewRouter()
+	rt.Handle("GET", "/projetos/:projetoId/entregas", func(context.Context, *Request) (Response, error) {
+		return JSON(200, map[string]string{}), nil
+	})
+	cases := []struct {
+		path   string
+		status int
+	}{
+		{"/projetos//entregas", 404},
+		{"/Projetos/abc/entregas", 404},
+		// strings.Trim drops edge slashes, so a trailing slash is the same route.
+		{"/projetos/abc/entregas/", 200},
+		{"/projetos/abc/entregas", 200},
+	}
+	for _, c := range cases {
+		if status, _, _ := call(t, rt, authed("GET", c.path)); status != c.status {
+			t.Errorf("%s: got %d, want %d", c.path, status, c.status)
+		}
+	}
+}
+
+func TestAuthenticationByDefault(t *testing.T) {
+	rt := NewRouter()
+	ran := false
+	h := func(context.Context, *Request) (Response, error) {
+		ran = true
+		return JSON(200, map[string]string{}), nil
+	}
+	rt.Handle("GET", "/private", h)
+	rt.Public("GET", "/public", h)
+
+	status, msg, _ := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/private"})
+	if status != 401 || msg != "Sessão expirada. Entre novamente." || ran {
+		t.Fatalf("private without claims: %d %q, handler ran %v", status, msg, ran)
+	}
+	if status, _, _ := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/public"}); status != 200 || !ran {
+		t.Fatalf("public without claims: %d", status)
+	}
+	if status, _, _ := call(t, rt, authed("GET", "/private")); status != 200 {
+		t.Fatalf("private with claims: %d", status)
+	}
+}
+
+func TestGatewayParametersKept(t *testing.T) {
+	rt := NewRouter()
+	var got *Request
+	rt.Handle("GET", "/a/:id", func(_ context.Context, r *Request) (Response, error) {
+		got = r
+		return JSON(200, map[string]string{}), nil
+	})
+	ev := authed("GET", "/a/1")
+	ev.PathParameters = map[string]string{"proxy": "a/1"}
+	call(t, rt, ev)
+	if got.Param("id") != "1" || got.Param("proxy") != "a/1" || len(ev.PathParameters) != 1 {
+		t.Fatalf("params %v, event %v", got.params, ev.PathParameters)
+	}
+}
+
+func BenchmarkServeLastRoute(b *testing.B) {
+	rt := NewRouter()
+	h := func(context.Context, *Request) (Response, error) { return JSON(200, nil), nil }
+	for i := 0; i < 70; i++ {
+		rt.Handle("GET", "/recurso"+string(rune('a'+i%26))+"/:id/sub"+string(rune('a'+i/26))+"/:other", h)
+	}
+	rt.Handle("GET", "/projetos/:projetoId/entregas/:atividadeId", h)
+	ev := authed("GET", "/projetos/abc/entregas/def")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rt.serve(context.Background(), ev)
+	}
+}
+
 func TestPreflight(t *testing.T) {
 	resp, _ := NewRouter().Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: "OPTIONS", Path: "/x"})
 	if resp.StatusCode != 204 || resp.Headers["Access-Control-Allow-Methods"] == "" || resp.Body != "" {
@@ -100,7 +180,7 @@ func TestErrors(t *testing.T) {
 	}
 	for _, c := range cases {
 		rt := NewRouter()
-		rt.Handle("GET", "/x", func(context.Context, *Request) (Response, error) { return Response{}, c.err })
+		rt.Public("GET", "/x", func(context.Context, *Request) (Response, error) { return Response{}, c.err })
 		if status, msg, _ := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/x"}); status != c.status || msg != c.msg {
 			t.Errorf("%v: got %d %q, want %d %q", c.err, status, msg, c.status, c.msg)
 		}
@@ -109,7 +189,7 @@ func TestErrors(t *testing.T) {
 
 func TestPanicBecomes500(t *testing.T) {
 	rt := NewRouter()
-	rt.Handle("GET", "/x", func(context.Context, *Request) (Response, error) { panic("boom") })
+	rt.Public("GET", "/x", func(context.Context, *Request) (Response, error) { panic("boom") })
 	if status, msg, _ := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/x"}); status != 500 || msg != msgInternal {
 		t.Fatalf("got %d %q", status, msg)
 	}
@@ -140,7 +220,7 @@ func TestRestrict(t *testing.T) {
 
 	as := func(role string, path string) events.APIGatewayProxyRequest {
 		return events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: path, RequestContext: events.APIGatewayProxyRequestContext{
-			Authorizer: map[string]any{"claims": map[string]any{"custom:perfil": role}},
+			Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": role}},
 		}}
 	}
 	if status, _, _ := call(t, rt, as("ADMIN", "/audited")); status != 200 {
