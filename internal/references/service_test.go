@@ -62,6 +62,18 @@ func (m *memoryStore) DeleteReference(_ context.Context, _, id string) error {
 	return nil
 }
 
+func (m *memoryStore) ReplaceReference(_ context.Context, oldID string, r Reference, _ string) error {
+	if _, ok := m.refs[oldID]; !ok {
+		return errNotFound
+	}
+	if _, ok := m.refs[r.ID]; ok && r.ID != oldID {
+		return errDuplicate
+	}
+	delete(m.refs, oldID)
+	m.refs[r.ID] = r
+	return nil
+}
+
 type fakeProjects map[string]groups.Project
 
 func (f fakeProjects) Project(_ context.Context, id string) (groups.Project, bool, error) {
@@ -162,6 +174,57 @@ func TestAddAndRemove(t *testing.T) {
 	}
 	if err := svc.Remove(ctx, member, "p1", ref.ID); kind(err) != apperr.KindNotFound {
 		t.Errorf("remove twice: %v", err)
+	}
+}
+
+const otherDOI = "10.1109/2.485845"
+
+var rbac = Work{
+	DOI: otherDOI, Type: WorkArticle, Title: "Role-based access control models", Venue: "Computer",
+	Volume: "29", Issue: "2", Pages: "38-47", Year: 1996,
+	Authors: []Author{{Surname: "Sandhu", GivenName: "Ravi S."}},
+}
+
+func TestReplace(t *testing.T) {
+	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi, otherDOI: rbac}})
+	ctx := context.Background()
+	member := actor.Actor{Email: "11111111@alunos.umc.br", Name: "Ana", Sub: "s1"}
+	editor := actor.Actor{Email: "11111111@alunos.umc.br", Name: "Bia", Sub: "s2"}
+
+	old, err := svc.Add(ctx, member, "p1", ReferenceInput{DOI: knownDOI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := svc.Replace(ctx, editor, "p1", old.ID, ReferenceInput{DOI: "https://doi.org/" + otherDOI})
+	if err != nil || ref.ID != referenceID(otherDOI) || ref.DOI != otherDOI || ref.AddedBy != "Bia" || !strings.Contains(ref.ABNT, "Role-based") {
+		t.Fatalf("ref = %+v, err = %v", ref, err)
+	}
+	if _, kept := store.refs[old.ID]; kept || len(store.refs) != 1 {
+		t.Fatalf("the old reference must be replaced: %+v", store.refs)
+	}
+
+	// The same DOI again refreshes the reference in place.
+	if again, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: otherDOI}); err != nil || again.ID != ref.ID || len(store.refs) != 1 {
+		t.Fatalf("same DOI: ref = %+v, err = %v", again, err)
+	}
+
+	// A DOI already on the list is refused, and nothing changes.
+	if _, err := svc.Add(ctx, member, "p1", ReferenceInput{DOI: knownDOI}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: knownDOI}); kind(err) != apperr.KindConflict || len(store.refs) != 2 {
+		t.Errorf("duplicate: %v, refs = %d", err, len(store.refs))
+	}
+
+	if _, err := svc.Replace(ctx, member, "p1", "missing", ReferenceInput{DOI: knownDOI}); kind(err) != apperr.KindNotFound {
+		t.Errorf("missing reference: %v", err)
+	}
+	if _, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: "abc"}); kind(err) != apperr.KindInvalid {
+		t.Errorf("invalid DOI: %v", err)
+	}
+	outsider := actor.Actor{Role: actor.RoleAdvisor, Email: "alessandro.horas@umc.br", Sub: "prof-sub"}
+	if _, err := svc.Replace(ctx, outsider, "p1", ref.ID, ReferenceInput{DOI: otherDOI}); kind(err) != apperr.KindForbidden {
+		t.Errorf("advisor editing: %v", err)
 	}
 }
 

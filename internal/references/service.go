@@ -115,12 +115,14 @@ func (s *Service) requireMember(ctx context.Context, member actor.Actor, p group
 	return apperr.Forbidden(msgMembersOnly)
 }
 
-func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string, in ReferenceInput) (Reference, error) {
+// build checks the member and fetches the DOI again from Crossref, so only
+// real works enter the list, whether added or edited.
+func (s *Service) build(ctx context.Context, member actor.Actor, projectID, action string, in ReferenceInput) (Reference, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
 		return Reference{}, err
 	}
-	if err := s.requireMember(ctx, member, p, "referencia.adicionada"); err != nil {
+	if err := s.requireMember(ctx, member, p, action); err != nil {
 		return Reference{}, err
 	}
 	doi, ok := normalizeDOI(in.DOI)
@@ -136,7 +138,7 @@ func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string,
 	text, html := formatABNT(w, now)
 	// Crossref's canonical DOI, not the one the student typed.
 	canonical := orDefault(w.DOI, doi)
-	ref := Reference{
+	return Reference{
 		ID:        referenceID(canonical),
 		ProjectID: p.ID,
 		DOI:       canonical,
@@ -146,6 +148,13 @@ func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string,
 		ABNTHTML:  html,
 		AddedBy:   member.Name,
 		AddedAt:   now.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string, in ReferenceInput) (Reference, error) {
+	ref, err := s.build(ctx, member, projectID, "referencia.adicionada", in)
+	if err != nil {
+		return Reference{}, err
 	}
 	err = s.store.PutReference(ctx, ref, member.Sub)
 	if errors.Is(err, errDuplicate) {
@@ -155,7 +164,30 @@ func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string,
 		return Reference{}, apperr.Internal("Não foi possível salvar a referência. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "referencia.adicionada", Result: audit.Success,
-		Resource: &audit.Resource{Type: "referencia", ID: ref.ID}, Details: map[string]any{"projetoId": p.ID, "doi": ref.DOI}})
+		Resource: &audit.Resource{Type: "referencia", ID: ref.ID}, Details: map[string]any{"projetoId": ref.ProjectID, "doi": ref.DOI}})
+	return ref, nil
+}
+
+// Replace corrects a reference by its DOI: the work is fetched again and
+// the ABNT text rebuilt, so the edit keeps the rule that only real works
+// are listed. The editor becomes the one who added it.
+func (s *Service) Replace(ctx context.Context, member actor.Actor, projectID, id string, in ReferenceInput) (Reference, error) {
+	const action = "referencia.alterada"
+	ref, err := s.build(ctx, member, projectID, action, in)
+	if err != nil {
+		return Reference{}, err
+	}
+	switch err := s.store.ReplaceReference(ctx, id, ref, member.Sub); {
+	case errors.Is(err, errNotFound):
+		return Reference{}, apperr.NotFound(msgReferenceNotFound)
+	case errors.Is(err, errDuplicate):
+		return Reference{}, apperr.Conflict(msgDuplicate)
+	case err != nil:
+		return Reference{}, apperr.Internal("Não foi possível alterar a referência. Tente novamente em instantes.", err)
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success,
+		Resource: &audit.Resource{Type: "referencia", ID: ref.ID},
+		Details:  map[string]any{"projetoId": ref.ProjectID, "anterior": id, "doi": ref.DOI}})
 	return ref, nil
 }
 

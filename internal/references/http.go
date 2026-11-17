@@ -15,6 +15,7 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("GET", "/referencias/doi", h.lookupDOI)
 	r.Handle("GET", "/projetos/:projetoId/referencias", h.list)
 	r.Handle("POST", "/projetos/:projetoId/referencias", h.add)
+	r.Handle("PUT", "/projetos/:projetoId/referencias/:referenciaId", h.replace)
 	r.Handle("DELETE", "/projetos/:projetoId/referencias/:referenciaId", h.remove)
 }
 
@@ -40,6 +41,15 @@ func (h handlers) add(ctx context.Context, r *httpapi.Request) (httpapi.Response
 	}
 	ref, err := h.svc.Add(ctx, r.Actor, r.Param("projetoId"), in)
 	return httpapi.Reply(201, ref, err)
+}
+
+func (h handlers) replace(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in ReferenceInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	ref, err := h.svc.Replace(ctx, r.Actor, r.Param("projetoId"), r.Param("referenciaId"), in)
+	return httpapi.Reply(200, ref, err)
 }
 
 func (h handlers) remove(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
