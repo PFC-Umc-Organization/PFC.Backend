@@ -13,11 +13,17 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Simulação
 type memStore struct {
 	items     map[string]Material
 	createErr error
 }
 
+// Criação
 func (m *memStore) Create(_ context.Context, x Material) error {
 	if m.createErr != nil {
 		return m.createErr
@@ -25,10 +31,14 @@ func (m *memStore) Create(_ context.Context, x Material) error {
 	m.items[x.ID] = x
 	return nil
 }
+
+// Consulta
 func (m *memStore) Get(_ context.Context, id string) (Material, bool, error) {
 	x, ok := m.items[id]
 	return x, ok, nil
 }
+
+// Listagem
 func (m *memStore) List(context.Context) ([]Material, error) {
 	out := []Material{}
 	for _, x := range m.items {
@@ -36,6 +46,8 @@ func (m *memStore) List(context.Context) ([]Material, error) {
 	}
 	return out, nil
 }
+
+// Exclusão
 func (m *memStore) Delete(_ context.Context, id string) (Material, error) {
 	x, ok := m.items[id]
 	if !ok {
@@ -45,28 +57,40 @@ func (m *memStore) Delete(_ context.Context, id string) (Material, error) {
 	return x, nil
 }
 
+// Simulação
 type academic map[string]string
 
+// Verificação
 func (a academic) CohortExists(_ context.Context, id string) (bool, error) {
 	return id == "t1" || id == "t2", nil
 }
+
+// Consulta
 func (a academic) CohortOf(_ context.Context, rgm string) (string, error) { return a[rgm], nil }
 
+// Simulação
 type files struct {
 	sizes   map[string]int64
 	deleted []string
 }
 
+// Assinatura
 func (f *files) PresignUpload(_ context.Context, key, ct string, _ int64, _ time.Duration) (storage.Upload, error) {
 	return storage.Upload{URL: "https://bucket", Fields: map[string]string{"key": key, "Content-Type": ct}}, nil
 }
+
+// Assinatura
 func (f *files) PresignDownload(_ context.Context, key, name string, _ time.Duration) (string, error) {
 	return "https://bucket/" + key, nil
 }
+
+// Consulta
 func (f *files) Size(_ context.Context, key string) (int64, bool, error) {
 	n, ok := f.sizes[key]
 	return n, ok, nil
 }
+
+// Exclusão
 func (f *files) Delete(_ context.Context, key string) error {
 	f.deleted = append(f.deleted, key)
 	return nil
@@ -78,10 +102,16 @@ var (
 	other   = actor.Actor{Role: actor.RoleAdvisor, Sub: "outro", Name: "Outro"}
 )
 
+// Construção
 func student(rgm string) actor.Actor {
 	return actor.Actor{Role: actor.RoleStudent, Email: rgm + "@alunos.umc.br"}
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Classificação
 func kind(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -89,6 +119,7 @@ func kind(err error) apperr.Kind {
 	return 0
 }
 
+// Construção
 func newService(t *testing.T, f Files) (*Service, *memStore) {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
@@ -101,8 +132,14 @@ func newService(t *testing.T, f Files) (*Service, *memStore) {
 	return svc, store
 }
 
+// Ponteiro
 func ptr(s string) *string { return &s }
 
+// ---------------------------------------------------------------------------
+// Materiais
+// ---------------------------------------------------------------------------
+
+// Visibilidade
 func TestVisibility(t *testing.T) {
 	svc, _ := newService(t, nil)
 	ctx := context.Background()
@@ -138,6 +175,7 @@ func TestVisibility(t *testing.T) {
 	}
 }
 
+// Validação
 func TestCreateValidation(t *testing.T) {
 	svc, _ := newService(t, nil)
 	ctx := context.Background()
@@ -160,6 +198,7 @@ func TestCreateValidation(t *testing.T) {
 	}
 }
 
+// Upload
 func TestFileMaterial(t *testing.T) {
 	f := &files{sizes: map[string]int64{}}
 	svc, _ := newService(t, f)
@@ -200,6 +239,7 @@ func TestFileMaterial(t *testing.T) {
 	}
 }
 
+// Exclusão
 func TestAdminRemovesAny(t *testing.T) {
 	svc, _ := newService(t, nil)
 	ctx := context.Background()
@@ -209,6 +249,7 @@ func TestAdminRemovesAny(t *testing.T) {
 	}
 }
 
+// Conflito
 func TestCreateDuplicateIDIsConflict(t *testing.T) {
 	svc, store := newService(t, nil)
 	store.createErr = errDuplicate

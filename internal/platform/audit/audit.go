@@ -1,6 +1,3 @@
-// Package audit writes who-did-what events as JSON lines tagged
-// tipo=auditoria in the Lambda log group. The field names and values are
-// the log's data format and stay in Portuguese.
 package audit
 
 import (
@@ -10,11 +7,16 @@ import (
 	"os"
 )
 
+// ---------------------------------------------------------------------------
+// Modelo
+// ---------------------------------------------------------------------------
+
 const (
 	Success = "sucesso"
 	Failure = "falha"
 )
 
+// Ator
 type Actor struct {
 	Sub   string `json:"sub,omitempty"`
 	Role  string `json:"perfil,omitempty"`
@@ -22,13 +24,13 @@ type Actor struct {
 	IP    string `json:"ip,omitempty"`
 }
 
+// Recurso
 type Resource struct {
 	Type string `json:"tipo"`
 	ID   string `json:"id,omitempty"`
 }
 
-// Event.Actor is normally left nil and taken from the request origin.
-// Public routes (login, sign-up) have no session and set it explicitly.
+// Evento
 type Event struct {
 	Action   string
 	Result   string
@@ -38,26 +40,38 @@ type Event struct {
 	Details  map[string]any
 }
 
+// Origem
 type Origin struct {
 	Actor     Actor
 	RequestID string
 }
 
+// ---------------------------------------------------------------------------
+// Origem
+// ---------------------------------------------------------------------------
+
+// Chave
 type originKey struct{}
 
+// Contexto
 func WithOrigin(ctx context.Context, o Origin) context.Context {
 	return context.WithValue(ctx, originKey{}, o)
 }
 
+// ---------------------------------------------------------------------------
+// Registro
+// ---------------------------------------------------------------------------
+
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-// SetOutput redirects the events, for tests; restore puts stdout back.
+// Configuração
 func SetOutput(w io.Writer) (restore func()) {
 	previous := logger
 	logger = slog.New(slog.NewJSONHandler(w, nil))
 	return func() { logger = previous }
 }
 
+// Registro
 func Record(ctx context.Context, ev Event) {
 	origin, _ := ctx.Value(originKey{}).(Origin)
 	actor := origin.Actor

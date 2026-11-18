@@ -13,11 +13,16 @@ import (
 	"sync"
 )
 
+// ---------------------------------------------------------------------------
+// Dublê
+// ---------------------------------------------------------------------------
+
 const (
 	validPassword    = "Senha#123"
 	confirmationCode = "123456"
 )
 
+// Simulação
 type fakeUser struct {
 	sub       string
 	email     string
@@ -28,17 +33,19 @@ type fakeUser struct {
 	forced    bool
 }
 
-// fakeCognito implements the subset of the Cognito JSON protocol the backend calls.
+// Simulação
 type fakeCognito struct {
 	mu    sync.Mutex
 	users map[string]*fakeUser
 	next  int
 }
 
+// Construção
 func newFakeCognito() *fakeCognito {
 	return &fakeCognito{users: map[string]*fakeUser{}}
 }
 
+// Redefinição
 func (f *fakeCognito) reset() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -46,8 +53,7 @@ func (f *fakeCognito) reset() {
 	f.next = 0
 }
 
-// subOf is the sub Cognito puts in the token of the account, as the
-// authorizer would.
+// Identificador
 func (f *fakeCognito) subOf(email string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -57,12 +63,14 @@ func (f *fakeCognito) subOf(email string) string {
 	return "sub-" + email
 }
 
+// Registro
 func (f *fakeCognito) add(email, name, role string, confirmed bool) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.addLocked(email, validPassword, map[string]string{"name": name, "custom:perfil": role}, confirmed, false)
 }
 
+// Adição
 func (f *fakeCognito) addLocked(email, password string, attrs map[string]string, confirmed, forced bool) string {
 	f.next++
 	sub := fmt.Sprintf("00000000-0000-4000-8000-%012d", f.next)
@@ -77,6 +85,7 @@ func (f *fakeCognito) addLocked(email, password string, attrs map[string]string,
 	return sub
 }
 
+// Despacho
 func (f *fakeCognito) serve(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -90,6 +99,11 @@ func (f *fakeCognito) serve(endpoint string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Atendimento
+// ---------------------------------------------------------------------------
+
+// Atendimento
 func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var in map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -128,11 +142,13 @@ func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Resposta
 func (f *fakeCognito) ok(w http.ResponseWriter, body any) {
 	w.Header().Set("Content-Type", "application/x-amz-json-1.1")
 	json.NewEncoder(w).Encode(body)
 }
 
+// Falha
 func (f *fakeCognito) fail(w http.ResponseWriter, code, msg string) {
 	w.Header().Set("Content-Type", "application/x-amz-json-1.1")
 	w.Header().Set("X-Amzn-ErrorType", code)
@@ -140,11 +156,17 @@ func (f *fakeCognito) fail(w http.ResponseWriter, code, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"__type": code, "message": msg})
 }
 
+// Leitura
 func str(m map[string]any, k string) string {
 	s, _ := m[k].(string)
 	return s
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Login
 func (f *fakeCognito) initiateAuth(w http.ResponseWriter, in map[string]any) {
 	params, _ := in["AuthParameters"].(map[string]any)
 	u := f.users[str(params, "USERNAME")]
@@ -162,6 +184,7 @@ func (f *fakeCognito) initiateAuth(w http.ResponseWriter, in map[string]any) {
 	}
 }
 
+// Identificador
 func idToken(attrs map[string]string) string {
 	payload, _ := json.Marshal(attrs)
 	enc := base64.RawURLEncoding.EncodeToString
@@ -170,6 +193,11 @@ func idToken(attrs map[string]string) string {
 
 var studentEmail = regexp.MustCompile(`^\d+@alunos\.umc\.br$`)
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Cadastro
 func (f *fakeCognito) signUp(w http.ResponseWriter, in map[string]any) {
 	email := str(in, "Username")
 	attrs := map[string]string{}
@@ -191,6 +219,7 @@ func (f *fakeCognito) signUp(w http.ResponseWriter, in map[string]any) {
 	}
 }
 
+// Confirmação
 func (f *fakeCognito) confirmSignUp(w http.ResponseWriter, in map[string]any) {
 	u := f.users[str(in, "Username")]
 	switch {
@@ -206,6 +235,7 @@ func (f *fakeCognito) confirmSignUp(w http.ResponseWriter, in map[string]any) {
 	}
 }
 
+// Reenvio
 func (f *fakeCognito) resend(w http.ResponseWriter, in map[string]any) {
 	u := f.users[str(in, "Username")]
 	switch {
@@ -219,8 +249,13 @@ func (f *fakeCognito) resend(w http.ResponseWriter, in map[string]any) {
 	f.ok(w, map[string]any{"CodeDeliveryDetails": map[string]any{"DeliveryMedium": "EMAIL"}})
 }
 
+// ---------------------------------------------------------------------------
+// Usuários
+// ---------------------------------------------------------------------------
+
 var listFilter = regexp.MustCompile(`^(\w+) (\^?=) "(.*)"$`)
 
+// Listagem
 func (f *fakeCognito) listUsers(w http.ResponseWriter, in map[string]any) {
 	var attr, op, value string
 	if m := listFilter.FindStringSubmatch(str(in, "Filter")); m != nil {
@@ -262,7 +297,7 @@ func (f *fakeCognito) listUsers(w http.ResponseWriter, in map[string]any) {
 	f.ok(w, map[string]any{"Users": users})
 }
 
-// byUsername accepts the sub, Cognito's username here, or the e-mail alias.
+// Busca
 func (f *fakeCognito) byUsername(name string) *fakeUser {
 	if u := f.users[name]; u != nil {
 		return u
@@ -275,6 +310,11 @@ func (f *fakeCognito) byUsername(name string) *fakeUser {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
+// Atualização
 func (f *fakeCognito) adminUpdate(w http.ResponseWriter, in map[string]any) {
 	u := f.byUsername(str(in, "Username"))
 	if u == nil {
@@ -289,6 +329,7 @@ func (f *fakeCognito) adminUpdate(w http.ResponseWriter, in map[string]any) {
 	f.ok(w, map[string]any{})
 }
 
+// Atualização
 func (f *fakeCognito) adminState(w http.ResponseWriter, op string, in map[string]any) {
 	u := f.byUsername(str(in, "Username"))
 	if u == nil {
@@ -304,6 +345,7 @@ func (f *fakeCognito) adminState(w http.ResponseWriter, op string, in map[string
 	f.ok(w, map[string]any{})
 }
 
+// Criação
 func (f *fakeCognito) adminCreate(w http.ResponseWriter, in map[string]any) {
 	email := str(in, "Username")
 	if str(in, "MessageAction") == "RESEND" {
@@ -334,6 +376,7 @@ func (f *fakeCognito) adminCreate(w http.ResponseWriter, in map[string]any) {
 	f.ok(w, map[string]any{"User": map[string]any{"Username": sub, "Enabled": true, "UserStatus": "FORCE_CHANGE_PASSWORD"}})
 }
 
+// Nova senha
 func (f *fakeCognito) respondChallenge(w http.ResponseWriter, in map[string]any) {
 	answers, _ := in["ChallengeResponses"].(map[string]any)
 	u := f.users[str(answers, "USERNAME")]
@@ -348,6 +391,11 @@ func (f *fakeCognito) respondChallenge(w http.ResponseWriter, in map[string]any)
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Senhas
+// ---------------------------------------------------------------------------
+
+// Recuperação
 func (f *fakeCognito) forgotPassword(w http.ResponseWriter, in map[string]any) {
 	u := f.users[str(in, "Username")]
 	switch {
@@ -360,6 +408,7 @@ func (f *fakeCognito) forgotPassword(w http.ResponseWriter, in map[string]any) {
 	}
 }
 
+// Confirmação
 func (f *fakeCognito) confirmForgotPassword(w http.ResponseWriter, in map[string]any) {
 	u := f.users[str(in, "Username")]
 	switch {

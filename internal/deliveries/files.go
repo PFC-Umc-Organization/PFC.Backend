@@ -15,14 +15,14 @@ const (
 	msgNoFileHere = "Esta entrega não tem arquivo para download."
 )
 
+// Entrada
 type UploadRequest struct {
 	FieldID string `json:"campoId"`
 	Name    string `json:"nome"`
 	Size    int64  `json:"tamanho"`
 }
 
-// UploadTicket is sent as a multipart form to URL: Fields first, the file
-// last, under "file". Key is the answer to submit for the field.
+// Resposta
 type UploadTicket struct {
 	URL       string            `json:"url"`
 	Fields    map[string]string `json:"campos"`
@@ -31,17 +31,19 @@ type UploadTicket struct {
 	MaxBytes  int64             `json:"tamanhoMaximo"`
 }
 
+// Resposta
 type Download struct {
 	URL  string `json:"url"`
 	Name string `json:"nome"`
 }
 
+// Chave
 func fieldPrefix(projectID, activityID, fieldID string) string {
 	return filesPrefix + projectID + "/" + activityID + "/" + fieldID + "/"
 }
 
-// isStoredFile tells an uploaded file from the bare names saved before
-// storage existed.
+// Verificação
 func isStoredFile(answer string) bool { return strings.HasPrefix(answer, filesPrefix) }
 
+// Extração
 func fileNameOf(key string) string { return path.Base(key) }

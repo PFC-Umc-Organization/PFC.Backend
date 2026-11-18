@@ -14,8 +14,14 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Rotas
+// ---------------------------------------------------------------------------
+
+// Manipulador
 type Handler func(ctx context.Context, r *Request) (Response, error)
 
+// Rota
 type route struct {
 	segments []string
 	nParams  int
@@ -23,26 +29,27 @@ type route struct {
 	handler  Handler
 }
 
+// Roteador
 type Router struct {
 	routes map[string][]route
 }
 
+// Construção
 func NewRouter() *Router {
 	return &Router{routes: map[string][]route{}}
 }
 
-// Handle registers a route that requires an authenticated caller; segments
-// starting with ":" are parameters. A request that reaches it without
-// authorizer claims is refused with 401 before the handler runs.
+// Registro
 func (rt *Router) Handle(method, pattern string, h Handler) {
 	rt.add(method, pattern, h, false)
 }
 
-// Public registers a route that is served without authentication.
+// Rota pública
 func (rt *Router) Public(method, pattern string, h Handler) {
 	rt.add(method, pattern, h, true)
 }
 
+// Registro
 func (rt *Router) add(method, pattern string, h Handler, public bool) {
 	segments := split(pattern)
 	n := 0
@@ -54,6 +61,7 @@ func (rt *Router) add(method, pattern string, h Handler, public bool) {
 	rt.routes[method] = append(rt.routes[method], route{segments: segments, nParams: n, public: public, handler: h})
 }
 
+// Entrada Lambda
 func (rt *Router) Lambda(ctx context.Context, ev events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if ev.HTTPMethod == "OPTIONS" {
 		return events.APIGatewayProxyResponse{StatusCode: 204, Headers: corsHeaders}, nil
@@ -61,6 +69,7 @@ func (rt *Router) Lambda(ctx context.Context, ev events.APIGatewayProxyRequest) 
 	return ToLambda(rt.serve(ctx, ev)), nil
 }
 
+// Despacho
 func (rt *Router) serve(ctx context.Context, ev events.APIGatewayProxyRequest) Response {
 	path := split(ev.Path)
 	if slices.Contains(path, "") {
@@ -84,8 +93,13 @@ func (rt *Router) serve(ctx context.Context, ev events.APIGatewayProxyRequest) R
 	return Error(404, msgNotFound)
 }
 
+// ---------------------------------------------------------------------------
+// Erros
+// ---------------------------------------------------------------------------
+
 const msgNotFound = "Endereço não encontrado."
 
+// Execução
 func run(ctx context.Context, h Handler, req *Request) (resp Response) {
 	defer func() {
 		if p := recover(); p != nil {
@@ -114,6 +128,7 @@ var statusOf = map[apperr.Kind]int{
 	apperr.KindInternal:        500,
 }
 
+// Erro
 func errorResponse(ctx context.Context, req *Request, err error) Response {
 	e, ok := apperr.As(err)
 	if !ok {
@@ -127,6 +142,11 @@ func errorResponse(ctx context.Context, req *Request, err error) Response {
 	return Error(status, e.Message)
 }
 
+// ---------------------------------------------------------------------------
+// Casamento
+// ---------------------------------------------------------------------------
+
+// Divisão
 func split(path string) []string {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
@@ -135,6 +155,7 @@ func split(path string) []string {
 	return strings.Split(trimmed, "/")
 }
 
+// Correspondência
 func match(pattern, actual []string) bool {
 	if len(pattern) != len(actual) {
 		return false
@@ -147,8 +168,7 @@ func match(pattern, actual []string) bool {
 	return true
 }
 
-// params extracts the path parameters of the winning route. Parameters
-// supplied by the API Gateway are kept; the route's own take precedence.
+// Extração
 func params(rte route, actual []string, gateway map[string]string) map[string]string {
 	if rte.nParams == 0 {
 		return gateway

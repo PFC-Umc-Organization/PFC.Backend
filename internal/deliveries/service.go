@@ -19,6 +19,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
+// ---------------------------------------------------------------------------
+// Serviço
+// ---------------------------------------------------------------------------
+
+// Serviço
 type Service struct {
 	store    Store
 	projects Projects
@@ -33,14 +38,22 @@ const (
 	downloadTTL = 5 * time.Minute
 )
 
+// Construção
 func NewService(store Store, projects Projects, files Files, cohorts Cohorts) *Service {
 	return &Service{store: store, projects: projects, files: files, cohorts: cohorts, newID: uuid.NewString, now: time.Now}
 }
 
+// Auditoria
 func activityResource(id string) *audit.Resource { return &audit.Resource{Type: "atividade", ID: id} }
 
+// Carimbo
 func (s *Service) timestamp() string { return s.now().UTC().Format(time.RFC3339) }
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (s *Service) ListActivities(ctx context.Context) ([]Activity, error) {
 	activities, err := s.store.ListActivities(ctx)
 	if err != nil {
@@ -50,8 +63,7 @@ func (s *Service) ListActivities(ctx context.Context) ([]Activity, error) {
 	return activities, nil
 }
 
-// ListActivitiesFor is what a viewer has to deliver: the staff reads every
-// activity, a student only those of their cohort and the old ones that apply to all.
+// Listagem
 func (s *Service) ListActivitiesFor(ctx context.Context, viewer actor.Actor) ([]Activity, error) {
 	activities, err := s.ListActivities(ctx)
 	if err != nil || viewer.HasRole(actor.RoleAdmin, actor.RoleAdvisor) {
@@ -64,7 +76,7 @@ func (s *Service) ListActivitiesFor(ctx context.Context, viewer actor.Actor) ([]
 	return slices.DeleteFunc(activities, func(a Activity) bool { return !a.appliesTo(cohort) }), nil
 }
 
-// activitiesOf lists the activities a project's group has to deliver.
+// Consulta
 func (s *Service) activitiesOf(ctx context.Context, p groups.Project) ([]Activity, error) {
 	cohort, err := s.cohorts.OfProject(ctx, p)
 	if err != nil {
@@ -77,7 +89,7 @@ func (s *Service) activitiesOf(ctx context.Context, p groups.Project) ([]Activit
 	return slices.DeleteFunc(activities, func(a Activity) bool { return !a.appliesTo(cohort) }), nil
 }
 
-// inCohort refuses an activity that belongs to another cohort than the group's.
+// Verificação
 func (s *Service) inCohort(ctx context.Context, p groups.Project, a Activity) error {
 	if a.CohortID == "" {
 		return nil
@@ -92,6 +104,7 @@ func (s *Service) inCohort(ctx context.Context, p groups.Project, a Activity) er
 	return nil
 }
 
+// Criação
 func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activity, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -132,6 +145,7 @@ func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activit
 	return a, nil
 }
 
+// Atualização
 func (s *Service) UpdateActivity(ctx context.Context, id string, in ActivityInput) (Activity, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -149,6 +163,7 @@ func (s *Service) UpdateActivity(ctx context.Context, id string, in ActivityInpu
 	return a, nil
 }
 
+// Exclusão
 func (s *Service) DeleteActivity(ctx context.Context, id string) error {
 	projects, err := s.store.DeleteActivity(ctx, id)
 	if errors.Is(err, errNotFound) {
@@ -164,6 +179,11 @@ func (s *Service) DeleteActivity(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Campos
+// ---------------------------------------------------------------------------
+
+// Adição
 func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput) (Field, error) {
 	in, msg := in.normalized()
 	if msg != "" {
@@ -183,7 +203,7 @@ func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput
 	return f, nil
 }
 
-// RemoveField refuses the last field: every activity needs at least one.
+// Remoção
 func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) error {
 	a, found, err := s.store.GetActivity(ctx, activityID)
 	if err != nil {
@@ -210,6 +230,11 @@ func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) e
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (s *Service) SubmissionsOfActivity(ctx context.Context, activityID string) ([]Submission, error) {
 	submissions, err := s.store.SubmissionsOfActivity(ctx, activityID)
 	if err != nil {
@@ -218,6 +243,7 @@ func (s *Service) SubmissionsOfActivity(ctx context.Context, activityID string) 
 	return submissions, nil
 }
 
+// Consulta
 func (s *Service) project(ctx context.Context, id string) (groups.Project, error) {
 	p, found, err := s.projects.Project(ctx, id)
 	if err != nil {
@@ -229,6 +255,7 @@ func (s *Service) project(ctx context.Context, id string) (groups.Project, error
 	return p, nil
 }
 
+// Listagem
 func (s *Service) SubmissionsOfProject(ctx context.Context, viewer actor.Actor, projectID string) ([]Submission, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -244,8 +271,7 @@ func (s *Service) SubmissionsOfProject(ctx context.Context, viewer actor.Actor, 
 	return submissions, nil
 }
 
-// SubmissionsOfProgram feeds the staff panel's status grid in one call; an
-// advisor gets only the projects they advise.
+// Listagem
 func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Submission, error) {
 	projects, err := s.projects.ProjectsOfProgram(ctx, viewer, programID)
 	if err != nil {
@@ -260,9 +286,7 @@ func (s *Service) SubmissionsOfProgram(ctx context.Context, viewer actor.Actor, 
 	return append([]Submission{}, slices.Concat(perProject...)...), nil
 }
 
-// Submit creates or edits the group's submission. After the deadline only a
-// group that submitted in time can still edit; the first submission's time
-// is kept.
+// Envio
 func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, activityID string, in SubmissionInput) (Submission, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -331,8 +355,7 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	return sub, nil
 }
 
-// submissionChanged explains a rejected write: a submission handed back
-// after the deadline is final, anything else is a concurrent change.
+// Verificação
 func (s *Service) submissionChanged(ctx context.Context, projectID string, a Activity, closed bool) error {
 	if closed {
 		if _, found, err := s.store.GetSubmission(ctx, projectID, a.ID); err == nil && !found {
@@ -344,15 +367,14 @@ func (s *Service) submissionChanged(ctx context.Context, projectID string, a Act
 	return apperr.Conflict(msgSubmissionChanged)
 }
 
+// Verificação
 func (s *Service) deadlinePassed(ctx context.Context, projectID, activityID string) error {
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgDeadlinePassed,
 		Resource: activityResource(activityID), Details: map[string]any{"projetoId": projectID}})
 	return apperr.Conflict(msgDeadlinePassed)
 }
 
-// RemoveSubmission is how the academic team hands an activity back to the
-// group; nobody else edits a submission's content. After the deadline the
-// group can no longer submit it again.
+// Devolução
 func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, projectID, activityID string) error {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -376,9 +398,11 @@ func (s *Service) RemoveSubmission(ctx context.Context, reviewer actor.Actor, pr
 	return nil
 }
 
-// Validate records the advisor's verdict on the submission as it is now:
-// only the project's advisor gives it; the coordination and the group read
-// it. Editing the submission afterwards drops it.
+// ---------------------------------------------------------------------------
+// Validação
+// ---------------------------------------------------------------------------
+
+// Validação
 func (s *Service) Validate(ctx context.Context, advisor actor.Actor, projectID, activityID string, in ValidationInput) (Submission, error) {
 	action := "entrega.validada"
 	if in.Status == NotValidated {
@@ -410,10 +434,7 @@ func (s *Service) Validate(ctx context.Context, advisor actor.Actor, projectID, 
 	return sub, nil
 }
 
-// checkOrder holds back the group's first submission of an activity while an
-// earlier one is still open: not submitted and with time left. An earlier
-// activity already past its deadline does not hold anything back, since it
-// can no longer be submitted. Editing a submission is never held back.
+// Verificação
 func (s *Service) checkOrder(ctx context.Context, p groups.Project, a Activity) error {
 	deadline, ok := deadlineOf(a.Deadline)
 	if !ok {
@@ -449,8 +470,11 @@ func (s *Service) checkOrder(ctx context.Context, p groups.Project, a Activity) 
 	return nil
 }
 
-// RequestUpload lets a member send one file for a file field. The answer
-// only changes when the group submits the form with the returned key.
+// ---------------------------------------------------------------------------
+// Arquivos
+// ---------------------------------------------------------------------------
+
+// Solicitação
 func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, projectID, activityID string, in UploadRequest) (UploadTicket, error) {
 	if s.files == nil {
 		return UploadTicket{}, apperr.Unavailable(msgNoStorage, nil)
@@ -511,9 +535,7 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	return UploadTicket{URL: up.URL, Fields: up.Fields, Key: key, ExpiresAt: up.ExpiresAt.UTC().Format(time.RFC3339), MaxBytes: storage.MaxBytes}, nil
 }
 
-// checkFiles accepts, in a file field, the answer already submitted or a
-// file this group uploaded for this field. Without storage, any name goes,
-// as before.
+// Verificação
 func (s *Service) checkFiles(ctx context.Context, projectID string, a Activity, answers, previous map[string]string) error {
 	if s.files == nil {
 		return nil
@@ -537,7 +559,7 @@ func (s *Service) checkFiles(ctx context.Context, projectID string, a Activity, 
 	return nil
 }
 
-// replaced lists the stored files that before had and after no longer has.
+// Comparação
 func replaced(before, after map[string]string) []string {
 	var keys []string
 	for id, v := range before {
@@ -548,8 +570,7 @@ func replaced(before, after map[string]string) []string {
 	return keys
 }
 
-// deleteFiles is best effort: a file left behind costs little and must not
-// undo the submission.
+// Exclusão
 func (s *Service) deleteFiles(ctx context.Context, keys []string) {
 	if s.files == nil || len(keys) == 0 {
 		return
@@ -559,11 +580,12 @@ func (s *Service) deleteFiles(ctx context.Context, keys []string) {
 	}
 }
 
-// ProjectDeleted removes the project's files, abandoned uploads included.
+// Gancho
 func (s *Service) ProjectDeleted(ctx context.Context, projectID string) {
 	s.deleteFolder(ctx, filesPrefix+projectID+"/")
 }
 
+// Exclusão
 func (s *Service) deleteFolder(ctx context.Context, prefix string) {
 	if s.files == nil {
 		return
@@ -573,6 +595,7 @@ func (s *Service) deleteFolder(ctx context.Context, prefix string) {
 	}
 }
 
+// Download
 func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectID, activityID, fieldID string) (Download, error) {
 	if s.files == nil {
 		return Download{}, apperr.Unavailable(msgNoStorage, nil)
@@ -600,7 +623,11 @@ func (s *Service) DownloadFile(ctx context.Context, viewer actor.Actor, projectI
 	return Download{URL: url, Name: name}, nil
 }
 
-// groupPenalties reads what the penalties are computed from, at once.
+// ---------------------------------------------------------------------------
+// Penalidades
+// ---------------------------------------------------------------------------
+
+// Cálculo
 func (s *Service) groupPenalties(ctx context.Context, p groups.Project) (Penalties, error) {
 	var activities []Activity
 	var activitiesErr error
@@ -617,11 +644,13 @@ func (s *Service) groupPenalties(ctx context.Context, p groups.Project) (Penalti
 	return penaltiesOf(p.ID, activities, src.submissions, src.records, s.now()), nil
 }
 
+// Agrupamento
 type penaltySources struct {
 	submissions []Submission
 	records     []penaltyRecord
 }
 
+// Cálculo
 func (s *Service) projectPenalties(ctx context.Context, projectID string) (penaltySources, error) {
 	var out penaltySources
 	var submissionsErr error
@@ -636,7 +665,7 @@ func (s *Service) projectPenalties(ctx context.Context, projectID string) (penal
 	return out, errors.Join(submissionsErr, err)
 }
 
-// failed refuses a member of a group that reached MaxPenalties.
+// Bloqueio
 func (s *Service) failed(ctx context.Context, p groups.Project, activityID string) error {
 	penalties, err := s.groupPenalties(ctx, p)
 	if err != nil {
@@ -650,6 +679,7 @@ func (s *Service) failed(ctx context.Context, p groups.Project, activityID strin
 	return apperr.Conflict(msgGroupFailed)
 }
 
+// Listagem
 func (s *Service) PenaltiesOfProject(ctx context.Context, viewer actor.Actor, projectID string) (Penalties, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -665,8 +695,7 @@ func (s *Service) PenaltiesOfProject(ctx context.Context, viewer actor.Actor, pr
 	return penalties, nil
 }
 
-// PenaltiesOfProgram feeds the staff panel; an advisor gets only the
-// projects they advise.
+// Listagem
 func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Penalties, error) {
 	projects, err := s.projects.ProjectsOfProgram(ctx, viewer, programID)
 	if err != nil {
@@ -675,7 +704,7 @@ func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, pr
 	if len(projects) == 0 {
 		return []Penalties{}, nil
 	}
-	// A program belongs to one cohort, so its groups share the activities.
+
 	activities, err := s.activitiesOf(ctx, projects[0])
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
@@ -690,6 +719,7 @@ func (s *Service) PenaltiesOfProgram(ctx context.Context, viewer actor.Actor, pr
 	return append([]Penalties{}, out...), nil
 }
 
+// Consulta
 func (s *Service) reviewedProject(ctx context.Context, reviewer actor.Actor, projectID, action string) (groups.Project, error) {
 	p, err := s.project(ctx, projectID)
 	if err != nil {
@@ -703,8 +733,7 @@ func (s *Service) reviewedProject(ctx context.Context, reviewer actor.Actor, pro
 	return p, nil
 }
 
-// ApplyPenalty adds a penalty for a reason other than a missed deadline,
-// optionally about one activity.
+// Penalidade
 func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projectID string, in PenaltyInput) (Penalties, error) {
 	p, err := s.reviewedProject(ctx, reviewer, projectID, "penalidade.aplicada")
 	if err != nil {
@@ -735,8 +764,7 @@ func (s *Service) ApplyPenalty(ctx context.Context, reviewer actor.Actor, projec
 	return s.PenaltiesOfProject(ctx, reviewer, p.ID)
 }
 
-// WaivePenalty takes back one active penalty, from a deadline or manual; a
-// failed group with fewer than MaxPenalties left can submit again.
+// Perdão
 func (s *Service) WaivePenalty(ctx context.Context, reviewer actor.Actor, projectID, penaltyID string, in WaiverInput) (Penalties, error) {
 	p, err := s.reviewedProject(ctx, reviewer, projectID, "penalidade.perdoada")
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// Sanitização
 func TestSafeName(t *testing.T) {
 	long := strings.Repeat("a", 200) + ".pdf"
 	for in, want := range map[string]string{
@@ -18,6 +19,7 @@ func TestSafeName(t *testing.T) {
 	}
 }
 
+// Tipo
 func TestContentType(t *testing.T) {
 	if ct, ok := ContentType("Relatório.PDF"); !ok || ct != "application/pdf" {
 		t.Errorf("pdf = %q %v", ct, ok)

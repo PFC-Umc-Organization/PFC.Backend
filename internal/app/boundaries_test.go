@@ -13,8 +13,6 @@ import (
 
 const module = "github.com/PFC-Umc-Organization/PFC.Backend/internal/"
 
-// allowed lists, for each internal package, the internal packages it may
-// import. A new dependency between modules has to be added here on purpose.
 var allowed = map[string][]string{
 	"platform/actor":    nil,
 	"platform/apperr":   nil,
@@ -38,6 +36,7 @@ var allowed = map[string][]string{
 
 var platform = []string{"platform/actor", "platform/apperr", "platform/audit", "platform/dynamo", "platform/httpapi", "platform/parallel", "platform/storage"}
 
+// Fronteiras
 func TestModuleBoundaries(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

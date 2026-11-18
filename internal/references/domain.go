@@ -1,5 +1,3 @@
-// Package references owns a project's bibliography: search by topic
-// (OpenAlex), lookup by DOI (Crossref) and ABNT NBR 6023 formatting.
 package references
 
 import (
@@ -8,7 +6,11 @@ import (
 	"strings"
 )
 
-// WorkType picks the ABNT layout.
+// ---------------------------------------------------------------------------
+// Obras
+// ---------------------------------------------------------------------------
+
+// Enumeração
 type WorkType int
 
 const (
@@ -19,17 +21,14 @@ const (
 	WorkBook
 )
 
-// Organization is set when the author is an institution, which has no
-// surname or given name.
+// Modelo
 type Author struct {
 	Surname      string
 	GivenName    string
 	Organization string
 }
 
-// Work is the metadata of a publication, whatever API it came from.
-// Venue is the journal (article), the proceedings (conference paper) or the
-// book that contains the chapter.
+// Modelo
 type Work struct {
 	DOI       string
 	Type      WorkType
@@ -47,6 +46,7 @@ type Work struct {
 	Citations int
 }
 
+// Resposta
 type FoundWork struct {
 	DOI       string   `json:"doi,omitempty"`
 	Title     string   `json:"titulo"`
@@ -57,19 +57,25 @@ type FoundWork struct {
 	URL       string   `json:"url,omitempty"`
 }
 
+// Resposta
 type SearchResult struct {
 	Total int         `json:"total"`
 	Page  int         `json:"pagina"`
 	Works []FoundWork `json:"artigos"`
 }
 
-// FormattedWork previews a reference before it joins the project's list.
+// Resposta
 type FormattedWork struct {
 	FoundWork
 	ABNT     string `json:"abnt"`
 	ABNTHTML string `json:"abntHtml"`
 }
 
+// ---------------------------------------------------------------------------
+// Referências
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Reference struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projetoId"`
@@ -82,12 +88,12 @@ type Reference struct {
 	AddedAt   string `json:"adicionadaEm"`
 }
 
-// ReferenceInput carries only the DOI: the metadata is fetched again from
-// Crossref so nobody stores a made-up reference.
+// Entrada
 type ReferenceInput struct {
 	DOI string `json:"doi"`
 }
 
+// Mapeamento
 func found(w Work) FoundWork {
 	authors := make([]string, 0, len(w.Authors))
 	for _, a := range w.Authors {
@@ -104,6 +110,10 @@ func found(w Work) FoundWork {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// DOI
+// ---------------------------------------------------------------------------
+
 var doiPrefixes = []string{
 	"https://doi.org/",
 	"http://doi.org/",
@@ -113,8 +123,7 @@ var doiPrefixes = []string{
 	"doi:",
 }
 
-// normalizeDOI accepts a DOI the way students paste it ("DOI: 10.1145/...",
-// "https://doi.org/10.1145/...") and returns the bare identifier.
+// Normalização
 func normalizeDOI(raw string) (string, bool) {
 	doi := strings.TrimSpace(raw)
 	lower := strings.ToLower(doi)
@@ -134,19 +143,21 @@ func normalizeDOI(raw string) (string, bool) {
 	return doi, true
 }
 
-// referenceID derives a stable id from the DOI: a DOI has "/" and cannot be
-// a path segment, and a deterministic id lets DynamoDB reject the same work
-// twice in a project. DOIs are case-insensitive.
+// Identificação
 func referenceID(doi string) string {
 	sum := sha256.Sum256([]byte(strings.ToLower(doi)))
 	return hex.EncodeToString(sum[:8])
 }
 
+// ---------------------------------------------------------------------------
+// Mensagens
+// ---------------------------------------------------------------------------
+
 const (
 	minSearchLen = 3
 	maxSearchLen = 200
 	pageSize     = 10
-	// OpenAlex pages by number only up to 10,000 results.
+
 	maxPage = 50
 )
 

@@ -1,6 +1,3 @@
-// Package storage keeps the uploaded files in a private S3 bucket. Browsers
-// send and fetch them through presigned requests, so no file goes through
-// the Lambda.
 package storage
 
 import (
@@ -15,25 +12,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+// Cliente
 type Bucket struct {
 	client  *s3.Client
 	presign *s3.PresignClient
 	name    string
 }
 
+// Construção
 func New(client *s3.Client, name string) *Bucket {
 	return &Bucket{client: client, presign: s3.NewPresignClient(client), name: name}
 }
 
-// Upload is an HTML form POST: the browser sends Fields plus the file. The
-// policy pins the key, the content type and the size range, so S3 itself
-// rejects anything else.
+// Resposta
 type Upload struct {
 	URL       string
 	Fields    map[string]string
 	ExpiresAt time.Time
 }
 
+// Assinatura
 func (b *Bucket) PresignUpload(ctx context.Context, key, contentType string, maxBytes int64, ttl time.Duration) (Upload, error) {
 	req, err := b.presign.PresignPostObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(b.name),
@@ -52,7 +50,7 @@ func (b *Bucket) PresignUpload(ctx context.Context, key, contentType string, max
 	return Upload{URL: req.URL, Fields: req.Values, ExpiresAt: time.Now().Add(ttl)}, nil
 }
 
-// PresignDownload makes the browser save the file under fileName.
+// Assinatura
 func (b *Bucket) PresignDownload(ctx context.Context, key, fileName string, ttl time.Duration) (string, error) {
 	req, err := b.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket:                     aws.String(b.name),
@@ -65,7 +63,7 @@ func (b *Bucket) PresignDownload(ctx context.Context, key, fileName string, ttl 
 	return req.URL, nil
 }
 
-// Size reports found=false when the object does not exist.
+// Consulta
 func (b *Bucket) Size(ctx context.Context, key string) (size int64, found bool, err error) {
 	out, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(b.name), Key: aws.String(key)})
 	var notFound *types.NotFound
@@ -78,14 +76,14 @@ func (b *Bucket) Size(ctx context.Context, key string) (size int64, found bool, 
 	return aws.ToInt64(out.ContentLength), true, nil
 }
 
+// Exclusão
 func (b *Bucket) Delete(ctx context.Context, key string) error {
 	return b.DeleteKeys(ctx, []string{key})
 }
 
-// maxDeleteBatch is the S3 limit of keys per DeleteObjects call.
 const maxDeleteBatch = 1000
 
-// DeleteKeys deletes the given objects in batches of up to 1000 keys.
+// Exclusão
 func (b *Bucket) DeleteKeys(ctx context.Context, keys []string) error {
 	for len(keys) > 0 {
 		n := min(len(keys), maxDeleteBatch)
@@ -101,6 +99,7 @@ func (b *Bucket) DeleteKeys(ctx context.Context, keys []string) error {
 	return nil
 }
 
+// Exclusão
 func (b *Bucket) deleteBatch(ctx context.Context, ids []types.ObjectIdentifier) error {
 	out, err := b.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(b.name),
@@ -116,9 +115,7 @@ func (b *Bucket) deleteBatch(ctx context.Context, ids []types.ObjectIdentifier) 
 	return nil
 }
 
-// DeletePrefix deletes every object under prefix. Listing needs
-// s3:ListBucket, which also makes HeadObject answer 404 instead of 403 for a
-// missing key.
+// Exclusão
 func (b *Bucket) DeletePrefix(ctx context.Context, prefix string) error {
 	pages := s3.NewListObjectsV2Paginator(b.client, &s3.ListObjectsV2Input{Bucket: aws.String(b.name), Prefix: aws.String(prefix)})
 	for pages.HasMorePages() {

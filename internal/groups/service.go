@@ -17,6 +17,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 )
 
+// ---------------------------------------------------------------------------
+// Serviço
+// ---------------------------------------------------------------------------
+
+// Serviço
 type Service struct {
 	store    Store
 	academic Academic
@@ -29,6 +34,7 @@ type Service struct {
 	deleted []func(ctx context.Context, projectID string)
 }
 
+// Construção
 func NewService(store Store, academic Academic, accounts Accounts) *Service {
 	return &Service{
 		store:    store,
@@ -42,16 +48,24 @@ func NewService(store Store, academic Academic, accounts Accounts) *Service {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Auditoria
+// ---------------------------------------------------------------------------
+
+// Auditoria
 func projectResource(id string) *audit.Resource { return &audit.Resource{Type: "projeto", ID: id} }
 
+// Resultado
 func failure(ctx context.Context, action, reason string, resource *audit.Resource, details map[string]any) {
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Failure, Reason: reason, Resource: resource, Details: details})
 }
 
+// Resultado
 func success(ctx context.Context, action string, resource *audit.Resource, details map[string]any) {
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: resource, Details: details})
 }
 
+// Tradução
 func writeError(err error) error {
 	if errors.Is(err, errNotFound) {
 		return apperr.NotFound(msgProjectNotFound)
@@ -59,10 +73,16 @@ func writeError(err error) error {
 	return apperr.Internal("Não foi possível salvar. Tente novamente em instantes.", err)
 }
 
+// ---------------------------------------------------------------------------
+// Projetos
+// ---------------------------------------------------------------------------
+
+// Consulta
 func (s *Service) Project(ctx context.Context, id string) (Project, bool, error) {
 	return s.store.GetProject(ctx, id)
 }
 
+// Carregamento
 func (s *Service) load(ctx context.Context, id string) (Project, error) {
 	p, found, err := s.store.GetProject(ctx, id)
 	if err != nil {
@@ -74,6 +94,7 @@ func (s *Service) load(ctx context.Context, id string) (Project, error) {
 	return p, nil
 }
 
+// Criação
 func (s *Service) CreateProject(ctx context.Context, programID string, in ProjectInput) (Project, error) {
 	exists, err := s.academic.ProgramExists(ctx, programID)
 	if err != nil {
@@ -94,6 +115,7 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 	return p, nil
 }
 
+// Listagem
 func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
@@ -105,6 +127,7 @@ func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, pro
 	return slices.DeleteFunc(projects, func(p Project) bool { return !Advises(viewer, p) }), nil
 }
 
+// Consulta
 func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]string, error) {
 	if advisorSub == "" {
 		return []string{}, nil
@@ -126,6 +149,7 @@ func (s *Service) MembersAdvisedBy(ctx context.Context, advisorSub string) ([]st
 	return members, nil
 }
 
+// Consulta
 func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (Detail, error) {
 	p, err := s.load(ctx, id)
 	if err != nil {
@@ -137,6 +161,7 @@ func (s *Service) Detail(ctx context.Context, viewer actor.Actor, id string) (De
 	return s.detail(ctx, p), nil
 }
 
+// Montagem
 func (s *Service) detail(ctx context.Context, p Project) Detail {
 	d := Detail{Project: p, Members: make([]Member, 0, len(p.Members))}
 	var names map[string]string
@@ -179,6 +204,7 @@ func (s *Service) detail(ctx context.Context, p Project) Detail {
 	return d
 }
 
+// Consulta
 func (s *Service) cohortOfProgram(ctx context.Context, programID string) (*Cohort, error) {
 	cohortID, found, err := s.academic.CohortOfProgram(ctx, programID)
 	if err != nil || !found {
@@ -187,6 +213,7 @@ func (s *Service) cohortOfProgram(ctx context.Context, programID string) (*Cohor
 	return s.cohort(ctx, cohortID)
 }
 
+// Consulta
 func (s *Service) cohort(ctx context.Context, id string) (*Cohort, error) {
 	c, found, err := s.academic.Cohort(ctx, id)
 	if err != nil || !found {
@@ -195,6 +222,7 @@ func (s *Service) cohort(ctx context.Context, id string) (*Cohort, error) {
 	return &c, nil
 }
 
+// Consulta
 func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error) {
 	rgm := student.RGM()
 	p, found, err := s.store.ProjectOfMember(ctx, rgm)
@@ -223,6 +251,7 @@ func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error)
 	return MyPFC{Cohort: cohort, ProgramID: programID}, nil
 }
 
+// Atualização
 func (s *Service) UpdateProject(ctx context.Context, id string, in ProjectInput) error {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -235,6 +264,7 @@ func (s *Service) UpdateProject(ctx context.Context, id string, in ProjectInput)
 	return nil
 }
 
+// Exclusão
 func (s *Service) DeleteProject(ctx context.Context, id string) error {
 	switch err := s.store.DeleteProject(ctx, id); {
 	case errors.Is(err, errNotFound):
@@ -251,10 +281,16 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 	return nil
 }
 
+// Gancho
 func (s *Service) OnProjectDeleted(f func(ctx context.Context, projectID string)) {
 	s.deleted = append(s.deleted, f)
 }
 
+// ---------------------------------------------------------------------------
+// Orientador
+// ---------------------------------------------------------------------------
+
+// Vinculação
 func (s *Service) AssignAdvisor(ctx context.Context, id string, in AdvisorInput) error {
 	if in.AdvisorID == "" {
 		return apperr.Invalid(msgAdvisorRequired)
@@ -274,6 +310,7 @@ func (s *Service) AssignAdvisor(ctx context.Context, id string, in AdvisorInput)
 	return nil
 }
 
+// Desvinculação
 func (s *Service) RemoveAdvisor(ctx context.Context, id string) error {
 	if err := s.store.ClearAdvisor(ctx, id); err != nil {
 		return writeError(err)
@@ -282,6 +319,11 @@ func (s *Service) RemoveAdvisor(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Membros
+// ---------------------------------------------------------------------------
+
+// Vinculação
 func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) error {
 	const action = "projeto.integrante_adicionado"
 	rgm := strings.TrimSpace(in.RGM)
@@ -336,6 +378,7 @@ func (s *Service) AddMember(ctx context.Context, id string, in MemberInput) erro
 	return nil
 }
 
+// Desvinculação
 func (s *Service) RemoveMember(ctx context.Context, id string, in MemberInput) error {
 	rgm := strings.TrimSpace(in.RGM)
 	if rgm == "" {
@@ -355,6 +398,11 @@ func (s *Service) RemoveMember(ctx context.Context, id string, in MemberInput) e
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Projeto próprio
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in ProjectInput) (Project, error) {
 	fail := func(reason string) { failure(ctx, "projeto.criado_pelo_aluno", reason, nil, nil) }
 	rgm := student.RGM()
@@ -428,6 +476,11 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 	return p, nil
 }
 
+// ---------------------------------------------------------------------------
+// Convites
+// ---------------------------------------------------------------------------
+
+// Convite
 func (s *Service) invite(ctx context.Context, p Project, rgm, invitedBy string) (Invitation, error) {
 	inv := Invitation{
 		ProjectID:   p.ID,
@@ -439,6 +492,7 @@ func (s *Service) invite(ctx context.Context, p Project, rgm, invitedBy string) 
 	return inv, s.store.CreateInvitation(ctx, inv)
 }
 
+// Listagem
 func (s *Service) InvitationsOf(ctx context.Context, rgm string) ([]Invitation, error) {
 	invitations, err := s.store.InvitationsOfStudent(ctx, rgm)
 	if err != nil {
@@ -447,6 +501,7 @@ func (s *Service) InvitationsOf(ctx context.Context, rgm string) ([]Invitation, 
 	return invitations, nil
 }
 
+// Aceite
 func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (Project, error) {
 	fail := func(reason string) { failure(ctx, "convite.aceito", reason, projectResource(projectID), nil) }
 
@@ -516,6 +571,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 	return p, nil
 }
 
+// Recusa
 func (s *Service) DeclineInvitation(ctx context.Context, rgm, projectID string) error {
 	switch err := s.store.DeleteInvitation(ctx, projectID, rgm); {
 	case errors.Is(err, errNotFound):
@@ -527,6 +583,7 @@ func (s *Service) DeclineInvitation(ctx context.Context, rgm, projectID string) 
 	return nil
 }
 
+// Listagem
 func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, projectID string) ([]Invitation, error) {
 	p, err := s.load(ctx, projectID)
 	if err != nil {
@@ -556,6 +613,7 @@ func (s *Service) InvitationsOfProject(ctx context.Context, viewer actor.Actor, 
 	return invitations, nil
 }
 
+// Convite
 func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID string, in MemberInput) (Invitation, error) {
 	p, err := s.load(ctx, projectID)
 	if err != nil {
@@ -615,6 +673,7 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 	return inv, nil
 }
 
+// Cancelamento
 func (s *Service) CancelInvitation(ctx context.Context, member actor.Actor, projectID, rgm string) error {
 	p, err := s.load(ctx, projectID)
 	if err != nil {

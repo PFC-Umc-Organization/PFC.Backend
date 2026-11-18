@@ -10,11 +10,16 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 )
 
+// ---------------------------------------------------------------------------
+// Usuários
+// ---------------------------------------------------------------------------
+
 const (
 	StatusActive   = "ATIVO"
 	StatusInactive = "INATIVO"
 )
 
+// Modelo
 type User struct {
 	ID                 string     `json:"id"`
 	Name               string     `json:"nome"`
@@ -28,6 +33,7 @@ type User struct {
 	Username           string     `json:"-"`
 }
 
+// Modelo
 type SessionUser struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"nome"`
@@ -38,11 +44,17 @@ type SessionUser struct {
 	RGM       string     `json:"rgm,omitempty"`
 }
 
+// Resposta
 type Session struct {
 	User  SessionUser `json:"usuario"`
 	Token string      `json:"token"`
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Resposta
 type LoginResult struct {
 	User      *SessionUser `json:"usuario,omitempty"`
 	Token     string       `json:"token,omitempty"`
@@ -52,27 +64,36 @@ type LoginResult struct {
 
 const ChallengeNewPassword = "NOVA_SENHA"
 
+// Entrada
 type NewPasswordInput struct {
 	Email    string `json:"email"`
 	Session  string `json:"sessao"`
 	Password string `json:"senha"`
 }
 
+// Entrada
 type ForgotPasswordInput struct {
 	Email string `json:"email"`
 }
 
+// Entrada
 type ResetPasswordInput struct {
 	Email    string `json:"email"`
 	Code     string `json:"codigo"`
 	Password string `json:"senha"`
 }
 
+// Entrada
 type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"senha"`
 }
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Entrada
 type SignUpInput struct {
 	Name     string     `json:"nome"`
 	Email    string     `json:"email"`
@@ -80,33 +101,48 @@ type SignUpInput struct {
 	Role     actor.Role `json:"perfil"`
 }
 
+// Entrada
 type Confirmation struct {
 	Email string `json:"email"`
 	Code  string `json:"codigo"`
 }
 
+// Entrada
 type ResendInput struct {
 	Email string `json:"email"`
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
+// Entrada
 type NameInput struct {
 	Name string `json:"nome"`
 }
 
+// Entrada
 type RoleInput struct {
 	Role actor.Role `json:"perfil"`
 }
 
 const maxAccountNameLen = 150
 
+// Entrada
 type NewAccount struct {
 	Name  string     `json:"nome"`
 	Email string     `json:"email"`
 	Role  actor.Role `json:"perfil"`
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Normalização
 func normalizeEmail(e string) string { return strings.TrimSpace(strings.ToLower(e)) }
 
+// Normalização
 func roleOrStudent(r string) actor.Role {
 	if r == "" {
 		return actor.RoleStudent
@@ -114,6 +150,7 @@ func roleOrStudent(r string) actor.Role {
 	return actor.Role(r)
 }
 
+// Mapeamento
 func userFromAttributes(attrs map[string]string, username string, enabled, confirmed bool) User {
 	id := attrs["sub"]
 	if id == "" {
@@ -139,6 +176,7 @@ func userFromAttributes(attrs map[string]string, username string, enabled, confi
 	return u
 }
 
+// Leitura
 func claimsOf(idToken string) (map[string]any, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
@@ -155,6 +193,7 @@ func claimsOf(idToken string) (map[string]any, error) {
 	return claims, nil
 }
 
+// Mapeamento
 func sessionUser(claims map[string]any) SessionUser {
 	str := func(k string) string { s, _ := claims[k].(string); return s }
 	u := SessionUser{
@@ -170,6 +209,10 @@ func sessionUser(claims map[string]any) SessionUser {
 	}
 	return u
 }
+
+// ---------------------------------------------------------------------------
+// Mensagens
+// ---------------------------------------------------------------------------
 
 var (
 	digitsOnly = regexp.MustCompile(`^\d+$`)

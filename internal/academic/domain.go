@@ -1,6 +1,3 @@
-// Package academic owns courses (cursos), cohorts (turmas), their PFC program
-// and the RGM allowlist (matrículas). A cohort is a registered course + shift
-// + term.
 package academic
 
 import (
@@ -9,24 +6,32 @@ import (
 	"unicode/utf8"
 )
 
-// Shifts mirror Turno in the frontend (curso.model.ts).
 var shifts = map[string]bool{"MANHA": true, "NOITE": true}
+
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
 
 const maxCourseNameLen = 100
 
+// Modelo
 type Course struct {
 	ID   string `json:"id"`
 	Name string `json:"nome"`
 }
 
+// Entrada
 type CourseInput struct {
 	Name string `json:"nome"`
 }
 
+// Normalização
 func courseName(s string) string { return strings.Join(strings.Fields(s), " ") }
 
+// Normalização
 func (in CourseInput) normalized() CourseInput { return CourseInput{Name: courseName(in.Name)} }
 
+// Validação
 func (in CourseInput) validate() string {
 	switch {
 	case in.Name == "":
@@ -37,8 +42,11 @@ func (in CourseInput) validate() string {
 	return ""
 }
 
-// Cohort.Course is the course name, read from the course on every listing so
-// a rename never leaves cohorts behind.
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Cohort struct {
 	ID       string `json:"id"`
 	CourseID string `json:"graduacaoId,omitempty"`
@@ -47,12 +55,14 @@ type Cohort struct {
 	Term     string `json:"periodo"`
 }
 
+// Entrada
 type CohortInput struct {
 	Course string `json:"nome"`
 	Shift  string `json:"turno"`
 	Term   string `json:"periodo"`
 }
 
+// Normalização
 func (in CohortInput) normalized() CohortInput {
 	return CohortInput{
 		Course: courseName(in.Course),
@@ -61,10 +71,9 @@ func (in CohortInput) normalized() CohortInput {
 	}
 }
 
-// The term is part of the cohort's uniqueness lock, so it has one spelling:
-// "2026/2" and "2026-2" become "2026.2" and anything else is refused.
 var termFormat = regexp.MustCompile(`^(\d{4})\s*[./-]\s*([12])$`)
 
+// Normalização
 func normalizeTerm(s string) string {
 	s = strings.TrimSpace(s)
 	if m := termFormat.FindStringSubmatch(s); m != nil {
@@ -73,6 +82,7 @@ func normalizeTerm(s string) string {
 	return s
 }
 
+// Validação
 func (in CohortInput) validate() string {
 	switch {
 	case in.Course == "" || in.Shift == "" || in.Term == "":
@@ -85,19 +95,27 @@ func (in CohortInput) validate() string {
 	return ""
 }
 
+// Comparação
 func (c Cohort) sameAs(courseID string, in CohortInput) bool {
 	return c.CourseID == courseID && c.Shift == in.Shift && c.Term == in.Term
 }
 
+// Montagem
 func (c Cohort) details() map[string]any {
 	return map[string]any{"nome": c.Course, "turno": c.Shift, "periodo": c.Term}
 }
 
+// ---------------------------------------------------------------------------
+// Programas
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Program struct {
 	ID       string `json:"id"`
 	CohortID string `json:"cursoId"`
 }
 
+// Entrada
 type ProgramInput struct {
 	CohortID string `json:"cursoId"`
 }
@@ -107,30 +125,36 @@ const (
 	EnrollmentInactive = "INATIVO"
 )
 
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Enrollment struct {
 	RGM      string `json:"rgm"`
 	Status   string `json:"status"`
 	CohortID string `json:"turmaId,omitempty"`
 }
 
-// EnrollmentRequest.CohortID is only read when enrolling.
+// Entrada
 type EnrollmentRequest struct {
 	RGMs     []string `json:"rgms"`
 	CohortID string   `json:"turmaId"`
 }
 
+// Resposta
 type EnrollmentFailure struct {
 	RGM   string `json:"rgm"`
 	Error string `json:"erro"`
 }
 
+// Resposta
 type EnrollmentResult struct {
 	Processed int                 `json:"processados"`
 	Failures  []EnrollmentFailure `json:"falhas,omitempty"`
 }
 
-// distinctRGMs trims, drops blanks and duplicates: a blank RGM would write a
-// bare "STUDENT#" item.
+// Deduplicação
 func distinctRGMs(rgms []string) []string {
 	seen := make(map[string]bool, len(rgms))
 	out := make([]string, 0, len(rgms))
@@ -145,9 +169,9 @@ func distinctRGMs(rgms []string) []string {
 	return out
 }
 
-// The RGM is the local part of the student's e-mail, digits only.
 var digitsOnly = regexp.MustCompile(`^\d+$`)
 
+// Separação
 func splitByFormat(rgms []string) (valid []string, invalid []EnrollmentFailure) {
 	for _, rgm := range rgms {
 		if digitsOnly.MatchString(rgm) {

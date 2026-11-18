@@ -2,6 +2,7 @@ package actor
 
 import "testing"
 
+// Permissão
 func TestHasRole(t *testing.T) {
 	a := Actor{Role: RoleAdvisor}
 	if !a.HasRole(RoleAdmin, RoleAdvisor) || a.HasRole(RoleAdmin) || a.HasRole() {
@@ -12,6 +13,7 @@ func TestHasRole(t *testing.T) {
 	}
 }
 
+// Extração
 func TestRGM(t *testing.T) {
 	for email, want := range map[string]string{
 		"12345678901@alunos.umc.br": "12345678901",
@@ -25,6 +27,7 @@ func TestRGM(t *testing.T) {
 	}
 }
 
+// Exibição
 func TestDisplayName(t *testing.T) {
 	for _, c := range []struct{ name, email, want string }{
 		{"Ana Souza", "ana@umc.br", "Ana Souza"},

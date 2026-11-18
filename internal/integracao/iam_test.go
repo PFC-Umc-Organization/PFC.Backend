@@ -11,11 +11,6 @@ import (
 	"github.com/aws/smithy-go/middleware"
 )
 
-// lambdaPolicy mirrors the IAM policy of the Lambda in PFC.Infra
-// (modules/backend-lambda/data.tf). DynamoDB Local checks no permission, so
-// an operation the policy lacks passes every test here and fails with 500 in
-// AWS — which is how deleting a cohort broke after ConditionCheckItem and
-// BatchGetItem came in.
 var lambdaPolicy = map[string]bool{
 	"dynamodb:GetItem": true, "dynamodb:PutItem": true, "dynamodb:UpdateItem": true,
 	"dynamodb:DeleteItem": true, "dynamodb:Query": true,
@@ -26,19 +21,16 @@ var lambdaPolicy = map[string]bool{
 	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true, "s3:ListBucket": true,
 }
 
-// s3Actions maps operations to their IAM action. Presigning runs the
-// operation's middleware too, so PutObject and GetObject are recorded when
-// the URLs are signed; the browser's request uses the Lambda's permission.
 var s3Actions = map[string]string{
 	"HeadObject": "s3:GetObject", "ListObjectsV2": "s3:ListBucket", "DeleteObjects": "s3:DeleteObject",
 }
 
-// Cognito's public operations are authorized by the app client, not by IAM.
 var cognitoPublic = map[string]bool{
 	"InitiateAuth": true, "SignUp": true, "ConfirmSignUp": true, "ResendConfirmationCode": true,
 	"ForgotPassword": true, "ConfirmForgotPassword": true, "RespondToAuthChallenge": true,
 }
 
+// Simulação
 type actionRecorder struct {
 	mu   sync.Mutex
 	used map[string]bool
@@ -46,14 +38,14 @@ type actionRecorder struct {
 
 var recorder = &actionRecorder{used: map[string]bool{}}
 
+// Registro
 func (r *actionRecorder) add(action string) {
 	r.mu.Lock()
 	r.used[action] = true
 	r.mu.Unlock()
 }
 
-// middleware records the IAM action of every call. TransactWriteItems is not
-// an action of its own: each item needs the action of its kind.
+// Interceptação
 func (r *actionRecorder) middleware(prefix string) func(*middleware.Stack) error {
 	return func(stack *middleware.Stack) error {
 		return stack.Initialize.Add(middleware.InitializeMiddlewareFunc("recordIAMAction",
@@ -85,6 +77,7 @@ func (r *actionRecorder) middleware(prefix string) func(*middleware.Stack) error
 	}
 }
 
+// Verificação
 func (r *actionRecorder) missing() []string {
 	var out []string
 	for a := range r.used {
@@ -96,6 +89,7 @@ func (r *actionRecorder) missing() []string {
 	return out
 }
 
+// Verificação
 func checkIAMActions() error {
 	if m := recorder.missing(); len(m) > 0 {
 		return fmt.Errorf("o backend usa ações que a política da Lambda não libera: %v — acrescente em PFC.Infra/modules/backend-lambda/data.tf e em lambdaPolicy (iam_test.go)", m)

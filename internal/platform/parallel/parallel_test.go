@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// Ordem
 func TestMapKeepsOrderAndLimit(t *testing.T) {
 	var running, peak atomic.Int32
 	items := make([]int, 40)
@@ -40,6 +41,7 @@ func TestMapKeepsOrderAndLimit(t *testing.T) {
 	}
 }
 
+// Erros
 func TestMapReturnsError(t *testing.T) {
 	boom := errors.New("boom")
 	_, err := Map(context.Background(), []int{1, 2, 3}, func(_ context.Context, i int) (int, error) {
@@ -53,6 +55,7 @@ func TestMapReturnsError(t *testing.T) {
 	}
 }
 
+// Interrupção
 func TestMapStopsLaunchingAfterFirstError(t *testing.T) {
 	boom := errors.New("boom")
 	var started atomic.Int32
@@ -72,6 +75,7 @@ func TestMapStopsLaunchingAfterFirstError(t *testing.T) {
 	}
 }
 
+// Interrupção
 func TestMapStopsWhenContextEnds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var started atomic.Int32
@@ -91,6 +95,7 @@ func TestMapStopsWhenContextEnds(t *testing.T) {
 	}
 }
 
+// Entrada vazia
 func TestMapSucceedsWithEmptyInput(t *testing.T) {
 	got, err := Map(context.Background(), []int(nil), func(context.Context, int) (int, error) { return 1, nil })
 	if err != nil || len(got) != 0 {

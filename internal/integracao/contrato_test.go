@@ -24,13 +24,14 @@ var (
 
 const fakeSubPrefix = "00000000-0000-4000-8000-"
 
-// transcript records every call so the whole API surface can be diffed.
+// Registro
 type transcript struct {
 	t   *testing.T
 	out bytes.Buffer
 	ids map[string]string
 }
 
+// Normalização
 func (tr *transcript) normalize(s string) string {
 	s = uuidPattern.ReplaceAllStringFunc(s, func(id string) string {
 		if strings.HasPrefix(id, fakeSubPrefix) {
@@ -47,8 +48,7 @@ func (tr *transcript) normalize(s string) string {
 	return accessedDate.ReplaceAllString(s, "Acesso em: <data>")
 }
 
-// canonicalJSON sorts object keys and top-level array items, after ids became
-// placeholders: raw order depends on random ids (map keys, GSI sort keys).
+// Normalização
 func canonicalJSON(body string) string {
 	dec := json.NewDecoder(strings.NewReader(body))
 	dec.UseNumber()
@@ -69,6 +69,7 @@ func canonicalJSON(body string) string {
 	return encode(v)
 }
 
+// Chamada
 func (tr *transcript) call(q quem, method, path, body string) (int, string) {
 	tr.t.Helper()
 	status, resp := chamar(tr.t, q, method, path, body)
@@ -84,6 +85,7 @@ func (tr *transcript) call(q quem, method, path, body string) (int, string) {
 	return status, resp
 }
 
+// Verificação
 func (tr *transcript) expect(q quem, method, path, body string, status int) string {
 	tr.t.Helper()
 	got, resp := tr.call(q, method, path, body)
@@ -93,6 +95,7 @@ func (tr *transcript) expect(q quem, method, path, body string, status int) stri
 	return resp
 }
 
+// Leitura
 func jsonField(t *testing.T, body string, path ...any) string {
 	t.Helper()
 	var v any
@@ -111,6 +114,7 @@ func jsonField(t *testing.T, body string, path ...any) string {
 	return s
 }
 
+// Contrato
 func TestContrato(t *testing.T) {
 	resetar(t)
 	tr := &transcript{t: t, ids: map[string]string{}}
@@ -126,7 +130,6 @@ func TestContrato(t *testing.T) {
 	cognito.add("666@alunos.umc.br", "Aluno Sem Matrícula", "ALUNO", true)
 	copiarNomes(t)
 
-	// auth
 	tr.expect(pub, "POST", "/auth/login", `{`, 400)
 	tr.expect(pub, "POST", "/auth/login", `{"email":"coord@umc.br"}`, 400)
 	tr.expect(pub, "POST", "/auth/login", `{"email":"coord@umc.br","senha":"errada"}`, 401)
@@ -147,14 +150,12 @@ func TestContrato(t *testing.T) {
 	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"444@alunos.umc.br"}`, 200)
 	tr.expect(pub, "POST", "/auth/reenviar-codigo", `{"email":"111@alunos.umc.br"}`, 200)
 
-	// contas
 	tr.expect(aluno("111"), "POST", "/admin/usuarios", `{"nome":"X","email":"x@umc.br","perfil":"ORIENTADOR"}`, 403)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"X","email":"x@gmail.com","perfil":"ORIENTADOR"}`, 400)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"X","email":"x@umc.br","perfil":"ALUNO"}`, 400)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"Nova@UMC.br","perfil":"ORIENTADOR"}`, 201)
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Nova Prof","email":"nova@umc.br","perfil":"ADMIN"}`, 409)
 
-	// primeiro acesso de conta criada pelo admin: a senha temporária pede uma nova
 	novaSessao := tr.expect(pub, "POST", "/auth/login", `{"email":"nova@umc.br","senha":"temporaria"}`, 200)
 	var desafio struct {
 		Sessao string `json:"sessao"`
@@ -169,7 +170,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(pub, "POST", "/auth/login", `{"email":"nova@umc.br","senha":"Nova#1234"}`, 200)
 	novaSub := cognito.subOf("nova@umc.br")
 
-	// gestão de contas pela coordenação
 	tr.expect(admin, "POST", "/admin/usuarios", `{"nome":"Outra Prof","email":"outra@umc.br","perfil":"ORIENTADOR"}`, 201)
 	outraSub := cognito.subOf("outra@umc.br")
 	tr.expect(aluno("111"), "PUT", "/admin/usuarios/"+novaSub+"/nome", `{"nome":"X"}`, 403)
@@ -201,7 +201,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "POST", "/admin/usuarios/"+outraSub+"/reativar", "", 409)
 	tr.expect(pub, "POST", "/auth/login", `{"email":"outra@umc.br","senha":"temporaria"}`, 200)
 
-	// esqueci a senha: a resposta não diz se a conta existe
 	tr.expect(pub, "POST", "/auth/esqueci-senha", `{}`, 400)
 	tr.expect(pub, "POST", "/auth/esqueci-senha", `{"email":"ninguem@umc.br"}`, 200)
 	tr.expect(pub, "POST", "/auth/esqueci-senha", `{"email":"444@alunos.umc.br"}`, 200)
@@ -213,12 +212,10 @@ func TestContrato(t *testing.T) {
 	tr.expect(pub, "POST", "/auth/redefinir-senha", `{"email":"prof@umc.br","codigo":"123456","senha":"Outra#1234"}`, 200)
 	tr.expect(pub, "POST", "/auth/login", `{"email":"prof@umc.br","senha":"Outra#1234"}`, 200)
 
-	// quem está logado
 	tr.expect(pub, "GET", "/me", "", 401)
 	tr.expect(admin, "GET", "/me", "", 200)
 	tr.expect(prof, "GET", "/me", "", 200)
 
-	// cursos
 	tr.expect(aluno("111"), "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 403)
 	tr.expect(admin, "POST", "/cursos", `{"nome":"  "}`, 400)
 	tr.expect(admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201)
@@ -232,7 +229,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "PUT", "/cursos/"+direito, `{"nome":"Direito Civil"}`, 200)
 	tr.expect(aluno("111"), "DELETE", "/cursos/"+direito, "", 403)
 
-	// turmas
 	tr.expect(aluno("111"), "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 403)
 	tr.expect(admin, "POST", "/turmas", `{"nome":"Engenharia de Software"}`, 400)
 	tr.expect(admin, "POST", "/turmas", `{"nome":"Medicina","turno":"NOITE","periodo":"2026.2"}`, 400)
@@ -252,7 +248,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/turmas/"+extra, "", 200)
 	tr.expect(admin, "DELETE", "/turmas/"+extra, "", 404)
 
-	// curso com turma não sai; depois que a turma sai, sai
 	direitoTurma := id(t, tr.expect(admin, "POST", "/turmas", `{"nome":"Direito Civil","turno":"NOITE","periodo":"2026.2"}`, 201))
 	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 409)
 	tr.expect(admin, "PUT", "/cursos/"+direito, `{"nome":"Direito Penal"}`, 200)
@@ -261,7 +256,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 200)
 	tr.expect(admin, "DELETE", "/cursos/"+direito, "", 404)
 
-	// matrículas
 	tr.expect(aluno("111"), "POST", "/admin/students", `{"turmaId":"`+eng+`","rgms":["111"]}`, 403)
 	tr.expect(admin, "POST", "/admin/students", `{"rgms":["111"]}`, 400)
 	tr.expect(admin, "POST", "/admin/students", `{"turmaId":"inexistente","rgms":["111"]}`, 404)
@@ -279,7 +273,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("111"), "GET", "/usuarios", "", 403)
 	tr.expect(prof, "GET", "/usuarios", "", 200)
 
-	// programas
 	tr.expect(aluno("111"), "POST", "/programas", `{"cursoId":"`+eng+`"}`, 403)
 	tr.expect(admin, "POST", "/programas", `{}`, 400)
 	tr.expect(admin, "POST", "/programas", `{"cursoId":"inexistente"}`, 404)
@@ -293,7 +286,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "PUT", "/programas/"+progSI, `{"cursoId":"`+si+`"}`, 200)
 	tr.expect(admin, "DELETE", "/turmas/"+eng, "", 409)
 
-	// projeto do aluno
 	tr.expect(admin, "POST", "/meu-pfc", `{"nome":"X"}`, 403)
 	tr.expect(aluno("666"), "POST", "/meu-pfc", `{"nome":"Sem turma"}`, 403)
 	tr.expect(aluno("888"), "POST", "/meu-pfc", `{"nome":"Sem programa?"}`, 201)
@@ -305,7 +297,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("666"), "GET", "/meu-pfc", "", 200)
 	tr.expect(aluno("111"), "GET", "/meu-pfc", "", 200)
 
-	// projetos pela coordenação
 	tr.expect(aluno("111"), "POST", "/programas/"+prog+"/projetos", `{"nome":"X"}`, 403)
 	tr.expect(admin, "POST", "/programas/inexistente/projetos", `{"nome":"X"}`, 404)
 	tr.expect(admin, "POST", "/programas/"+prog+"/projetos", `{"nome":""}`, 400)
@@ -322,7 +313,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "PUT", "/projetos/inexistente", `{"nome":"Novo"}`, 404)
 	tr.expect(admin, "PUT", "/projetos/"+p2, `{"nome":"Web-Cursos 2","descricao":"nova"}`, 200)
 
-	// orientador
 	tr.expect(aluno("111"), "PUT", "/projetos/"+p1+"/orientador", `{"orientadorId":"`+profSub+`"}`, 403)
 	tr.expect(admin, "PUT", "/projetos/"+p1+"/orientador", `{}`, 400)
 	tr.expect(admin, "PUT", "/projetos/"+p1+"/orientador", `{"orientadorId":"`+fakeSubPrefix+`000000000001"}`, 404)
@@ -336,7 +326,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(prof, "GET", "/projetos/"+p1, "", 200)
 	tr.expect(prof, "GET", "/projetos/"+p2, "", 403)
 
-	// integrantes pela coordenação
 	tr.expect(aluno("111"), "PUT", "/projetos/"+p2+"/integrantes", `{"rgm":"333"}`, 403)
 	tr.expect(admin, "PUT", "/projetos/"+p2+"/integrantes", `{"rgm":" "}`, 400)
 	tr.expect(admin, "PUT", "/projetos/inexistente/integrantes", `{"rgm":"333"}`, 404)
@@ -349,7 +338,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/projetos/inexistente/integrantes", `{"rgm":"333"}`, 404)
 	tr.expect(admin, "DELETE", "/projetos/"+p2+"/integrantes", `{"rgm":"666"}`, 200)
 
-	// convites
 	tr.expect(admin, "GET", "/meus-convites", "", 403)
 	tr.expect(aluno("222"), "GET", "/meus-convites", "", 200)
 	tr.expect(aluno("111"), "GET", "/projetos/"+p1+"/convites", "", 200)
@@ -375,7 +363,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("444"), "GET", "/meus-convites", "", 200)
 	tr.expect(prof, "GET", "/usuarios", "", 200)
 
-	// atividades
 	tr.expect(aluno("111"), "POST", "/atividades", `{"titulo":"Tema","prazo":"2099-11-01T23:59"}`, 403)
 	tr.expect(admin, "POST", "/atividades", `{"titulo":"","prazo":"2099-11-01T23:59"}`, 400)
 	tr.expect(admin, "POST", "/atividades", `{"titulo":"Tema","prazo":"amanhã"}`, 400)
@@ -400,7 +387,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/atividades/"+a1+"/campos/"+extraField, "", 200)
 	tr.expect(admin, "GET", "/atividades", "", 200)
 
-	// entregas
 	tr.expect(aluno("333"), "PUT", "/projetos/"+p1+"/entregas/"+a2, `{"respostas":{}}`, 403)
 	tr.expect(aluno("111"), "PUT", "/projetos/"+p1+"/entregas/"+a2, `{"respostas":{}}`, 400)
 	tr.expect(aluno("111"), "PUT", "/projetos/"+p1+"/entregas/"+a2, `{"respostas":{"`+linkField+`":"não é link"}}`, 400)
@@ -408,7 +394,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("111"), "PUT", "/projetos/inexistente/entregas/"+a2, `{"respostas":{}}`, 404)
 	tr.expect(aluno("222"), "PUT", "/projetos/"+p1+"/entregas/"+a2, `{"respostas":{"`+linkField+`":"https://github.com/x/y","`+summaryField+`":"resumo"}}`, 200)
 
-	// validação da entrega pelo orientador do projeto
 	tr.expect(aluno("111"), "PUT", "/projetos/"+p1+"/entregas/"+a2+"/validacao", `{"status":"VALIDADA"}`, 403)
 	tr.expect(admin, "PUT", "/projetos/"+p1+"/entregas/"+a2+"/validacao", `{"status":"VALIDADA"}`, 403)
 	tr.expect(prof, "PUT", "/projetos/"+p2+"/entregas/"+a2+"/validacao", `{"status":"VALIDADA"}`, 403)
@@ -441,7 +426,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("111"), "GET", "/projetos/"+p1+"/entregas/"+a2+"/arquivos/"+linkField, "", 404)
 	tr.expect(aluno("333"), "GET", "/projetos/"+p1+"/entregas/"+a2+"/arquivos/"+linkField, "", 403)
 
-	// penalidades
 	late1 := id(t, tr.expect(admin, "POST", "/atividades", `{"titulo":"Ficha","prazo":"2020-08-21T23:59"}`, 201))
 	late2 := id(t, tr.expect(admin, "POST", "/atividades", `{"titulo":"Arquitetura","prazo":"2020-08-28T23:59"}`, 201))
 	tr.expect(aluno("111"), "GET", "/projetos/"+p1+"/penalidades", "", 200)
@@ -465,7 +449,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/atividades/"+late1, "", 200)
 	tr.expect(admin, "DELETE", "/atividades/"+late2, "", 200)
 
-	// materiais
 	tr.expect(aluno("111"), "POST", "/materiais", `{"titulo":"X","tipo":"LINK","url":"https://x"}`, 403)
 	tr.expect(admin, "POST", "/materiais", `{"titulo":"","tipo":"LINK","url":"https://x"}`, 400)
 	tr.expect(admin, "POST", "/materiais", `{"titulo":"X","tipo":"LINK"}`, 400)
@@ -484,7 +467,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(prof, "DELETE", "/materiais/"+daEng, "", 200)
 	tr.expect(admin, "DELETE", "/materiais/"+daEng, "", 404)
 
-	// referências
 	tr.expect(aluno("111"), "GET", "/referencias/busca?q=ab", "", 400)
 	tr.expect(aluno("111"), "GET", "/referencias/busca?q=human&pagina=0", "", 400)
 	tr.expect(aluno("111"), "GET", "/referencias/doi?doi=abc", "", 400)
@@ -501,7 +483,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(aluno("111"), "DELETE", "/projetos/"+p1+"/referencias/"+jsonField(t, refBody, "id"), "", 200)
 	tr.expect(aluno("111"), "POST", "/projetos/"+p1+"/referencias", `{"doi":"`+knownDOI+`"}`, 201)
 
-	// exclusões em cascata
 	tr.expect(admin, "DELETE", "/programas/"+prog, "", 409)
 	tr.expect(aluno("111"), "DELETE", "/projetos/"+p1, "", 403)
 	tr.expect(admin, "DELETE", "/projetos/"+p1, "", 200)
@@ -515,7 +496,6 @@ func TestContrato(t *testing.T) {
 	tr.expect(admin, "DELETE", "/atividades/"+a2, "", 404)
 	tr.expect(admin, "DELETE", "/programas/inexistente", "", 404)
 
-	// roteador
 	tr.expect(admin, "GET", "/nao-existe", "", 404)
 	tr.expect(admin, "PATCH", "/turmas", "", 404)
 	tr.expect(pub, "OPTIONS", "/turmas", "", 204)

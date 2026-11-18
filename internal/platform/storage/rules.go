@@ -7,13 +7,10 @@ import (
 	"unicode/utf8"
 )
 
-// MaxBytes is the size limit of any uploaded file.
 const MaxBytes = 50 << 20
 
 const maxNameLen = 120
 
-// fileTypes decides the Content-Type from the extension; the browser's own
-// guess varies between systems.
 var contentTypes = map[string]string{
 	".pdf":  "application/pdf",
 	".doc":  "application/msword",
@@ -32,14 +29,13 @@ var contentTypes = map[string]string{
 	".txt":  "text/plain",
 }
 
+// Mapeamento
 func ContentType(name string) (string, bool) {
 	t, ok := contentTypes[strings.ToLower(path.Ext(name))]
 	return t, ok
 }
 
-// SafeName keeps the name readable in the key and in the download: no path
-// separators or control characters, and a bounded length that preserves the
-// extension.
+// Sanitização
 func SafeName(name string) string {
 	name = strings.Map(func(r rune) rune {
 		if r == '/' || r == '\\' || unicode.IsControl(r) {

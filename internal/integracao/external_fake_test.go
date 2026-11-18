@@ -37,6 +37,7 @@ const openAlexSearch = `{
   }]
 }`
 
+// Atendimento
 func serveExternalAPIs(crossrefURL, openAlexURL string) error {
 	crossref := http.NewServeMux()
 	crossref.HandleFunc("/works/", func(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +57,7 @@ func serveExternalAPIs(crossrefURL, openAlexURL string) error {
 	return listen(openAlexURL, openAlex)
 }
 
+// Escuta
 func listen(endpoint string, h http.Handler) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {

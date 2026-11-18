@@ -13,6 +13,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Simulação
 type fakeStore struct {
 	Store
 	courses  map[string]Course
@@ -24,6 +29,7 @@ type fakeStore struct {
 	deleted  [][]string
 }
 
+// Verificação
 func (f *fakeStore) CohortHasEnrollments(_ context.Context, cohortID string) (bool, error) {
 	for _, c := range f.enrolled {
 		if c == cohortID {
@@ -32,6 +38,8 @@ func (f *fakeStore) CohortHasEnrollments(_ context.Context, cohortID string) (bo
 	}
 	return false, nil
 }
+
+// Verificação
 func (f *fakeStore) EnrolledAmong(_ context.Context, rgms []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	for _, rgm := range rgms {
@@ -41,11 +49,14 @@ func (f *fakeStore) EnrolledAmong(_ context.Context, rgms []string) (map[string]
 	}
 	return out, nil
 }
+
+// Exclusão
 func (f *fakeStore) DeleteEnrollments(_ context.Context, rgms []string) error {
 	f.deleted = append(f.deleted, rgms)
 	return nil
 }
 
+// Busca
 func (f *fakeStore) CourseByName(_ context.Context, name string) (Course, bool, error) {
 	for _, c := range f.courses {
 		if strings.EqualFold(c.Name, name) {
@@ -54,10 +65,14 @@ func (f *fakeStore) CourseByName(_ context.Context, name string) (Course, bool, 
 	}
 	return Course{}, false, nil
 }
+
+// Consulta
 func (f *fakeStore) GetCourse(_ context.Context, id string) (Course, bool, error) {
 	c, ok := f.courses[id]
 	return c, ok, nil
 }
+
+// Listagem
 func (f *fakeStore) ListCourses(context.Context) ([]Course, error) {
 	var out []Course
 	for _, c := range f.courses {
@@ -65,9 +80,17 @@ func (f *fakeStore) ListCourses(context.Context) ([]Course, error) {
 	}
 	return out, nil
 }
-func (f *fakeStore) CreateCourse(context.Context, Course) error         { return f.err }
+
+// Criação
+func (f *fakeStore) CreateCourse(context.Context, Course) error { return f.err }
+
+// Atualização
 func (f *fakeStore) UpdateCourse(context.Context, Course, Course) error { return f.err }
-func (f *fakeStore) DeleteCourse(context.Context, Course) error         { return f.err }
+
+// Exclusão
+func (f *fakeStore) DeleteCourse(context.Context, Course) error { return f.err }
+
+// Listagem
 func (f *fakeStore) ListCohorts(context.Context) ([]Cohort, error) {
 	var out []Cohort
 	for _, c := range f.cohorts {
@@ -76,22 +99,37 @@ func (f *fakeStore) ListCohorts(context.Context) ([]Cohort, error) {
 	return out, nil
 }
 
+// Consulta
 func (f *fakeStore) GetCohort(_ context.Context, id string) (Cohort, bool, error) {
 	c, ok := f.cohorts[id]
 	return c, ok, nil
 }
-func (f *fakeStore) CreateCohort(context.Context, Cohort) error         { return f.err }
+
+// Criação
+func (f *fakeStore) CreateCohort(context.Context, Cohort) error { return f.err }
+
+// Atualização
 func (f *fakeStore) UpdateCohort(context.Context, Cohort, Cohort) error { return f.err }
-func (f *fakeStore) DeleteCohort(context.Context, Cohort) error         { return f.err }
+
+// Exclusão
+func (f *fakeStore) DeleteCohort(context.Context, Cohort) error { return f.err }
+
+// Verificação
 func (f *fakeStore) CohortExists(_ context.Context, id string) (bool, error) {
 	_, ok := f.cohorts[id]
 	return ok, nil
 }
+
+// Consulta
 func (f *fakeStore) GetProgram(_ context.Context, id string) (Program, bool, error) {
 	p, ok := f.programs[id]
 	return p, ok, nil
 }
+
+// Exclusão
 func (f *fakeStore) DeleteProgram(context.Context, Program) error { return f.err }
+
+// Gravação
 func (f *fakeStore) PutEnrollments(_ context.Context, rgms []string, _ string) error {
 	f.written = append(f.written, rgms)
 	if len(f.written) == 2 {
@@ -100,10 +138,17 @@ func (f *fakeStore) PutEnrollments(_ context.Context, rgms []string, _ string) e
 	return nil
 }
 
+// Simulação
 type fakeProjects bool
 
+// Verificação
 func (f fakeProjects) ProgramHasProjects(context.Context, string) (bool, error) { return bool(f), nil }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Construção
 func newTestService(store *fakeStore, hasProjects bool) (*Service, *bytes.Buffer, func()) {
 	var buf bytes.Buffer
 	restore := audit.SetOutput(&buf)
@@ -112,6 +157,7 @@ func newTestService(store *fakeStore, hasProjects bool) (*Service, *bytes.Buffer
 	return svc, &buf, restore
 }
 
+// Verificação
 func wantErr(t *testing.T, err error, kind apperr.Kind, msg string) {
 	t.Helper()
 	e, ok := apperr.As(err)
@@ -125,6 +171,11 @@ var (
 	engCourse = map[string]Course{"k1": {ID: "k1", Name: "Engenharia de Software"}}
 )
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Validação
 func TestCreateCohortValidation(t *testing.T) {
 	svc, _, restore := newTestService(&fakeStore{}, false)
 	defer restore()
@@ -139,10 +190,11 @@ func TestCreateCohortValidation(t *testing.T) {
 	}
 }
 
+// Criação
 func TestCreateCohort(t *testing.T) {
 	svc, buf, restore := newTestService(&fakeStore{courses: engCourse}, false)
 	defer restore()
-	// the cohort takes the registered spelling of the course, whatever was typed
+
 	c, err := svc.CreateCohort(context.Background(), CohortInput{Course: " engenharia de software ", Shift: "NOITE", Term: " 2026.2 "})
 	if err != nil || c != (Cohort{ID: "id-1", CourseID: "k1", Course: "Engenharia de Software", Shift: "NOITE", Term: "2026.2"}) {
 		t.Fatalf("CreateCohort = %+v, %v", c, err)
@@ -152,6 +204,7 @@ func TestCreateCohort(t *testing.T) {
 	}
 }
 
+// Criação
 func TestCreateCohortCourseGone(t *testing.T) {
 	svc, _, restore := newTestService(&fakeStore{courses: engCourse, err: errNoCourse}, false)
 	defer restore()
@@ -159,6 +212,11 @@ func TestCreateCohortCourseGone(t *testing.T) {
 	wantErr(t, err, apperr.KindInvalid, msgInvalidCourse)
 }
 
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
+
+// Validação
 func TestCourseValidation(t *testing.T) {
 	svc, _, restore := newTestService(&fakeStore{}, false)
 	defer restore()
@@ -168,6 +226,7 @@ func TestCourseValidation(t *testing.T) {
 	wantErr(t, err, apperr.KindInvalid, msgCourseNameTooLong)
 }
 
+// Criação
 func TestCreateCourse(t *testing.T) {
 	svc, buf, restore := newTestService(&fakeStore{}, false)
 	defer restore()
@@ -185,6 +244,11 @@ func TestCreateCourse(t *testing.T) {
 	wantErr(t, err, apperr.KindConflict, msgCourseDuplicate)
 }
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Consulta
 func TestListCohortsTakesTheCourseName(t *testing.T) {
 	store := &fakeStore{courses: map[string]Course{"k1": {ID: "k1", Name: "Engenharia de Software e IA"}}, cohorts: map[string]Cohort{
 		"c1": engNight,
@@ -205,6 +269,7 @@ func TestListCohortsTakesTheCourseName(t *testing.T) {
 	}
 }
 
+// Período
 func TestCohortTerm(t *testing.T) {
 	for in, want := range map[string]string{"2026.2": "2026.2", " 2026/2 ": "2026.2", "2026 - 1": "2026.1"} {
 		if got := normalizeTerm(in); got != want {
@@ -219,6 +284,11 @@ func TestCohortTerm(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
+
+// Atualização
 func TestUpdateCourseErrors(t *testing.T) {
 	ctx := context.Background()
 	in := CourseInput{Name: "Novo nome"}
@@ -243,6 +313,7 @@ func TestUpdateCourseErrors(t *testing.T) {
 	wantErr(t, svc.UpdateCourse(ctx, "k1", CourseInput{}), apperr.KindInvalid, msgCourseNameRequired)
 }
 
+// Atualização
 func TestUpdateCourseUnchangedSkipsStore(t *testing.T) {
 	store := &fakeStore{courses: engCourse, err: errors.New("must not be called")}
 	svc, _, restore := newTestService(store, false)
@@ -252,6 +323,7 @@ func TestUpdateCourseUnchangedSkipsStore(t *testing.T) {
 	}
 }
 
+// Exclusão
 func TestDeleteCourse(t *testing.T) {
 	ctx := context.Background()
 
@@ -270,6 +342,7 @@ func TestDeleteCourse(t *testing.T) {
 	restore()
 }
 
+// Ordenação
 func TestListCoursesSorted(t *testing.T) {
 	store := &fakeStore{courses: map[string]Course{
 		"a": {ID: "a", Name: "sistemas de Informação"},
@@ -283,6 +356,11 @@ func TestListCoursesSorted(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Erros
 func TestCohortStoreErrors(t *testing.T) {
 	in := CohortInput{Course: engNight.Course, Shift: "MANHA", Term: engNight.Term}
 	cases := []struct {
@@ -306,6 +384,7 @@ func TestCohortStoreErrors(t *testing.T) {
 	wantErr(t, svc.DeleteCohort(context.Background(), "x"), apperr.KindNotFound, msgCohortNotFound)
 }
 
+// Atualização
 func TestUpdateCohortUnchangedSkipsStore(t *testing.T) {
 	store := &fakeStore{courses: engCourse, cohorts: map[string]Cohort{"c1": engNight}, err: errors.New("must not be called")}
 	svc, _, restore := newTestService(store, false)
@@ -316,6 +395,7 @@ func TestUpdateCohortUnchangedSkipsStore(t *testing.T) {
 	}
 }
 
+// Exclusão
 func TestDeleteCohortWithProgram(t *testing.T) {
 	svc, buf, restore := newTestService(&fakeStore{cohorts: map[string]Cohort{"c1": engNight}, err: errInUse}, false)
 	defer restore()
@@ -325,6 +405,7 @@ func TestDeleteCohortWithProgram(t *testing.T) {
 	}
 }
 
+// Exclusão
 func TestDeleteCohortWithEnrollments(t *testing.T) {
 	store := &fakeStore{cohorts: map[string]Cohort{"c1": engNight}, enrolled: map[string]string{"111": "c1"}, err: errors.New("must not be called")}
 	svc, _, restore := newTestService(store, false)
@@ -332,6 +413,11 @@ func TestDeleteCohortWithEnrollments(t *testing.T) {
 	wantErr(t, svc.DeleteCohort(context.Background(), "c1"), apperr.KindConflict, msgCohortHasEnrollments)
 }
 
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Desmatrícula
 func TestUnenrollReportsUnknownRGMs(t *testing.T) {
 	store := &fakeStore{enrolled: map[string]string{"111": "c1"}}
 	svc, _, restore := newTestService(store, false)
@@ -343,6 +429,11 @@ func TestUnenrollReportsUnknownRGMs(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Programas
+// ---------------------------------------------------------------------------
+
+// Exclusão
 func TestDeleteProgramWithProjects(t *testing.T) {
 	store := &fakeStore{programs: map[string]Program{"p1": {ID: "p1", CohortID: "c1"}}, err: errors.New("must not be called")}
 	svc, _, restore := newTestService(store, true)
@@ -350,6 +441,11 @@ func TestDeleteProgramWithProjects(t *testing.T) {
 	wantErr(t, svc.DeleteProgram(context.Background(), "p1"), apperr.KindConflict, msgProgramHasProjects)
 }
 
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Matrícula
 func TestEnroll(t *testing.T) {
 	store := &fakeStore{cohorts: map[string]Cohort{"c1": engNight}}
 	svc, buf, restore := newTestService(store, false)
@@ -377,6 +473,7 @@ func TestEnroll(t *testing.T) {
 	}
 }
 
+// Validação
 func TestEnrollValidation(t *testing.T) {
 	svc, _, restore := newTestService(&fakeStore{cohorts: map[string]Cohort{"c1": engNight}}, false)
 	defer restore()

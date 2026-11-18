@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+// ---------------------------------------------------------------------------
+// Cliente
+// ---------------------------------------------------------------------------
+
 var (
 	errWorkNotFound = errors.New("work not found")
 	errUnavailable  = errors.New("external service unavailable")
@@ -22,6 +26,7 @@ var (
 
 const maxResponseSize = 2 << 20
 
+// Configuração
 type CatalogConfig struct {
 	CrossrefURL    string
 	OpenAlexURL    string
@@ -29,19 +34,19 @@ type CatalogConfig struct {
 	OpenAlexAPIKey string
 }
 
-// Catalog reads works from Crossref (one work by DOI, with the full
-// metadata ABNT needs) and OpenAlex (search by topic, with citation counts).
+// Cliente
 type Catalog struct {
 	cfg    CatalogConfig
 	client *http.Client
 }
 
+// Construção
 func NewCatalog(cfg CatalogConfig) *Catalog {
-	// The Lambda has 10 s in total; the frontend needs an error before that
-	// when an external API hangs.
+
 	return &Catalog{cfg: cfg, client: &http.Client{Timeout: 5 * time.Second}}
 }
 
+// Requisição
 func (c *Catalog) getJSON(ctx context.Context, endpoint string, dst any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -71,10 +76,16 @@ func (c *Catalog) getJSON(ctx context.Context, endpoint string, dst any) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Crossref
+// ---------------------------------------------------------------------------
+
+// Resposta
 type crossrefResponse struct {
 	Message crossrefWork `json:"message"`
 }
 
+// Resposta
 type crossrefWork struct {
 	DOI               string   `json:"DOI"`
 	Type              string   `json:"type"`
@@ -94,11 +105,11 @@ type crossrefWork struct {
 		Name   string `json:"name"`
 	} `json:"author"`
 	Issued struct {
-		// [[year, month, day]]; Crossref sometimes sends [[null]].
 		DateParts [][]*int `json:"date-parts"`
 	} `json:"issued"`
 }
 
+// Consulta
 func (c *Catalog) WorkByDOI(ctx context.Context, doi string) (Work, error) {
 	parts := strings.Split(doi, "/")
 	for i, p := range parts {
@@ -115,6 +126,7 @@ func (c *Catalog) WorkByDOI(ctx context.Context, doi string) (Work, error) {
 	return resp.Message.work(), nil
 }
 
+// Mapeamento
 func (cw crossrefWork) work() Work {
 	w := Work{
 		DOI:       cw.DOI,
@@ -144,6 +156,7 @@ func (cw crossrefWork) work() Work {
 	return w
 }
 
+// Mapeamento
 func crossrefType(t string) WorkType {
 	switch t {
 	case "journal-article":
@@ -158,9 +171,13 @@ func crossrefType(t string) WorkType {
 	return WorkOther
 }
 
-// Only the fields the screen uses: a full OpenAlex response is large.
+// ---------------------------------------------------------------------------
+// OpenAlex
+// ---------------------------------------------------------------------------
+
 const openAlexFields = "doi,title,publication_year,cited_by_count,authorships,primary_location"
 
+// Resposta
 type openAlexResponse struct {
 	Meta struct {
 		Count int `json:"count"`
@@ -168,6 +185,7 @@ type openAlexResponse struct {
 	Results []openAlexWork `json:"results"`
 }
 
+// Resposta
 type openAlexWork struct {
 	DOI         *string `json:"doi"`
 	Title       *string `json:"title"`
@@ -186,6 +204,7 @@ type openAlexWork struct {
 	} `json:"primary_location"`
 }
 
+// Busca
 func (c *Catalog) Search(ctx context.Context, term string, page int) (int, []Work, error) {
 	params := url.Values{}
 	params.Set("search", term)
@@ -209,10 +228,11 @@ func (c *Catalog) Search(ctx context.Context, term string, page int) (int, []Wor
 	return resp.Meta.Count, works, nil
 }
 
+// Mapeamento
 func (ow openAlexWork) work() Work {
 	w := Work{Type: WorkOther, Citations: ow.CitedBy}
 	if ow.DOI != nil {
-		// OpenAlex returns the DOI as a URL (https://doi.org/10...).
+
 		w.DOI, _ = normalizeDOI(*ow.DOI)
 		w.URL = *ow.DOI
 	}
@@ -238,15 +258,16 @@ func (ow openAlexWork) work() Work {
 	return w
 }
 
-// In Brazilian names these suffixes belong to the ABNT entry surname:
-// "José Santos Filho" → "SANTOS FILHO, José".
+// ---------------------------------------------------------------------------
+// Autores
+// ---------------------------------------------------------------------------
+
 var kinshipSuffixes = map[string]bool{
 	"filho": true, "filha": true, "neto": true, "neta": true,
 	"sobrinho": true, "sobrinha": true, "junior": true, "júnior": true, "jr.": true,
 }
 
-// authorFromFullName splits OpenAlex's "Given Surname": the last word is the
-// surname unless it is a kinship suffix.
+// Mapeamento
 func authorFromFullName(name string) Author {
 	parts := strings.Fields(name)
 	switch len(parts) {
@@ -264,16 +285,20 @@ func authorFromFullName(name string) Author {
 	return Author{Surname: surname, GivenName: strings.Join(parts[:end], " ")}
 }
 
+// ---------------------------------------------------------------------------
+// Texto
+// ---------------------------------------------------------------------------
+
 var htmlTag = regexp.MustCompile(`<[^>]*>`)
 
-// clean strips markup the APIs leave in titles ("<i>Drosophila</i>",
-// "&amp;") and normalizes spaces.
+// Limpeza
 func clean(s string) string {
 	s = htmlTag.ReplaceAllString(s, "")
 	s = html.UnescapeString(s)
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// Seleção
 func first(values []string) string {
 	if len(values) == 0 {
 		return ""

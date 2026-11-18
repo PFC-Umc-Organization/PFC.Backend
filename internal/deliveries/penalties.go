@@ -7,10 +7,9 @@ import (
 	"unicode/utf8"
 )
 
-// MaxPenalties active penalties fail the group: it can no longer submit
-// until the academic team waives one.
 const MaxPenalties = 3
 
+// Enumeração
 type PenaltySource string
 
 const (
@@ -24,14 +23,14 @@ const (
 	maxReasonLen          = 500
 )
 
+// Modelo
 type Waiver struct {
 	Reason string `json:"motivo"`
 	By     string `json:"por"`
 	At     string `json:"em"`
 }
 
-// Penalty is active while Waiver is nil. A deadline penalty is not stored:
-// it exists while the activity is closed without the group's submission.
+// Modelo
 type Penalty struct {
 	ID            string        `json:"id"`
 	Source        PenaltySource `json:"origem"`
@@ -43,6 +42,7 @@ type Penalty struct {
 	Waiver        *Waiver       `json:"perdao"`
 }
 
+// Resposta
 type Penalties struct {
 	ProjectID string    `json:"projetoId"`
 	Active    int       `json:"ativas"`
@@ -51,17 +51,18 @@ type Penalties struct {
 	Items     []Penalty `json:"penalidades"`
 }
 
+// Entrada
 type PenaltyInput struct {
 	Reason     string `json:"motivo"`
 	ActivityID string `json:"atividadeId"`
 }
 
+// Entrada
 type WaiverInput struct {
 	Reason string `json:"motivo"`
 }
 
-// penaltyRecord is what the store keeps: a manual penalty, or the waiver of
-// a deadline penalty (then only ID and Waiver are set).
+// Item
 type penaltyRecord struct {
 	ID         string
 	ActivityID string
@@ -71,6 +72,7 @@ type penaltyRecord struct {
 	Waiver     *Waiver
 }
 
+// Validação
 func validReason(reason string) (string, string) {
 	reason = strings.TrimSpace(reason)
 	switch {
@@ -82,6 +84,7 @@ func validReason(reason string) (string, string) {
 	return reason, ""
 }
 
+// Cálculo
 func penaltiesOf(projectID string, activities []Activity, submissions []Submission, records []penaltyRecord, now time.Time) Penalties {
 	submitted := map[string]bool{}
 	for _, s := range submissions {

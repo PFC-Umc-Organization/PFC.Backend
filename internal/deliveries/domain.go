@@ -1,6 +1,3 @@
-// Package deliveries owns activities, the submission form of each one
-// (fields) and the groups' submissions. Activities are global on purpose:
-// every cohort and shift has the same PFC deliverables.
 package deliveries
 
 import (
@@ -11,6 +8,11 @@ import (
 	"unicode/utf8"
 )
 
+// ---------------------------------------------------------------------------
+// Campos
+// ---------------------------------------------------------------------------
+
+// Enumeração
 type FieldType string
 
 const (
@@ -31,8 +33,7 @@ const (
 	maxCommentLen     = 2000
 )
 
-// A file field's answer is the key of the uploaded file (see files.go), or
-// a bare file name in submissions made before storage existed.
+// Modelo
 type Field struct {
 	ID       string    `json:"id"`
 	Label    string    `json:"rotulo"`
@@ -40,14 +41,18 @@ type Field struct {
 	Required bool      `json:"obrigatorio"`
 }
 
+// Entrada
 type FieldInput struct {
 	Label    string    `json:"rotulo"`
 	Type     FieldType `json:"tipo"`
 	Required bool      `json:"obrigatorio"`
 }
 
-// Deadline comes from <input type="datetime-local">, with no time zone, and
-// is read as Brasília time.
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Activity struct {
 	ID          string  `json:"id"`
 	Title       string  `json:"titulo"`
@@ -55,18 +60,16 @@ type Activity struct {
 	Deadline    string  `json:"prazo"`
 	PublishedAt string  `json:"publicadaEm"`
 	Fields      []Field `json:"campos"`
-	// CohortID is the cohort the activity belongs to. Empty is an activity
-	// from before cohorts had their own, which applies to every cohort.
+
 	CohortID string `json:"turmaId,omitempty"`
 }
 
-// appliesTo tells whether a group of the cohort has to deliver the activity.
+// Verificação
 func (a Activity) appliesTo(cohortID string) bool {
 	return a.CohortID == "" || a.CohortID == cohortID
 }
 
-// ActivityInput.Fields and CohortID are only read on creation; empty Fields
-// means the default file field. The cohort of an activity never changes.
+// Entrada
 type ActivityInput struct {
 	Title       string       `json:"titulo"`
 	Description string       `json:"descricao"`
@@ -75,9 +78,11 @@ type ActivityInput struct {
 	CohortID    string       `json:"turmaId"`
 }
 
-// Answers are keyed by field id. SubmittedAt is the first submission, the
-// one the deadline is checked against; editing sets UpdatedAt and drops the
-// validation, which was about the previous content.
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Submission struct {
 	ActivityID  string            `json:"atividadeId"`
 	ProjectID   string            `json:"projetoId"`
@@ -89,10 +94,16 @@ type Submission struct {
 	Validation  *Validation       `json:"validacao,omitempty"`
 }
 
+// Entrada
 type SubmissionInput struct {
 	Answers map[string]string `json:"respostas"`
 }
 
+// ---------------------------------------------------------------------------
+// Validação
+// ---------------------------------------------------------------------------
+
+// Enumeração
 type ValidationStatus string
 
 const (
@@ -100,8 +111,7 @@ const (
 	NotValidated ValidationStatus = "NAO_VALIDADA"
 )
 
-// Validation is the advisor's verdict on the submission as it is now. By is
-// the advisor's sub; ByName, the name shown to the group.
+// Modelo
 type Validation struct {
 	Status  ValidationStatus `json:"status"`
 	Comment string           `json:"comentario,omitempty"`
@@ -110,11 +120,13 @@ type Validation struct {
 	At      string           `json:"em"`
 }
 
+// Entrada
 type ValidationInput struct {
 	Status  ValidationStatus `json:"status"`
 	Comment string           `json:"comentario"`
 }
 
+// Normalização
 func (in ValidationInput) normalized() (ValidationInput, string) {
 	in.Comment = strings.TrimSpace(in.Comment)
 	switch {
@@ -128,10 +140,15 @@ func (in ValidationInput) normalized() (ValidationInput, string) {
 	return in, ""
 }
 
+// ---------------------------------------------------------------------------
+// Prazos
+// ---------------------------------------------------------------------------
+
 var deadlineLayouts = []string{"2006-01-02T15:04", "2006-01-02T15:04:05", time.RFC3339}
 
 var brasilia = mustLoadLocation("America/Sao_Paulo")
 
+// Carga
 func mustLoadLocation(name string) *time.Location {
 	loc, err := time.LoadLocation(name)
 	if err != nil {
@@ -140,6 +157,7 @@ func mustLoadLocation(name string) *time.Location {
 	return loc
 }
 
+// Conversão
 func deadlineOf(s string) (time.Time, bool) {
 	for _, l := range deadlineLayouts {
 		if t, err := time.ParseInLocation(l, s, brasilia); err == nil {
@@ -149,17 +167,23 @@ func deadlineOf(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// Validação
 func validDeadline(s string) bool {
 	_, ok := deadlineOf(s)
 	return ok
 }
 
-// closed tells whether a group without a submission can no longer submit.
+// Verificação
 func (a Activity) closed(now time.Time) bool {
 	deadline, ok := deadlineOf(a.Deadline)
 	return ok && now.After(deadline)
 }
 
+// ---------------------------------------------------------------------------
+// Normalização
+// ---------------------------------------------------------------------------
+
+// Normalização
 func (in ActivityInput) normalized() ActivityInput {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
@@ -168,6 +192,7 @@ func (in ActivityInput) normalized() ActivityInput {
 	return in
 }
 
+// Validação
 func (in ActivityInput) validate() string {
 	switch {
 	case in.Title == "":
@@ -182,6 +207,7 @@ func (in ActivityInput) validate() string {
 	return ""
 }
 
+// Normalização
 func (in FieldInput) normalized() (FieldInput, string) {
 	in.Label = strings.TrimSpace(in.Label)
 	switch {
@@ -199,6 +225,7 @@ func (in FieldInput) normalized() (FieldInput, string) {
 
 var defaultFields = []FieldInput{{Label: "Arquivo da entrega", Type: FieldFile, Required: true}}
 
+// Normalização
 func normalizedFields(fields []FieldInput) ([]FieldInput, string) {
 	if len(fields) == 0 {
 		return defaultFields, ""
@@ -217,6 +244,7 @@ func normalizedFields(fields []FieldInput) ([]FieldInput, string) {
 	return out, ""
 }
 
+// Validação
 func validAnswers(fields []Field, answers map[string]string) (map[string]string, string) {
 	known := make(map[string]bool, len(fields))
 	for _, f := range fields {
@@ -256,6 +284,10 @@ func validAnswers(fields []Field, answers map[string]string) (map[string]string,
 	return out, ""
 }
 
+// ---------------------------------------------------------------------------
+// Mensagens
+// ---------------------------------------------------------------------------
+
 const (
 	msgStaffOnly          = "Acesso restrito a orientadores e à coordenação."
 	msgMembersAndStaff    = "Acesso restrito aos integrantes, ao orientador do projeto e à coordenação."
@@ -285,6 +317,7 @@ const (
 	msgCommentTooLong      = "O comentário excede o tamanho máximo permitido."
 )
 
+// Mensagem
 func msgBlockedBy(title string) string {
 	return fmt.Sprintf("Esta entrega ainda não está liberada. Antes, envie a atividade %q.", title)
 }

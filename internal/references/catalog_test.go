@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// Simulação
 func fakeCatalog(t *testing.T, crossref, openAlex http.HandlerFunc) *Catalog {
 	t.Helper()
 	cfg := CatalogConfig{}
@@ -25,12 +26,11 @@ func fakeCatalog(t *testing.T, crossref, openAlex http.HandlerFunc) *Catalog {
 	return NewCatalog(cfg)
 }
 
+// Despacho
 func serve(body string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(body)) }
 }
 
-// Excerpt of https://api.crossref.org/works/10.1145/3290605.3300233, plus an
-// organization author and HTML in the title.
 const crossrefCHI = `{
   "status": "ok",
   "message": {
@@ -52,6 +52,7 @@ const crossrefCHI = `{
   }
 }`
 
+// Consulta
 func TestWorkByDOI(t *testing.T) {
 	c := fakeCatalog(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/works/10.1145/3290605.3300233" {
@@ -89,6 +90,7 @@ func TestWorkByDOI(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestWorkByDOINullDate(t *testing.T) {
 	c := fakeCatalog(t, serve(`{"message":{"DOI":"10.1/x","type":"book","title":["Livro"],"issued":{"date-parts":[[null]]}}}`), nil)
 	w, err := c.WorkByDOI(context.Background(), "10.1/x")
@@ -97,6 +99,7 @@ func TestWorkByDOINullDate(t *testing.T) {
 	}
 }
 
+// Erros
 func TestWorkByDOIErrors(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -119,7 +122,6 @@ func TestWorkByDOIErrors(t *testing.T) {
 	}
 }
 
-// Shape of https://api.openalex.org/works?search=...
 const openAlexSearch = `{
   "meta": {"count": 639, "page": 2, "per_page": 10},
   "results": [
@@ -148,6 +150,7 @@ const openAlexSearch = `{
   ]
 }`
 
+// Busca
 func TestSearch(t *testing.T) {
 	c := fakeCatalog(t, nil, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

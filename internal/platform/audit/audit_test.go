@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// Captura
 func capture(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -14,6 +15,7 @@ func capture(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
+// Leitura
 func decode(t *testing.T, buf *bytes.Buffer) map[string]any {
 	t.Helper()
 	var line map[string]any
@@ -28,6 +30,7 @@ var origin = Origin{
 	RequestID: "req-123",
 }
 
+// Origem
 func TestRecordUsesOrigin(t *testing.T) {
 	buf := capture(t)
 	Record(WithOrigin(context.Background(), origin), Event{
@@ -51,6 +54,7 @@ func TestRecordUsesOrigin(t *testing.T) {
 	}
 }
 
+// Registro
 func TestRecordOmitsEmptyFields(t *testing.T) {
 	buf := capture(t)
 	Record(WithOrigin(context.Background(), origin), Event{Action: "programa.criado", Result: Failure, Reason: "acesso restrito a administradores"})
@@ -66,6 +70,7 @@ func TestRecordOmitsEmptyFields(t *testing.T) {
 	}
 }
 
+// Origem
 func TestRecordExplicitActorKeepsOriginIP(t *testing.T) {
 	buf := capture(t)
 	Record(WithOrigin(context.Background(), origin), Event{Action: "auth.login", Result: Success, Actor: &Actor{Email: "a@alunos.umc.br"}})

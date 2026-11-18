@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+// Verificação
 func TestFailedAt(t *testing.T) {
 	err := fmt.Errorf("save: %w", &ConditionError{Failed: []int{0, 2}})
 	for i, want := range []bool{true, false, true, false} {
@@ -21,6 +22,7 @@ func TestFailedAt(t *testing.T) {
 	}
 }
 
+// Reenvio
 func TestRetryUnprocessed(t *testing.T) {
 	calls := 0
 	err := retryUnprocessed(context.Background(), func() (int, error) {
@@ -38,6 +40,7 @@ func TestRetryUnprocessed(t *testing.T) {
 	}
 }
 
+// Texto
 func TestString(t *testing.T) {
 	it := Item{"PK": S("CURSO#1"), "n": N(3)}
 	if String(it, "PK") != "CURSO#1" || String(it, "n") != "" || String(it, "x") != "" {
@@ -45,6 +48,7 @@ func TestString(t *testing.T) {
 	}
 }
 
+// Erro
 func TestConditionError(t *testing.T) {
 	if conditionError(nil) != nil {
 		t.Error("nil must stay nil")

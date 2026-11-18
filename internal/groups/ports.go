@@ -5,6 +5,10 @@ import (
 	"errors"
 )
 
+// ---------------------------------------------------------------------------
+// Erros
+// ---------------------------------------------------------------------------
+
 var (
 	errNotFound    = errors.New("not found")
 	errDuplicate   = errors.New("already exists")
@@ -13,6 +17,11 @@ var (
 	errMemberTaken = errors.New("rgm already belongs to a project")
 )
 
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
+// Repositório
 type Store interface {
 	CreateProject(ctx context.Context, p Project) error
 	GetProject(ctx context.Context, id string) (Project, bool, error)
@@ -33,6 +42,11 @@ type Store interface {
 	DeleteInvitation(ctx context.Context, projectID, rgm string) error
 }
 
+// ---------------------------------------------------------------------------
+// Dependências
+// ---------------------------------------------------------------------------
+
+// Dependência
 type Academic interface {
 	ProgramExists(ctx context.Context, id string) (bool, error)
 	CohortOfProgram(ctx context.Context, programID string) (string, bool, error)
@@ -44,6 +58,7 @@ type Academic interface {
 	ProgramIDs(ctx context.Context) ([]string, error)
 }
 
+// Dependência
 type Accounts interface {
 	StudentExists(ctx context.Context, rgm string) (bool, error)
 	AdvisorExists(ctx context.Context, sub string) (bool, error)

@@ -14,27 +14,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table):
-//
-//	course          PK=COURSE#<id>                          SK=PROFILE      GSI1PK=COURSES     GSI1SK=COURSE#<id>  nome, turmas
-//	course name     PK=CURSO_NOME#<name, lower case>        SK=CURSO_NOME   cursoId, nome
-//	cohort          PK=CURSO#<id>                           SK=PROFILE      GSI1PK=TURMAS      GSI1SK=CURSO#<id>   graduacaoId, turno, periodo
-//	cohort lock     PK=TURMA_UNICA#<course id>#<shift>#<term> SK=TURMA_UNICA  cursoId
-//	cohort program  PK=CURSO#<id>                         SK=PROGRAMA     programaId
-//	program         PK=PROGRAM#<id>                       SK=PROFILE      GSI1PK=PROGRAMAS   GSI1SK=PROGRAM#<id>  cursoId
-//	enrollment      PK=STUDENT#<rgm>                      SK=PROFILE      GSI1PK=MATRICULAS#<turmaId> GSI1SK=STUDENT#<rgm> status, turmaId
-//
-// Despite the prefix, CURSO# is a cohort and COURSE# a course: CURSO# predates
-// courses and its keys cannot change. A cohort points to its course by id
-// (graduacaoId) and the course counts its cohorts (turmas) in the same
-// transactions that create, move and delete cohorts, so a course with cohorts
-// cannot be deleted. Cohorts written before courses existed carry only the
-// course name (nome) and the lock keyed by it; cmd/migrar moves them over.
-//
-// The lock and the cohort-program link exist so that a transaction rejects
-// a second cohort with the same course/shift/term and a second program per
-// cohort. The Pre Sign-up Lambda reads the enrollment item by key, so its
-// PK and SK cannot change.
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
 const (
 	coursePrefix     = "COURSE#"
 	courseNamePrefix = "CURSO_NOME#"
@@ -51,12 +34,19 @@ const (
 	enrollmentStatusActive = "ACTIVE"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// ---------------------------------------------------------------------------
+// Itens e chaves
+// ---------------------------------------------------------------------------
+
+// Item
 type courseItem struct {
 	PK      string `dynamodbav:"PK"`
 	SK      string `dynamodbav:"SK"`
@@ -66,6 +56,7 @@ type courseItem struct {
 	Cohorts int    `dynamodbav:"turmas"`
 }
 
+// Item
 type cohortItem struct {
 	PK       string `dynamodbav:"PK"`
 	SK       string `dynamodbav:"SK"`
@@ -77,10 +68,12 @@ type cohortItem struct {
 	Term     string `dynamodbav:"periodo"`
 }
 
+// Mapeamento
 func (it cohortItem) cohort() Cohort {
 	return Cohort{ID: strings.TrimPrefix(it.PK, cohortPrefix), CourseID: it.CourseID, Course: it.Course, Shift: it.Shift, Term: it.Term}
 }
 
+// Item
 type programItem struct {
 	PK       string `dynamodbav:"PK"`
 	SK       string `dynamodbav:"SK"`
@@ -89,34 +82,43 @@ type programItem struct {
 	CohortID string `dynamodbav:"cursoId"`
 }
 
+// Mapeamento
 func (it programItem) program() Program {
 	return Program{ID: strings.TrimPrefix(it.PK, programPrefix), CohortID: it.CohortID}
 }
 
+// Item
 type enrollmentItem struct {
 	PK       string `dynamodbav:"PK"`
 	Status   string `dynamodbav:"status"`
 	CohortID string `dynamodbav:"turmaId"`
 }
 
-func cohortKey(id string) dynamo.Item      { return dynamo.Key(cohortPrefix+id, profileSK) }
-func programKey(id string) dynamo.Item     { return dynamo.Key(programPrefix+id, profileSK) }
+// Chave
+func cohortKey(id string) dynamo.Item { return dynamo.Key(cohortPrefix+id, profileSK) }
+
+// Chave
+func programKey(id string) dynamo.Item { return dynamo.Key(programPrefix+id, profileSK) }
+
+// Chave
 func enrollmentKey(rgm string) dynamo.Item { return dynamo.Key(enrollmentPrefix+rgm, profileSK) }
+
+// Chave
 func cohortProgramKey(cohortID string) dynamo.Item {
 	return dynamo.Key(cohortPrefix+cohortID, "PROGRAMA")
 }
 
+// Trava
 func cohortLock(c Cohort) dynamo.Item {
 	return dynamo.Key(CohortLockPK(c.CourseID, c.Shift, c.Term), "TURMA_UNICA")
 }
 
-// CohortLockPK is shared with cmd/migrar.
+// Chave
 func CohortLockPK(courseID, shift, term string) string {
 	return fmt.Sprintf("TURMA_UNICA#%s#%s#%s", courseID, shift, term)
 }
 
-// currentLock is the lock a stored cohort holds: keyed by course name when
-// the cohort predates courses.
+// Consulta
 func currentLock(c Cohort) dynamo.Item {
 	if c.CourseID == "" {
 		return dynamo.Key(fmt.Sprintf("TURMA_UNICA#%s#%s#%s", c.Course, c.Shift, c.Term), "TURMA_UNICA")
@@ -124,22 +126,29 @@ func currentLock(c Cohort) dynamo.Item {
 	return cohortLock(c)
 }
 
+// Contagem
 func (s *DynamoStore) countCohort(courseID string, delta int) types.TransactWriteItem {
 	return s.table.Update(courseKey(courseID), "SET turmas = if_not_exists(turmas, :zero) + :delta", present,
 		dynamo.Item{":zero": dynamo.N(0), ":delta": dynamo.N(delta)})
 }
 
+// Verificação
 func ownedLock(c Cohort) dynamo.Item {
 	lock := cohortLock(c)
 	lock["cursoId"] = dynamo.S(c.ID)
 	return lock
 }
 
+// Vínculo
 func cohortProgramLink(cohortID, programID string) dynamo.Item {
 	link := cohortProgramKey(cohortID)
 	link["programaId"] = dynamo.S(programID)
 	return link
 }
+
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
 
 const (
 	absent         = "attribute_not_exists(PK)"
@@ -148,17 +157,20 @@ const (
 	ownedByProgram = "attribute_not_exists(PK) OR programaId = :id"
 )
 
+// Mapeamento
 func (it courseItem) course() Course {
 	return Course{ID: strings.TrimPrefix(it.PK, coursePrefix), Name: it.Name}
 }
 
+// Chave
 func courseKey(id string) dynamo.Item { return dynamo.Key(coursePrefix+id, profileSK) }
 
-// courseNameKey is the uniqueness lock of a course name, ignoring case.
+// Chave
 func courseNameKey(name string) dynamo.Item {
 	return dynamo.Key(courseNamePrefix+strings.ToLower(name), courseNameSK)
 }
 
+// Verificação
 func ownedCourseName(c Course) dynamo.Item {
 	lock := courseNameKey(c.Name)
 	lock["cursoId"] = dynamo.S(c.ID)
@@ -166,6 +178,7 @@ func ownedCourseName(c Course) dynamo.Item {
 	return lock
 }
 
+// Criação
 func (s *DynamoStore) CreateCourse(ctx context.Context, c Course) error {
 	item, err := attributevalue.MarshalMap(courseItem{
 		PK: coursePrefix + c.ID, SK: profileSK, GSI1PK: coursesPartition, GSI1SK: coursePrefix + c.ID, Name: c.Name,
@@ -183,16 +196,19 @@ func (s *DynamoStore) CreateCourse(ctx context.Context, c Course) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) GetCourse(ctx context.Context, id string) (Course, bool, error) {
 	it, found, err := dynamo.Get[courseItem](ctx, s.table, courseKey(id))
 	return it.course(), found, err
 }
 
+// Listagem
 func (s *DynamoStore) ListCourses(ctx context.Context) ([]Course, error) {
 	items, err := dynamo.QueryIndex[courseItem](ctx, s.table, coursesPartition)
 	return mapItems(items, courseItem.course), err
 }
 
+// Busca
 func (s *DynamoStore) CourseByName(ctx context.Context, name string) (Course, bool, error) {
 	lock, found, err := dynamo.Get[struct {
 		ID   string `dynamodbav:"cursoId"`
@@ -201,12 +217,11 @@ func (s *DynamoStore) CourseByName(ctx context.Context, name string) (Course, bo
 	return Course{ID: lock.ID, Name: lock.Name}, found, err
 }
 
-// UpdateCourse renames the course and swaps its name lock.
+// Atualização
 func (s *DynamoStore) UpdateCourse(ctx context.Context, current, next Course) error {
 	rename := s.table.Update(courseKey(current.ID), "SET nome = :n", "nome = :old",
 		dynamo.Item{":n": dynamo.S(next.Name), ":old": dynamo.S(current.Name)})
-	// A case-only change keeps the lock key, and a transaction cannot delete
-	// and put the same item: the lock is updated in place.
+
 	if strings.EqualFold(current.Name, next.Name) {
 		return s.staleOnFailure(s.table.Transact(ctx, rename,
 			s.table.Update(courseNameKey(current.Name), "SET nome = :n", "cursoId = :id",
@@ -222,6 +237,7 @@ func (s *DynamoStore) UpdateCourse(ctx context.Context, current, next Course) er
 	return s.staleOnFailure(err)
 }
 
+// Verificação
 func (s *DynamoStore) staleOnFailure(err error) error {
 	var rejected *dynamo.ConditionError
 	if errors.As(err, &rejected) {
@@ -230,6 +246,7 @@ func (s *DynamoStore) staleOnFailure(err error) error {
 	return err
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteCourse(ctx context.Context, c Course) error {
 	err := s.table.Transact(ctx,
 		s.table.Delete(courseKey(c.ID), "attribute_exists(PK) AND (attribute_not_exists(turmas) OR turmas = :zero)",
@@ -248,6 +265,11 @@ func (s *DynamoStore) DeleteCourse(ctx context.Context, c Course) error {
 	return err
 }
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	item, err := attributevalue.MarshalMap(cohortItem{
 		PK: cohortPrefix + c.ID, SK: profileSK, GSI1PK: cohortsPartition, GSI1SK: cohortPrefix + c.ID,
@@ -270,22 +292,24 @@ func (s *DynamoStore) CreateCohort(ctx context.Context, c Cohort) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) GetCohort(ctx context.Context, id string) (Cohort, bool, error) {
 	it, found, err := dynamo.Get[cohortItem](ctx, s.table, cohortKey(id))
 	return it.cohort(), found, err
 }
 
+// Listagem
 func (s *DynamoStore) ListCohorts(ctx context.Context) ([]Cohort, error) {
 	items, err := dynamo.QueryIndex[cohortItem](ctx, s.table, cohortsPartition)
 	return mapItems(items, cohortItem.cohort), err
 }
 
+// Verificação
 func (s *DynamoStore) CohortExists(ctx context.Context, id string) (bool, error) {
 	return s.table.Exists(ctx, cohortKey(id))
 }
 
-// UpdateCohort swaps the lock and, when the course changes, moves the count
-// to the new course; the condition on the cohort rejects a concurrent edit.
+// Atualização
 func (s *DynamoStore) UpdateCohort(ctx context.Context, current, next Cohort) error {
 	cond := "graduacaoId = :vc AND turno = :vt AND periodo = :vp"
 	values := dynamo.Item{
@@ -319,6 +343,7 @@ func (s *DynamoStore) UpdateCohort(ctx context.Context, current, next Cohort) er
 	return err
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteCohort(ctx context.Context, c Cohort) error {
 	ops := []types.TransactWriteItem{
 		s.table.Delete(cohortKey(c.ID), present, nil),
@@ -340,6 +365,11 @@ func (s *DynamoStore) DeleteCohort(ctx context.Context, c Cohort) error {
 	return err
 }
 
+// ---------------------------------------------------------------------------
+// Programas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) CreateProgram(ctx context.Context, p Program) error {
 	item, err := attributevalue.MarshalMap(programItem{
 		PK: programPrefix + p.ID, SK: profileSK, GSI1PK: programsPartition, GSI1SK: programPrefix + p.ID, CohortID: p.CohortID,
@@ -361,20 +391,24 @@ func (s *DynamoStore) CreateProgram(ctx context.Context, p Program) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) GetProgram(ctx context.Context, id string) (Program, bool, error) {
 	it, found, err := dynamo.Get[programItem](ctx, s.table, programKey(id))
 	return it.program(), found, err
 }
 
+// Listagem
 func (s *DynamoStore) ListPrograms(ctx context.Context) ([]Program, error) {
 	items, err := dynamo.QueryIndex[programItem](ctx, s.table, programsPartition)
 	return mapItems(items, programItem.program), err
 }
 
+// Verificação
 func (s *DynamoStore) ProgramExists(ctx context.Context, id string) (bool, error) {
 	return s.table.Exists(ctx, programKey(id))
 }
 
+// Consulta
 func (s *DynamoStore) ProgramOfCohort(ctx context.Context, cohortID string) (string, bool, error) {
 	link, found, err := dynamo.Get[struct {
 		ProgramID string `dynamodbav:"programaId"`
@@ -382,6 +416,7 @@ func (s *DynamoStore) ProgramOfCohort(ctx context.Context, cohortID string) (str
 	return link.ProgramID, found, err
 }
 
+// Movimentação
 func (s *DynamoStore) MoveProgram(ctx context.Context, current Program, cohortID string) error {
 	err := s.table.Transact(ctx,
 		s.table.Update(programKey(current.ID), "SET cursoId = :new", "cursoId = :old",
@@ -401,6 +436,7 @@ func (s *DynamoStore) MoveProgram(ctx context.Context, current Program, cohortID
 	return err
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteProgram(ctx context.Context, p Program) error {
 	err := s.table.Transact(ctx,
 		s.table.Delete(programKey(p.ID), present, nil),
@@ -415,9 +451,14 @@ func (s *DynamoStore) DeleteProgram(ctx context.Context, p Program) error {
 	return err
 }
 
-// EnrollmentsPartition is the GSI1 partition of a cohort's enrollments.
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Chave
 func EnrollmentsPartition(cohortID string) string { return "MATRICULAS#" + cohortID }
 
+// Listagem
 func (s *DynamoStore) ListEnrollments(ctx context.Context, cohortID string) ([]Enrollment, error) {
 	items, err := dynamo.QueryIndex[enrollmentItem](ctx, s.table, EnrollmentsPartition(cohortID))
 	return mapItems(items, func(it enrollmentItem) Enrollment {
@@ -429,6 +470,7 @@ func (s *DynamoStore) ListEnrollments(ctx context.Context, cohortID string) ([]E
 	}), err
 }
 
+// Gravação
 func (s *DynamoStore) PutEnrollments(ctx context.Context, rgms []string, cohortID string) error {
 	writes := make([]types.WriteRequest, 0, len(rgms))
 	for _, rgm := range rgms {
@@ -444,6 +486,7 @@ func (s *DynamoStore) PutEnrollments(ctx context.Context, rgms []string, cohortI
 	return s.table.BatchWrite(ctx, writes)
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteEnrollments(ctx context.Context, rgms []string) error {
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {
@@ -452,10 +495,12 @@ func (s *DynamoStore) DeleteEnrollments(ctx context.Context, rgms []string) erro
 	return s.table.DeleteKeys(ctx, keys)
 }
 
+// Verificação
 func (s *DynamoStore) EnrollmentExists(ctx context.Context, rgm string) (bool, error) {
 	return s.table.Exists(ctx, enrollmentKey(rgm))
 }
 
+// Verificação
 func (s *DynamoStore) EnrolledAmong(ctx context.Context, rgms []string) (map[string]bool, error) {
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {
@@ -472,6 +517,7 @@ func (s *DynamoStore) EnrolledAmong(ctx context.Context, rgms []string) (map[str
 	return found, nil
 }
 
+// Verificação
 func (s *DynamoStore) CohortHasEnrollments(ctx context.Context, cohortID string) (bool, error) {
 	out, err := s.table.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 aws.String(s.table.Name),
@@ -487,11 +533,13 @@ func (s *DynamoStore) CohortHasEnrollments(ctx context.Context, cohortID string)
 	return len(out.Items) > 0, nil
 }
 
+// Consulta
 func (s *DynamoStore) CohortOfStudent(ctx context.Context, rgm string) (string, error) {
 	it, _, err := dynamo.Get[enrollmentItem](ctx, s.table, enrollmentKey(rgm), "turmaId")
 	return it.CohortID, err
 }
 
+// Consulta
 func (s *DynamoStore) CohortsOfStudents(ctx context.Context, rgms []string) (map[string]string, error) {
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {
@@ -510,6 +558,11 @@ func (s *DynamoStore) CohortsOfStudents(ctx context.Context, rgms []string) (map
 	return cohorts, nil
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliar
+// ---------------------------------------------------------------------------
+
+// Mapeamento
 func mapItems[I, T any](items []I, f func(I) T) []T {
 	out := make([]T, 0, len(items))
 	for _, it := range items {

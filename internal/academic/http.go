@@ -6,8 +6,14 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// ---------------------------------------------------------------------------
+// Rotas
+// ---------------------------------------------------------------------------
+
+// Rotas
 type handlers struct{ svc *Service }
 
+// Rotas
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
@@ -31,6 +37,11 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("DELETE", "/programas/:programaId", httpapi.Admin(msgAdminOnly, h.deleteProgram, httpapi.Audit("programa.removido")))
 }
 
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
+
+// Criação
 func (h handlers) createCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in CourseInput
 	if err := r.Decode(&in); err != nil {
@@ -40,11 +51,13 @@ func (h handlers) createCourse(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Reply(201, c, err)
 }
 
+// Listagem
 func (h handlers) listCourses(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	courses, err := h.svc.ListCourses(ctx)
 	return httpapi.Reply(200, courses, err)
 }
 
+// Atualização
 func (h handlers) updateCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in CourseInput
 	if err := r.Decode(&in); err != nil {
@@ -53,10 +66,16 @@ func (h handlers) updateCourse(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Message("Curso atualizado.", h.svc.UpdateCourse(ctx, r.Param("cursoId"), in))
 }
 
+// Exclusão
 func (h handlers) deleteCourse(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Curso excluído.", h.svc.DeleteCourse(ctx, r.Param("cursoId")))
 }
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (h handlers) createCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in CohortInput
 	if err := r.Decode(&in); err != nil {
@@ -66,11 +85,13 @@ func (h handlers) createCohort(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Reply(201, c, err)
 }
 
+// Listagem
 func (h handlers) listCohorts(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	cohorts, err := h.svc.ListCohorts(ctx)
 	return httpapi.Reply(200, cohorts, err)
 }
 
+// Atualização
 func (h handlers) updateCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in CohortInput
 	if err := r.Decode(&in); err != nil {
@@ -79,15 +100,22 @@ func (h handlers) updateCohort(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Message("Turma atualizada.", h.svc.UpdateCohort(ctx, r.Param("turmaId"), in))
 }
 
+// Exclusão
 func (h handlers) deleteCohort(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Turma excluída.", h.svc.DeleteCohort(ctx, r.Param("turmaId")))
 }
 
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (h handlers) listEnrollments(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	enrollments, err := h.svc.ListEnrollments(ctx, r.Query("turmaId"))
 	return httpapi.Reply(200, enrollments, err)
 }
 
+// Matrícula
 func (h handlers) enroll(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in EnrollmentRequest
 	if err := r.Decode(&in); err != nil {
@@ -97,6 +125,7 @@ func (h handlers) enroll(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 	return httpapi.Reply(200, result, err)
 }
 
+// Desmatrícula
 func (h handlers) unenroll(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in EnrollmentRequest
 	if err := r.Decode(&in); err != nil {
@@ -106,6 +135,11 @@ func (h handlers) unenroll(ctx context.Context, r *httpapi.Request) (httpapi.Res
 	return httpapi.Reply(200, result, err)
 }
 
+// ---------------------------------------------------------------------------
+// Programas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (h handlers) createProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ProgramInput
 	if err := r.Decode(&in); err != nil {
@@ -115,11 +149,13 @@ func (h handlers) createProgram(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Reply(201, p, err)
 }
 
+// Listagem
 func (h handlers) listPrograms(ctx context.Context, _ *httpapi.Request) (httpapi.Response, error) {
 	programs, err := h.svc.ListPrograms(ctx)
 	return httpapi.Reply(200, programs, err)
 }
 
+// Atualização
 func (h handlers) updateProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ProgramInput
 	if err := r.Decode(&in); err != nil {
@@ -128,6 +164,7 @@ func (h handlers) updateProgram(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Message("Programa atualizado.", h.svc.UpdateProgram(ctx, r.Param("programaId"), in))
 }
 
+// Exclusão
 func (h handlers) deleteProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Programa excluído.", h.svc.DeleteProgram(ctx, r.Param("programaId")))
 }

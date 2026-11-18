@@ -22,6 +22,7 @@ const (
 	downloadTTL = 5 * time.Minute
 )
 
+// Serviço
 type Service struct {
 	store    Store
 	academic Academic
@@ -30,13 +31,15 @@ type Service struct {
 	now      func() time.Time
 }
 
+// Construção
 func NewService(store Store, academic Academic, files Files) *Service {
 	return &Service{store: store, academic: academic, files: files, newID: uuid.NewString, now: time.Now}
 }
 
+// Auditoria
 func resource(id string) *audit.Resource { return &audit.Resource{Type: "material", ID: id} }
 
-// cohortOf is the student's cohort; staff need none.
+// Consulta
 func (s *Service) cohortOf(ctx context.Context, viewer actor.Actor) (string, error) {
 	if isStaff(viewer) {
 		return "", nil
@@ -44,7 +47,7 @@ func (s *Service) cohortOf(ctx context.Context, viewer actor.Actor) (string, err
 	return s.academic.CohortOf(ctx, viewer.RGM())
 }
 
-// List puts the newest first.
+// Listagem
 func (s *Service) List(ctx context.Context, viewer actor.Actor) ([]Material, error) {
 	cohort, err := s.cohortOf(ctx, viewer)
 	if err != nil {
@@ -59,6 +62,7 @@ func (s *Service) List(ctx context.Context, viewer actor.Actor) ([]Material, err
 	return visible, nil
 }
 
+// Criação
 func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInput) (Material, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -107,6 +111,7 @@ func (s *Service) Create(ctx context.Context, author actor.Actor, in MaterialInp
 	return m, nil
 }
 
+// Exclusão
 func (s *Service) Delete(ctx context.Context, who actor.Actor, id string) error {
 	m, found, err := s.store.Get(ctx, id)
 	if err != nil {
@@ -126,7 +131,7 @@ func (s *Service) Delete(ctx context.Context, who actor.Actor, id string) error 
 	if err != nil {
 		return apperr.Internal("Não foi possível remover o material. Tente novamente em instantes.", err)
 	}
-	// A file left behind costs little and must not undo the removal.
+
 	if removed.fileKey != "" && s.files != nil {
 		if err := s.files.Delete(ctx, removed.fileKey); err != nil {
 			slog.WarnContext(ctx, "file not deleted", "key", removed.fileKey, "error", err)
@@ -136,6 +141,7 @@ func (s *Service) Delete(ctx context.Context, who actor.Actor, id string) error 
 	return nil
 }
 
+// Solicitação
 func (s *Service) RequestUpload(ctx context.Context, in UploadRequest) (UploadTicket, error) {
 	if s.files == nil {
 		return UploadTicket{}, apperr.Unavailable(msgNoStorage, nil)
@@ -159,6 +165,7 @@ func (s *Service) RequestUpload(ctx context.Context, in UploadRequest) (UploadTi
 	return UploadTicket{URL: up.URL, Fields: up.Fields, Key: key, ExpiresAt: up.ExpiresAt.UTC().Format(time.RFC3339), MaxBytes: storage.MaxBytes}, nil
 }
 
+// Download
 func (s *Service) Download(ctx context.Context, viewer actor.Actor, id string) (Download, error) {
 	if s.files == nil {
 		return Download{}, apperr.Unavailable(msgNoStorage, nil)

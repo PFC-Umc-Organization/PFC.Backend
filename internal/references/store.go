@@ -7,20 +7,20 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table), in the project's partition:
-//
-//	reference  PK=PROJECT#<projectId>  SK=REF#<id derived from the DOI>
 const (
 	projectPrefix   = "PROJECT#"
 	referencePrefix = "REF#"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// Item
 type referenceItem struct {
 	PK        string `dynamodbav:"PK"`
 	SK        string `dynamodbav:"SK"`
@@ -34,6 +34,7 @@ type referenceItem struct {
 	AddedAt   string `dynamodbav:"adicionadaEm"`
 }
 
+// Mapeamento
 func (it referenceItem) reference() Reference {
 	return Reference{
 		ID:        strings.TrimPrefix(it.SK, referencePrefix),
@@ -48,6 +49,7 @@ func (it referenceItem) reference() Reference {
 	}
 }
 
+// Gravação
 func (s *DynamoStore) PutReference(ctx context.Context, r Reference, addedByID string) error {
 	err := dynamo.PutStruct(ctx, s.table, referenceItem{
 		PK: projectPrefix + r.ProjectID, SK: referencePrefix + r.ID,
@@ -60,6 +62,7 @@ func (s *DynamoStore) PutReference(ctx context.Context, r Reference, addedByID s
 	return err
 }
 
+// Listagem
 func (s *DynamoStore) ReferencesOf(ctx context.Context, projectID string) ([]Reference, error) {
 	items, err := dynamo.QueryPartition[referenceItem](ctx, s.table, projectPrefix+projectID, referencePrefix)
 	if err != nil {
@@ -72,6 +75,7 @@ func (s *DynamoStore) ReferencesOf(ctx context.Context, projectID string) ([]Ref
 	return refs, nil
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteReference(ctx context.Context, projectID, id string) error {
 	_, err := s.table.DeleteItem(ctx, dynamo.Key(projectPrefix+projectID, referencePrefix+id), dynamo.Write{Condition: "attribute_exists(SK)"})
 	if dynamo.ConditionFailed(err) {

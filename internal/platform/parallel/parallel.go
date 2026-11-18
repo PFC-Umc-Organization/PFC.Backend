@@ -1,5 +1,3 @@
-// Package parallel runs independent lookups concurrently, so a handler pays
-// one round trip instead of one per item.
 package parallel
 
 import (
@@ -7,13 +5,9 @@ import (
 	"sync"
 )
 
-// Limit caps concurrent calls to stay under the AWS request quotas.
 const Limit = 8
 
-// Map calls f for every item, at most Limit at a time, and returns the
-// results in the items' order. The first error wins: it cancels the context
-// handed to f, and no further item is started. When ctx itself ends first,
-// Map stops launching and returns ctx's error.
+// Paralelismo
 func Map[T, R any](ctx context.Context, items []T, f func(context.Context, T) (R, error)) ([]R, error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

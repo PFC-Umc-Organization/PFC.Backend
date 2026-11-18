@@ -9,8 +9,13 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 )
 
+// ---------------------------------------------------------------------------
+// Requisição
+// ---------------------------------------------------------------------------
+
 const msgInvalidBody = "Não foi possível ler os dados enviados. Atualize a página e tente novamente."
 
+// Requisição
 type Request struct {
 	Method    string
 	Path      string
@@ -23,6 +28,7 @@ type Request struct {
 	query  map[string]string
 }
 
+// Montagem
 func newRequest(ev events.APIGatewayProxyRequest, params map[string]string) *Request {
 	return &Request{
 		Method:    ev.HTTPMethod,
@@ -36,10 +42,13 @@ func newRequest(ev events.APIGatewayProxyRequest, params map[string]string) *Req
 	}
 }
 
+// Consulta
 func (r *Request) Param(name string) string { return r.params[name] }
 
+// Consulta
 func (r *Request) Query(name string) string { return r.query[name] }
 
+// Leitura
 func (r *Request) Decode(v any) error {
 	if err := json.Unmarshal([]byte(r.Body), v); err != nil {
 		return apperr.Invalid(msgInvalidBody)
@@ -47,7 +56,11 @@ func (r *Request) Decode(v any) error {
 	return nil
 }
 
-// actorOf reads the Cognito Authorizer claims, in either payload format.
+// ---------------------------------------------------------------------------
+// Ator
+// ---------------------------------------------------------------------------
+
+// Extração
 func actorOf(ev events.APIGatewayProxyRequest) actor.Actor {
 	claims := claimsOf(ev.RequestContext.Authorizer)
 	str := func(k string) string { s, _ := claims[k].(string); return s }
@@ -59,6 +72,7 @@ func actorOf(ev events.APIGatewayProxyRequest) actor.Actor {
 	}
 }
 
+// Leitura
 func claimsOf(authorizer map[string]any) map[string]any {
 	if jwt, ok := authorizer["jwt"].(map[string]any); ok {
 		if claims, ok := jwt["claims"].(map[string]any); ok {

@@ -11,24 +11,27 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// ConditionError lists the positions of the transaction items whose
-// condition was rejected.
+// Erro
 type ConditionError struct {
 	Failed []int
 	cause  error
 }
 
+// Mensagem
 func (e *ConditionError) Error() string {
 	return fmt.Sprintf("condition rejected for transaction items %v", e.Failed)
 }
 
+// Desembrulho
 func (e *ConditionError) Unwrap() error { return e.cause }
 
+// Verificação
 func FailedAt(err error, i int) bool {
 	var c *ConditionError
 	return errors.As(err, &c) && slices.Contains(c.Failed, i)
 }
 
+// Transação
 func (t *Table) Transact(ctx context.Context, items ...types.TransactWriteItem) error {
 	_, err := t.Client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items})
 	var canceled *types.TransactionCanceledException
@@ -47,6 +50,7 @@ func (t *Table) Transact(ctx context.Context, items ...types.TransactWriteItem) 
 	return &ConditionError{Failed: failed, cause: err}
 }
 
+// Montagem
 func optional(s string) *string {
 	if s == "" {
 		return nil
@@ -54,6 +58,7 @@ func optional(s string) *string {
 	return aws.String(s)
 }
 
+// Montagem
 func optionalValues(v Item) Item {
 	if len(v) == 0 {
 		return nil
@@ -61,6 +66,7 @@ func optionalValues(v Item) Item {
 	return v
 }
 
+// Gravação
 func (t *Table) Put(item Item, condition string, values Item) types.TransactWriteItem {
 	return types.TransactWriteItem{Put: &types.Put{
 		TableName:                 aws.String(t.Name),
@@ -70,6 +76,7 @@ func (t *Table) Put(item Item, condition string, values Item) types.TransactWrit
 	}}
 }
 
+// Exclusão
 func (t *Table) Delete(key Item, condition string, values Item) types.TransactWriteItem {
 	return types.TransactWriteItem{Delete: &types.Delete{
 		TableName:                 aws.String(t.Name),
@@ -79,6 +86,7 @@ func (t *Table) Delete(key Item, condition string, values Item) types.TransactWr
 	}}
 }
 
+// Atualização
 func (t *Table) Update(key Item, expression, condition string, values Item) types.TransactWriteItem {
 	return types.TransactWriteItem{Update: &types.Update{
 		TableName:                 aws.String(t.Name),
@@ -89,6 +97,7 @@ func (t *Table) Update(key Item, expression, condition string, values Item) type
 	}}
 }
 
+// Condição
 func (t *Table) Check(key Item, condition string, values Item) types.TransactWriteItem {
 	return types.TransactWriteItem{ConditionCheck: &types.ConditionCheck{
 		TableName:                 aws.String(t.Name),

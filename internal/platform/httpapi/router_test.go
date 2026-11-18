@@ -15,6 +15,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// Chamada
 func call(t *testing.T, rt *Router, ev events.APIGatewayProxyRequest) (int, string, map[string]string) {
 	t.Helper()
 	resp, err := rt.Lambda(context.Background(), ev)
@@ -26,6 +27,7 @@ func call(t *testing.T, rt *Router, ev events.APIGatewayProxyRequest) (int, stri
 	return resp.StatusCode, body["erro"], resp.Headers
 }
 
+// Roteamento
 func TestRouting(t *testing.T) {
 	rt := NewRouter()
 	var got *Request
@@ -52,7 +54,6 @@ func TestRouting(t *testing.T) {
 		t.Fatalf("headers %v", headers)
 	}
 
-	// Without CORS headers the browser hides the 404 behind a CORS error.
 	status, msg, headers := call(t, rt, events.APIGatewayProxyRequest{HTTPMethod: "GET", Path: "/nao-existe"})
 	if status != 404 || msg != "Endereço não encontrado." || headers["Access-Control-Allow-Origin"] != "*" {
 		t.Fatalf("404: status %d, msg %q, headers %v", status, msg, headers)
@@ -64,12 +65,14 @@ func TestRouting(t *testing.T) {
 	}
 }
 
+// Montagem
 func authed(method, path string) events.APIGatewayProxyRequest {
 	return events.APIGatewayProxyRequest{HTTPMethod: method, Path: path, RequestContext: events.APIGatewayProxyRequestContext{
 		Authorizer: map[string]any{"claims": map[string]any{"sub": "s1", "custom:perfil": "ALUNO"}},
 	}}
 }
 
+// Roteamento
 func TestRoutingEdgeCases(t *testing.T) {
 	rt := NewRouter()
 	rt.Handle("GET", "/projetos/:projetoId/entregas", func(context.Context, *Request) (Response, error) {
@@ -81,7 +84,7 @@ func TestRoutingEdgeCases(t *testing.T) {
 	}{
 		{"/projetos//entregas", 404},
 		{"/Projetos/abc/entregas", 404},
-		// strings.Trim drops edge slashes, so a trailing slash is the same route.
+
 		{"/projetos/abc/entregas/", 200},
 		{"/projetos/abc/entregas", 200},
 	}
@@ -92,6 +95,7 @@ func TestRoutingEdgeCases(t *testing.T) {
 	}
 }
 
+// Rota privada
 func TestAuthenticationByDefault(t *testing.T) {
 	rt := NewRouter()
 	ran := false
@@ -114,6 +118,7 @@ func TestAuthenticationByDefault(t *testing.T) {
 	}
 }
 
+// Parâmetros
 func TestGatewayParametersKept(t *testing.T) {
 	rt := NewRouter()
 	var got *Request
@@ -129,6 +134,7 @@ func TestGatewayParametersKept(t *testing.T) {
 	}
 }
 
+// Desempenho
 func BenchmarkServeLastRoute(b *testing.B) {
 	rt := NewRouter()
 	h := func(context.Context, *Request) (Response, error) { return JSON(200, nil), nil }
@@ -144,6 +150,7 @@ func BenchmarkServeLastRoute(b *testing.B) {
 	}
 }
 
+// CORS
 func TestPreflight(t *testing.T) {
 	resp, _ := NewRouter().Lambda(context.Background(), events.APIGatewayProxyRequest{HTTPMethod: "OPTIONS", Path: "/x"})
 	if resp.StatusCode != 204 || resp.Headers["Access-Control-Allow-Methods"] == "" || resp.Body != "" {
@@ -151,6 +158,7 @@ func TestPreflight(t *testing.T) {
 	}
 }
 
+// Claims
 func TestJWTPayloadClaims(t *testing.T) {
 	a := actorOf(events.APIGatewayProxyRequest{RequestContext: events.APIGatewayProxyRequestContext{
 		Authorizer: map[string]any{"jwt": map[string]any{"claims": map[string]any{"sub": "s2", "custom:perfil": "ADMIN"}}},
@@ -163,6 +171,7 @@ func TestJWTPayloadClaims(t *testing.T) {
 	}
 }
 
+// Erros
 func TestErrors(t *testing.T) {
 	cases := []struct {
 		err    error
@@ -187,6 +196,7 @@ func TestErrors(t *testing.T) {
 	}
 }
 
+// Recuperação
 func TestPanicBecomes500(t *testing.T) {
 	rt := NewRouter()
 	rt.Public("GET", "/x", func(context.Context, *Request) (Response, error) { panic("boom") })
@@ -195,6 +205,7 @@ func TestPanicBecomes500(t *testing.T) {
 	}
 }
 
+// Leitura
 func TestDecode(t *testing.T) {
 	var v struct{ Nome string }
 	r := &Request{Body: `{"nome":"x"}`}
@@ -207,6 +218,7 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// Restrição
 func TestRestrict(t *testing.T) {
 	var buf bytes.Buffer
 	t.Cleanup(audit.SetOutput(&buf))

@@ -13,11 +13,17 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Simulação
 type fakeWorks struct {
 	works map[string]Work
 	down  bool
 }
 
+// Busca
 func (f fakeWorks) Search(context.Context, string, int) (int, []Work, error) {
 	if f.down {
 		return 0, nil, errUnavailable
@@ -25,6 +31,7 @@ func (f fakeWorks) Search(context.Context, string, int) (int, []Work, error) {
 	return 1, []Work{f.works[knownDOI]}, nil
 }
 
+// Consulta
 func (f fakeWorks) WorkByDOI(_ context.Context, doi string) (Work, error) {
 	if f.down {
 		return Work{}, errUnavailable
@@ -36,10 +43,12 @@ func (f fakeWorks) WorkByDOI(_ context.Context, doi string) (Work, error) {
 	return w, nil
 }
 
+// Simulação
 type memoryStore struct {
 	refs map[string]Reference
 }
 
+// Gravação
 func (m *memoryStore) PutReference(_ context.Context, r Reference, _ string) error {
 	if _, ok := m.refs[r.ID]; ok {
 		return errDuplicate
@@ -47,6 +56,8 @@ func (m *memoryStore) PutReference(_ context.Context, r Reference, _ string) err
 	m.refs[r.ID] = r
 	return nil
 }
+
+// Listagem
 func (m *memoryStore) ReferencesOf(context.Context, string) ([]Reference, error) {
 	out := []Reference{}
 	for _, r := range m.refs {
@@ -54,6 +65,8 @@ func (m *memoryStore) ReferencesOf(context.Context, string) ([]Reference, error)
 	}
 	return out, nil
 }
+
+// Exclusão
 func (m *memoryStore) DeleteReference(_ context.Context, _, id string) error {
 	if _, ok := m.refs[id]; !ok {
 		return errNotFound
@@ -62,8 +75,10 @@ func (m *memoryStore) DeleteReference(_ context.Context, _, id string) error {
 	return nil
 }
 
+// Simulação
 type fakeProjects map[string]groups.Project
 
+// Consulta
 func (f fakeProjects) Project(_ context.Context, id string) (groups.Project, bool, error) {
 	p, ok := f[id]
 	return p, ok, nil
@@ -78,6 +93,11 @@ var chi = Work{
 	Authors: []Author{{Surname: "Amershi", GivenName: "Saleema"}, {Surname: "Weld", GivenName: "Dan"}, {Organization: "Microsoft Research"}},
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Construção
 func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
@@ -87,6 +107,7 @@ func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	return svc, store
 }
 
+// Classificação
 func kind(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -94,6 +115,11 @@ func kind(err error) apperr.Kind {
 	return 0
 }
 
+// ---------------------------------------------------------------------------
+// Busca
+// ---------------------------------------------------------------------------
+
+// Validação
 func TestSearchValidation(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{})
 	for name, q := range map[string][2]string{
@@ -111,6 +137,7 @@ func TestSearchValidation(t *testing.T) {
 	}
 }
 
+// Busca
 func TestServiceSearch(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	result, err := svc.Search(context.Background(), " gestão ", "2")
@@ -123,6 +150,7 @@ func TestServiceSearch(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestLookupDOI(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -145,6 +173,11 @@ func TestLookupDOI(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Referências
+// ---------------------------------------------------------------------------
+
+// Inclusão
 func TestAddAndRemove(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -165,6 +198,7 @@ func TestAddAndRemove(t *testing.T) {
 	}
 }
 
+// Permissão
 func TestPermissions(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -192,6 +226,7 @@ func TestPermissions(t *testing.T) {
 	}
 }
 
+// Ordenação
 func TestReferencesSortedAlphabetically(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{})
 	store.refs = map[string]Reference{"b": {ID: "b", ABNT: "souza"}, "a": {ID: "a", ABNT: "ALVES"}, "c": {ID: "c", ABNT: "Lima"}}

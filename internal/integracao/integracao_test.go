@@ -1,5 +1,3 @@
-// Package integracao testa a API de ponta a ponta: DynamoDB Local de verdade,
-// Cognito e APIs externas falsos. Rodar com scripts/test-integration.sh.
 package integracao
 
 import (
@@ -26,15 +24,20 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// ---------------------------------------------------------------------------
+// Ambiente
+// ---------------------------------------------------------------------------
+
 var (
 	r       *httpapi.Router
 	table   *dynamo.Table
 	cognito = newFakeCognito()
 	bucket  = newFakeS3()
-	// directory reads the fake Cognito outside the recorder, for setup.
+
 	directory identity.Directory
 )
 
+// Execução
 func TestMain(m *testing.M) {
 	required := []string{
 		"AWS_ENDPOINT_URL_DYNAMODB", "AWS_ENDPOINT_URL_COGNITO_IDENTITY_PROVIDER",
@@ -91,7 +94,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// resetar deixa tabela e Cognito vazios: cada teste começa do zero.
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Limpeza
 func resetar(t *testing.T) {
 	t.Helper()
 	if err := criarTabela(context.Background()); err != nil {
@@ -100,8 +107,7 @@ func resetar(t *testing.T) {
 	cognito.reset()
 }
 
-// copiarNomes faz o que o cmd/migrar faz em produção: copia para a tabela
-// os nomes das contas criadas direto no Cognito.
+// Cópia
 func copiarNomes(t *testing.T) {
 	t.Helper()
 	if _, _, err := identity.SyncNames(context.Background(), directory, identity.NewDynamoProfiles(table), true); err != nil {
@@ -109,8 +115,7 @@ func copiarNomes(t *testing.T) {
 	}
 }
 
-// criarTabela recria a tabela com o mesmo formato da infra: PK/SK e o GSI1
-// (GSI1PK/GSI1SK) com projeção ALL.
+// Criação
 func criarTabela(ctx context.Context) error {
 	ddb := table.Client
 	_, _ = ddb.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: aws.String(table.Name)})
@@ -137,7 +142,7 @@ func criarTabela(ctx context.Context) error {
 	return err
 }
 
-// criarCursos cadastra os cursos que as turmas do teste usam.
+// Criação
 func criarCursos(t *testing.T, nomes ...string) {
 	t.Helper()
 	for _, n := range nomes {
@@ -145,6 +150,7 @@ func criarCursos(t *testing.T, nomes ...string) {
 	}
 }
 
+// Modelo
 type quem struct{ perfil, email string }
 
 var (
@@ -152,7 +158,7 @@ var (
 	aluno = func(rgm string) quem { return quem{"ALUNO", rgm + "@alunos.umc.br"} }
 )
 
-// chamar despacha a requisição pelo router e devolve status e corpo.
+// Chamada
 func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 	t.Helper()
 	req := events.APIGatewayProxyRequest{HTTPMethod: metodo, Path: caminho, Body: corpo}
@@ -167,7 +173,7 @@ func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 			req.QueryStringParameters[k] = valores.Get(k)
 		}
 	}
-	// Public routes have no authorizer, as in the API Gateway.
+
 	if q.email != "" {
 		req.RequestContext.Authorizer = map[string]interface{}{
 			"claims": map[string]interface{}{"custom:perfil": q.perfil, "email": q.email, "sub": cognito.subOf(q.email), "name": q.email},
@@ -180,6 +186,7 @@ func chamar(t *testing.T, q quem, metodo, caminho, corpo string) (int, string) {
 	return resp.StatusCode, resp.Body
 }
 
+// Espera
 func esperar(t *testing.T, q quem, metodo, caminho, corpo string, status int) string {
 	t.Helper()
 	got, body := chamar(t, q, metodo, caminho, corpo)
@@ -189,6 +196,7 @@ func esperar(t *testing.T, q quem, metodo, caminho, corpo string, status int) st
 	return body
 }
 
+// Identificador
 func id(t *testing.T, body string) string {
 	t.Helper()
 	var v struct {
@@ -200,16 +208,21 @@ func id(t *testing.T, body string) string {
 	return v.ID
 }
 
+// ---------------------------------------------------------------------------
+// Fluxos
+// ---------------------------------------------------------------------------
+
+// Fluxo completo
 func TestFluxoCompleto(t *testing.T) {
 	resetar(t)
 	criarCursos(t, "Engenharia de Software", "Sistemas de Informação")
-	// --- turmas: unicidade por transação ---
+
 	turmaEng := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 201))
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 409)
 	turmaSI := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Sistemas de Informação","turno":"NOITE","periodo":"2026.2"}`, 201))
 	esperar(t, admin, "PUT", "/turmas/"+turmaSI, `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2026.2"}`, 409)
 	esperar(t, admin, "PUT", "/turmas/"+turmaSI, `{"nome":"Sistemas de Informação","turno":"MANHA","periodo":"2026.2"}`, 200)
-	// A combinação antiga ficou livre de novo.
+
 	extra := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Sistemas de Informação","turno":"NOITE","periodo":"2026.2"}`, 201))
 	esperar(t, admin, "DELETE", "/turmas/"+extra, "", 200)
 	esperar(t, admin, "DELETE", "/turmas/inexistente", "", 404)
@@ -217,7 +230,6 @@ func TestFluxoCompleto(t *testing.T) {
 		t.Fatalf("GET /turmas: queria 2 turmas, veio %s", body)
 	}
 
-	// --- programas: um por turma ---
 	esperar(t, admin, "POST", "/programas", `{"cursoId":"inexistente"}`, 404)
 	prog := id(t, esperar(t, admin, "POST", "/programas", `{"cursoId":"`+turmaEng+`"}`, 201))
 	esperar(t, admin, "POST", "/programas", `{"cursoId":"`+turmaEng+`"}`, 409)
@@ -230,13 +242,11 @@ func TestFluxoCompleto(t *testing.T) {
 		t.Fatalf("GET /programas: queria 1 programa, veio %s", body)
 	}
 
-	// --- matrículas ---
 	esperar(t, admin, "POST", "/admin/students", `{"turmaId":"`+turmaEng+`","rgms":["111","222","333","444","abc"]}`, 200)
 	if body := esperar(t, admin, "GET", "/admin/students?turmaId="+turmaEng, "", 200); strings.Count(body, `"rgm"`) != 4 {
 		t.Fatalf("GET /admin/students: queria 4 RGMs, veio %s", body)
 	}
 
-	// --- projeto do aluno, convite e aceite ---
 	p1 := id(t, esperar(t, aluno("111"), "POST", "/meu-pfc", `{"nome":"Athena","integrantes":["222"]}`, 201))
 	esperar(t, aluno("111"), "POST", "/meu-pfc", `{"nome":"Outro"}`, 409)
 	esperar(t, aluno("999"), "POST", "/meu-pfc", `{"nome":"Sem turma"}`, 403)
@@ -245,7 +255,6 @@ func TestFluxoCompleto(t *testing.T) {
 	}
 	esperar(t, aluno("222"), "POST", "/meus-convites/"+p1+"/aceitar", "", 200)
 
-	// --- um projeto por aluno, também pela coordenação ---
 	p2 := id(t, esperar(t, admin, "POST", "/programas/"+prog+"/projetos", `{"nome":"Web-Cursos"}`, 201))
 	esperar(t, admin, "PUT", "/projetos/"+p2+"/integrantes", `{"rgm":"222"}`, 409)
 	esperar(t, admin, "PUT", "/projetos/"+p2+"/integrantes", `{"rgm":"333"}`, 200)
@@ -258,7 +267,6 @@ func TestFluxoCompleto(t *testing.T) {
 		t.Fatalf("integrantes inesperados: %s", body)
 	}
 
-	// --- apagar o projeto libera os alunos ---
 	esperar(t, admin, "DELETE", "/programas/"+prog, "", 409)
 	esperar(t, admin, "DELETE", "/projetos/"+p1, "", 200)
 	esperar(t, admin, "DELETE", "/projetos/"+p1, "", 404)
@@ -268,6 +276,7 @@ func TestFluxoCompleto(t *testing.T) {
 	esperar(t, aluno("111"), "POST", "/meu-pfc", `{"nome":"Athena 2"}`, 201)
 }
 
+// Concorrência
 func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 	resetar(t)
 	criarCursos(t, "Engenharia de Software")
@@ -280,8 +289,6 @@ func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 		projetos = append(projetos, id(t, esperar(t, admin, "POST", "/programas/"+prog+"/projetos", fmt.Sprintf(`{"nome":"G%d"}`, i), 201)))
 	}
 
-	// Cinco coordenadores põem o mesmo aluno em cinco grupos ao mesmo tempo:
-	// só um pode conseguir.
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
@@ -304,14 +311,14 @@ func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 	}
 }
 
+// Fluxo
 func TestCursos(t *testing.T) {
 	resetar(t)
 	eng := id(t, esperar(t, admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201))
 	si := id(t, esperar(t, admin, "POST", "/cursos", `{"nome":"Sistemas de Informação"}`, 201))
-	// nome repetido, inclusive com outra caixa
+
 	esperar(t, admin, "POST", "/cursos", `{"nome":"engenharia de software"}`, 409)
 
-	// a turma só aceita curso cadastrado e grava o nome como ele foi cadastrado
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Medicina","turno":"NOITE","periodo":"2026.2"}`, 400)
 	t1 := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"ENGENHARIA DE SOFTWARE","turno":"NOITE","periodo":"2026.2"}`, 201))
 	t2 := id(t, esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2026.2"}`, 201))
@@ -319,10 +326,8 @@ func TestCursos(t *testing.T) {
 		t.Fatalf("a turma devia guardar o nome do curso cadastrado: %s", body)
 	}
 
-	// curso com turmas não sai
 	esperar(t, admin, "DELETE", "/cursos/"+eng, "", 409)
 
-	// renomear leva as turmas junto, nome e trava
 	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"Sistemas de Informação"}`, 409)
 	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"Engenharia de Computação"}`, 200)
 	body := esperar(t, admin, "GET", "/turmas", "", 200)
@@ -330,19 +335,17 @@ func TestCursos(t *testing.T) {
 		t.Fatalf("as turmas deviam ter o novo nome do curso: %s", body)
 	}
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Software","turno":"NOITE","periodo":"2027.1"}`, 400)
-	// a trava de turma acompanhou o nome: repetir a turma renomeada é conflito
+
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Computação","turno":"NOITE","periodo":"2026.2"}`, 409)
-	// o nome antigo ficou livre para outro curso
+
 	esperar(t, admin, "POST", "/cursos", `{"nome":"Engenharia de Software"}`, 201)
 
-	// só a caixa muda: o nome continua o mesmo para a trava
 	esperar(t, admin, "PUT", "/cursos/"+eng, `{"nome":"engenharia de computação"}`, 200)
 	if body := esperar(t, admin, "GET", "/cursos", "", 200); !strings.Contains(body, `"nome":"engenharia de computação"`) {
 		t.Fatalf("o curso devia ter o novo nome: %s", body)
 	}
 	esperar(t, admin, "POST", "/turmas", `{"nome":"Engenharia de Computação","turno":"NOITE","periodo":"2026.2"}`, 409)
 
-	// sem turmas o curso sai, e o nome volta a ser inválido
 	esperar(t, admin, "DELETE", "/turmas/"+t1, "", 200)
 	esperar(t, admin, "DELETE", "/turmas/"+t2, "", 200)
 	esperar(t, admin, "DELETE", "/cursos/"+eng, "", 200)
@@ -351,6 +354,7 @@ func TestCursos(t *testing.T) {
 	esperar(t, admin, "DELETE", "/cursos/"+si, "", 200)
 }
 
+// Fluxo
 func TestAtividade(t *testing.T) {
 	resetar(t)
 	a := id(t, esperar(t, admin, "POST", "/atividades", `{"titulo":"Tema","prazo":"2099-11-01T23:59"}`, 201))
@@ -360,15 +364,14 @@ func TestAtividade(t *testing.T) {
 	}
 	esperar(t, admin, "PUT", "/atividades/inexistente", `{"titulo":"x","prazo":"2099-11-02T23:59"}`, 404)
 	esperar(t, admin, "POST", "/atividades/inexistente/campos", `{"rotulo":"Link","tipo":"LINK"}`, 404)
-	// Nasce com 1 campo; o limite é 20.
+
 	for i := 1; i < 20; i++ {
 		esperar(t, admin, "POST", "/atividades/"+a+"/campos", fmt.Sprintf(`{"rotulo":"Campo %d","tipo":"TEXTO"}`, i), 201)
 	}
 	esperar(t, admin, "POST", "/atividades/"+a+"/campos", `{"rotulo":"Demais","tipo":"TEXTO"}`, 409)
 }
 
-// TestTurmaAntiga covers a cohort written before courses existed: it carries
-// only the course name and the lock keyed by it, until cmd/migrar runs.
+// Migração
 func TestTurmaAntiga(t *testing.T) {
 	resetar(t)
 	ctx := context.Background()
@@ -386,7 +389,7 @@ func TestTurmaAntiga(t *testing.T) {
 	if body := esperar(t, admin, "GET", "/turmas", "", 200); !strings.Contains(body, `"nome":"Engenharia de Software"`) {
 		t.Fatalf("a turma antiga devia aparecer com o nome gravado: %s", body)
 	}
-	// editar liga a turma ao curso, troca a trava velha pela nova e conta a turma
+
 	esperar(t, admin, "PUT", "/turmas/antiga", `{"nome":"Engenharia de Software","turno":"MANHA","periodo":"2026.2"}`, 200)
 	velha, err := table.Client.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(table.Name),
 		Key: map[string]types.AttributeValue{"PK": s("TURMA_UNICA#Engenharia de Software#NOITE#2026.2"), "SK": s("TURMA_UNICA")}})

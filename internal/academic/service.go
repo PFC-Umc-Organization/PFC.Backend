@@ -13,27 +13,42 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
-// enrollmentBatch matches DynamoDB's BatchWriteItem limit; failures are
-// reported per batch.
+// ---------------------------------------------------------------------------
+// Serviço
+// ---------------------------------------------------------------------------
+
 const enrollmentBatch = 25
 
+// Serviço
 type Service struct {
 	store    Store
 	projects Projects
 	newID    func() string
 }
 
+// Construção
 func NewService(store Store, projects Projects) *Service {
 	return &Service{store: store, projects: projects, newID: uuid.NewString}
 }
 
-func courseResource(id string) *audit.Resource  { return &audit.Resource{Type: "curso", ID: id} }
-func cohortResource(id string) *audit.Resource  { return &audit.Resource{Type: "turma", ID: id} }
+// ---------------------------------------------------------------------------
+// Auditoria
+// ---------------------------------------------------------------------------
+
+// Auditoria
+func courseResource(id string) *audit.Resource { return &audit.Resource{Type: "curso", ID: id} }
+
+// Auditoria
+func cohortResource(id string) *audit.Resource { return &audit.Resource{Type: "turma", ID: id} }
+
+// Auditoria
 func programResource(id string) *audit.Resource { return &audit.Resource{Type: "programa", ID: id} }
 
-// registeredCourse resolves the course a cohort names, ignoring case and
-// repeated spaces; a name that is not a registered course is a validation
-// error.
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
+
+// Consulta
 func (s *Service) registeredCourse(ctx context.Context, name string) (Course, error) {
 	course, found, err := s.store.CourseByName(ctx, name)
 	if err != nil {
@@ -45,6 +60,7 @@ func (s *Service) registeredCourse(ctx context.Context, name string) (Course, er
 	return course, nil
 }
 
+// Criação
 func (s *Service) CreateCourse(ctx context.Context, in CourseInput) (Course, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -63,6 +79,7 @@ func (s *Service) CreateCourse(ctx context.Context, in CourseInput) (Course, err
 	return c, nil
 }
 
+// Listagem
 func (s *Service) ListCourses(ctx context.Context) ([]Course, error) {
 	courses, err := s.store.ListCourses(ctx)
 	if err != nil {
@@ -74,8 +91,7 @@ func (s *Service) ListCourses(ctx context.Context) ([]Course, error) {
 	return courses, nil
 }
 
-// UpdateCourse renames the course; cohorts point to it by id and show the new
-// name on the next listing.
+// Atualização
 func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) error {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -106,6 +122,7 @@ func (s *Service) UpdateCourse(ctx context.Context, id string, in CourseInput) e
 	return nil
 }
 
+// Exclusão
 func (s *Service) DeleteCourse(ctx context.Context, id string) error {
 	c, found, err := s.store.GetCourse(ctx, id)
 	if err != nil {
@@ -129,6 +146,11 @@ func (s *Service) DeleteCourse(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Turmas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *Service) CreateCohort(ctx context.Context, in CohortInput) (Cohort, error) {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -154,8 +176,7 @@ func (s *Service) CreateCohort(ctx context.Context, in CohortInput) (Cohort, err
 	return c, nil
 }
 
-// ListCohorts takes the course name from the course itself. A cohort whose
-// course is gone keeps the name it was stored with.
+// Listagem
 func (s *Service) ListCohorts(ctx context.Context) ([]Cohort, error) {
 	cohorts, err := s.store.ListCohorts(ctx)
 	if err != nil {
@@ -177,6 +198,7 @@ func (s *Service) ListCohorts(ctx context.Context) ([]Cohort, error) {
 	return cohorts, nil
 }
 
+// Atualização
 func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) error {
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
@@ -212,6 +234,7 @@ func (s *Service) UpdateCohort(ctx context.Context, id string, in CohortInput) e
 	return nil
 }
 
+// Exclusão
 func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	c, found, err := s.store.GetCohort(ctx, id)
 	if err != nil {
@@ -220,9 +243,7 @@ func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	if !found {
 		return apperr.NotFound(msgCohortNotFound)
 	}
-	// Checked before the transaction: a cohort holds any number of
-	// enrollments, too many for a condition. An RGM enrolled in between is
-	// left without a cohort, as before this check.
+
 	enrolled, err := s.store.CohortHasEnrollments(ctx, c.ID)
 	if err != nil {
 		return apperr.Internal("Não foi possível excluir a turma. Tente novamente em instantes.", err)
@@ -246,6 +267,11 @@ func (s *Service) DeleteCohort(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Programas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *Service) CreateProgram(ctx context.Context, in ProgramInput) (Program, error) {
 	if in.CohortID == "" {
 		return Program{}, apperr.Invalid(msgCohortIDRequired)
@@ -266,6 +292,7 @@ func (s *Service) CreateProgram(ctx context.Context, in ProgramInput) (Program, 
 	return p, nil
 }
 
+// Listagem
 func (s *Service) ListPrograms(ctx context.Context) ([]Program, error) {
 	programs, err := s.store.ListPrograms(ctx)
 	if err != nil {
@@ -274,6 +301,7 @@ func (s *Service) ListPrograms(ctx context.Context) ([]Program, error) {
 	return programs, nil
 }
 
+// Atualização
 func (s *Service) UpdateProgram(ctx context.Context, id string, in ProgramInput) error {
 	if in.CohortID == "" {
 		return apperr.Invalid(msgCohortIDRequired)
@@ -304,9 +332,7 @@ func (s *Service) UpdateProgram(ctx context.Context, id string, in ProgramInput)
 	return nil
 }
 
-// DeleteProgram checks for projects before the transaction: a GSI cannot be
-// part of a condition, so a project created at the same instant slips
-// through. Accepted: the operation is rare and admin-only.
+// Exclusão
 func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 	p, found, err := s.store.GetProgram(ctx, id)
 	if err != nil {
@@ -335,6 +361,11 @@ func (s *Service) DeleteProgram(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Matrículas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (s *Service) ListEnrollments(ctx context.Context, cohortID string) ([]Enrollment, error) {
 	cohortID = strings.TrimSpace(cohortID)
 	if cohortID == "" {
@@ -347,6 +378,7 @@ func (s *Service) ListEnrollments(ctx context.Context, cohortID string) ([]Enrol
 	return enrollments, nil
 }
 
+// Matrícula
 func (s *Service) Enroll(ctx context.Context, in EnrollmentRequest) (EnrollmentResult, error) {
 	cohortID := strings.TrimSpace(in.CohortID)
 	if cohortID == "" {
@@ -372,13 +404,13 @@ func (s *Service) Enroll(ctx context.Context, in EnrollmentRequest) (EnrollmentR
 	return result, nil
 }
 
+// Desmatrícula
 func (s *Service) Unenroll(ctx context.Context, in EnrollmentRequest) (EnrollmentResult, error) {
 	rgms := distinctRGMs(in.RGMs)
 	if len(rgms) == 0 {
 		return EnrollmentResult{}, apperr.Invalid(msgRGMRequired)
 	}
-	// The delete itself succeeds for an RGM that was never enrolled, so the
-	// count would report it as removed.
+
 	enrolled, err := s.store.EnrolledAmong(ctx, rgms)
 	if err != nil {
 		return EnrollmentResult{}, apperr.Internal("Não foi possível remover as pré-autorizações. Tente novamente em instantes.", err)
@@ -400,6 +432,7 @@ func (s *Service) Unenroll(ctx context.Context, in EnrollmentRequest) (Enrollmen
 	return result, nil
 }
 
+// Registro
 func (s *Service) recordBatch(ctx context.Context, action string, total int, result EnrollmentResult, details map[string]any) {
 	ev := audit.Event{Action: action, Result: audit.Success, Details: details}
 	if len(result.Failures) > 0 {
@@ -409,6 +442,7 @@ func (s *Service) recordBatch(ctx context.Context, action string, total int, res
 	audit.Record(ctx, ev)
 }
 
+// Divisão
 func inBatches(rgms []string, write func([]string) error) []EnrollmentFailure {
 	var failures []EnrollmentFailure
 	for start := 0; start < len(rgms); start += enrollmentBatch {
@@ -422,7 +456,11 @@ func inBatches(rgms []string, write func([]string) error) []EnrollmentFailure {
 	return failures
 }
 
-// Cohort takes the course name from the course, like ListCohorts.
+// ---------------------------------------------------------------------------
+// Consultas
+// ---------------------------------------------------------------------------
+
+// Consulta
 func (s *Service) Cohort(ctx context.Context, id string) (Cohort, bool, error) {
 	if id == "" {
 		return Cohort{}, false, nil
@@ -441,19 +479,23 @@ func (s *Service) Cohort(ctx context.Context, id string) (Cohort, bool, error) {
 	return c, true, nil
 }
 
+// Verificação
 func (s *Service) CohortExists(ctx context.Context, id string) (bool, error) {
 	return s.store.CohortExists(ctx, id)
 }
 
+// Consulta
 func (s *Service) CohortOfProgram(ctx context.Context, programID string) (string, bool, error) {
 	p, found, err := s.store.GetProgram(ctx, programID)
 	return p.CohortID, found, err
 }
 
+// Verificação
 func (s *Service) ProgramExists(ctx context.Context, id string) (bool, error) {
 	return s.store.ProgramExists(ctx, id)
 }
 
+// Consulta
 func (s *Service) ProgramOfCohort(ctx context.Context, cohortID string) (string, bool, error) {
 	if cohortID == "" {
 		return "", false, nil
@@ -461,10 +503,12 @@ func (s *Service) ProgramOfCohort(ctx context.Context, cohortID string) (string,
 	return s.store.ProgramOfCohort(ctx, cohortID)
 }
 
+// Verificação
 func (s *Service) IsEnrolled(ctx context.Context, rgm string) (bool, error) {
 	return s.store.EnrollmentExists(ctx, rgm)
 }
 
+// Consulta
 func (s *Service) CohortOf(ctx context.Context, rgm string) (string, error) {
 	if rgm == "" {
 		return "", nil
@@ -472,6 +516,7 @@ func (s *Service) CohortOf(ctx context.Context, rgm string) (string, error) {
 	return s.store.CohortOfStudent(ctx, rgm)
 }
 
+// Consulta
 func (s *Service) CohortsOf(ctx context.Context, rgms []string) (map[string]string, error) {
 	return s.store.CohortsOfStudents(ctx, rgms)
 }
