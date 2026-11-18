@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -500,6 +501,28 @@ func (s *Service) DisableAccount(ctx context.Context, admin actor.Actor, id stri
 	}
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id)})
 	return nil
+}
+
+// Alternância
+func (s *Service) SetMFA(ctx context.Context, id string, in MFAInput) (bool, error) {
+	const action = "usuario.mfa_alterado"
+	if in.Enabled == nil {
+		return false, apperr.Invalid(msgMFAEnabledRequired)
+	}
+	enabled := *in.Enabled
+	u, err := s.account(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if err := s.directory.SetUserMFA(ctx, u.Username, enabled); err != nil {
+		if enabled && errors.Is(err, errInvalidInput) {
+			return false, refuse(ctx, action, id, apperr.Invalid(msgMFANotLinked))
+		}
+		return false, refuse(ctx, action, id, adminError(fmt.Errorf("set mfa: %w", err)))
+	}
+	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id),
+		Details: map[string]any{"ativo": enabled}})
+	return enabled, nil
 }
 
 // Reativação

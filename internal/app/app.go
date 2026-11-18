@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/academic"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/announcements"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/deliveries"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/identity"
@@ -78,6 +79,7 @@ func New(d Deps) *httpapi.Router {
 	deliveriesSvc := deliveries.NewService(deliveries.NewDynamoStore(d.Table), groupsSvc, deliveryFiles, deliveriesCohorts{academicSvc})
 	groupsSvc.OnProjectDeleted(deliveriesSvc.ProjectDeleted)
 	deliveries.Routes(r, deliveriesSvc)
+	announcements.Routes(r, announcements.NewService(announcements.NewDynamoStore(d.Table), academicSvc, groupsSvc))
 	materials.Routes(r, materials.NewService(materials.NewDynamoStore(d.Table), academicSvc, materialFiles))
 	references.Routes(r, references.NewService(references.NewDynamoStore(d.Table), catalog, groupsSvc))
 	return r
@@ -103,7 +105,7 @@ func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
 // Consulta
 func (a academicForGroups) Cohort(ctx context.Context, id string) (groups.Cohort, bool, error) {
 	c, found, err := a.Service.Cohort(ctx, id)
-	return groups.Cohort{ID: c.ID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
+	return groups.Cohort{ID: c.ID, CourseID: c.CourseID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
 }
 
 // ---------------------------------------------------------------------------

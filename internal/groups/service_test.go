@@ -26,6 +26,7 @@ type world struct {
 	invitations map[string]bool
 	cohorts     map[string]string
 	programs    map[string]string
+	meta        map[string]Cohort
 	full        bool
 	joined      []string
 }
@@ -152,6 +153,9 @@ func (w *world) CohortOfProgram(_ context.Context, program string) (string, bool
 func (w *world) Cohort(_ context.Context, id string) (Cohort, bool, error) {
 	if id == "" {
 		return Cohort{}, false, nil
+	}
+	if c, ok := w.meta[id]; ok {
+		return c, true, nil
 	}
 	return Cohort{ID: id, Course: "Curso " + id, Shift: "NOITE", Term: "2026.2"}, true, nil
 }
@@ -375,6 +379,33 @@ func TestAcceptInvitationRefusals(t *testing.T) {
 		}
 		if len(w.joined) != 0 {
 			t.Errorf("%s: must not join", c.name)
+		}
+	}
+}
+
+// Turno
+func TestAcceptInvitationAcrossShifts(t *testing.T) {
+	meta := map[string]Cohort{
+		"turma-a": {ID: "turma-a", CourseID: "es", Shift: "MANHA", Term: "2026.2"},
+		"turma-n": {ID: "turma-n", CourseID: "es", Shift: "NOITE", Term: "2026.2"},
+		"turma-t": {ID: "turma-t", CourseID: "es", Shift: "NOITE", Term: "2026.1"},
+		"turma-c": {ID: "turma-c", CourseID: "si", Shift: "NOITE", Term: "2026.2"},
+	}
+	for _, c := range []struct {
+		cohort string
+		allow  bool
+	}{{"turma-n", true}, {"turma-t", false}, {"turma-c", false}} {
+		w := newWorld()
+		w.meta = meta
+		w.cohorts["222"] = c.cohort
+		w.programs[c.cohort] = "prog-" + c.cohort
+		svc, _ := w.service(t)
+		_, err := svc.AcceptInvitation(context.Background(), "222", "p1")
+		if c.allow && err != nil {
+			t.Errorf("%s: %v", c.cohort, err)
+		}
+		if !c.allow && (err == nil || len(w.joined) != 0) {
+			t.Errorf("%s: must be refused, err = %v", c.cohort, err)
 		}
 	}
 }

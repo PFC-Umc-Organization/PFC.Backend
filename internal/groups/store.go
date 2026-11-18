@@ -200,6 +200,12 @@ func (s *DynamoStore) ProjectOfMember(ctx context.Context, rgm string) (Project,
 }
 
 // Consulta
+func (s *DynamoStore) ProgramOfMember(ctx context.Context, rgm string) (string, bool, error) {
+	p, found, err := s.ProjectOfMember(ctx, rgm)
+	return p.ProgramID, found, err
+}
+
+// Consulta
 func (s *DynamoStore) ProjectsOfMembers(ctx context.Context, rgms []string) (map[string]string, error) {
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {

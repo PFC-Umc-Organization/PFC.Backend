@@ -8,6 +8,7 @@ uma API Gateway REST API.
 ```
 main.go                    # entrypoint do Lambda: app.Load + app.New
 cmd/migrar/                # migração idempotente da tabela pra modelagem atual
+cmd/seed/                  # massa de teste em volume (cursos, turmas, orientadores, alunos, projetos e entregas)
 internal/
 ├── app/                   # composition root: clientes AWS, config e ligação dos módulos
 ├── platform/              # infraestrutura compartilhada pelos módulos
@@ -23,6 +24,7 @@ internal/
 ├── academic/              # módulo: cursos, turmas, programa da turma e allowlist de RGMs
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
 ├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos (com arquivo)
+├── announcements/         # módulo: avisos da coordenação e dos orientadores, por turma ou gerais
 ├── materials/             # módulo: materiais de apoio (link ou arquivo), por turma ou gerais
 ├── references/            # módulo: referências bibliográficas (OpenAlex, Crossref, ABNT)
 └── integracao/            # testes ponta a ponta contra o DynamoDB Local
@@ -81,6 +83,7 @@ em rota nenhuma.
 | Referência | `PROJECT#<id>` | `REF#<hash do DOI>` | — | — |
 | Atividade | `ACTIVITY#<id>` | `PROFILE` | `ACTIVITIES` | `ACTIVITY#<id>` |
 | Material | `MATERIAL#<id>` | `PROFILE` | `MATERIAIS` | `MATERIAL#<id>` |
+| Aviso | `AVISO#<id>` | `PROFILE` | `AVISOS` | `AVISO#<id>` |
 | Nome do aluno | `ALUNO#<rgm>` | `CONTA` | — | — |
 | Nome da equipe | `EQUIPE#<sub>` | `CONTA` | — | — |
 
@@ -125,7 +128,8 @@ ver [Migração](#migração).
 | POST   | `/auth/esqueci-senha`                    | Manda o código de redefinição (`{ email }`); responde igual exista ou não a conta | pública |
 | POST   | `/auth/redefinir-senha`                  | Define a senha nova com o código (`{ email, codigo, senha }`)       | pública |
 | GET    | `/me`                                    | O usuário logado, com a turma lida agora (o front relê ao abrir)    | qualquer autenticado |
-| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, e-mail, perfil, status, `confirmado`, `rgm` (aluno) e a turma (um `BatchGetItem` para todos) | ADMIN, ORIENTADOR |
+| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, e-mail, perfil, status, `confirmado`, `mfaAtivo` (só aparece quando verdadeiro), `rgm` (aluno) e a turma (um `BatchGetItem` para todos) | ADMIN, ORIENTADOR |
+| PUT    | `/usuarios/:usuarioId/mfa`               | Ativa ou desativa o MFA TOTP da conta (`{ ativo }`, `AdminSetUserMFAPreference`); responde `{ mfaAtivo }`; 400 ao ativar se a pessoa ainda não vinculou um autenticador; auditado como `usuario.mfa_alterado` | ADMIN |
 | GET    | `/cursos`                                | Lista os cursos cadastrados                                         | qualquer autenticado |
 | POST   | `/cursos`                                | Cadastra curso (`{ nome }`); 409 se o nome já existe                | ADMIN |
 | PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas mostram o nome novo                             | ADMIN |
@@ -139,6 +143,7 @@ ver [Migração](#migração).
 | POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa (`{ nome, descricao }`; `integrantes` do corpo é ignorado — entram por `PUT /projetos/:id/integrantes`) | ADMIN |
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa; o orientador recebe só os que orienta   | ADMIN, ORIENTADOR |
 | GET    | `/projetos/:projetoId`                   | Projeto com os nomes: `{ projeto, integrantes: [{ rgm, nome }], orientador: { id, nome }, turma }` (`nome` null = RGM sem conta). Nomes e turma que falharem ficam vazios em vez de derrubar a tela | integrantes, orientador do projeto, ADMIN |
+| PUT    | `/projetos/:projetoId`                   | Edita título e descrição (`{ nome, descricao }`, descrição opcional de até 1000 caracteres); `descricao` volta nas listagens e no detalhe | integrantes do projeto, ADMIN |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | ADMIN |
 | GET    | `/meus-convites`                         | Convites pendentes recebidos pelo aluno logado                      | ALUNO |
 | POST   | `/meus-convites/:projetoId/aceitar`      | Aceita: entra no grupo (revalida turma, se está livre e o limite de 10) e apaga os outros convites dele. 404 sem convite ou grupo apagado, 409 já em projeto/fora da turma/grupo cheio | ALUNO |
@@ -150,7 +155,7 @@ ver [Migração](#migração).
 | POST   | `/atividades`                            | Cria atividade (`{ titulo, descricao, prazo, turmaId, campos? }`); sem `campos` nasce com 1 campo de arquivo obrigatório. `turmaId` é uma turma cadastrada (400 se não existir) e não muda depois; sem ele a atividade vale para todas as turmas (comportamento antigo). "Todas as turmas" na tela é uma chamada por turma | ADMIN |
 | PUT    | `/atividades/:atividadeId`               | Edita título/descrição/prazo                                       | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId`               | Remove a atividade e as entregas dela                               | ADMIN, ORIENTADOR |
-| POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20) | ADMIN, ORIENTADOR |
+| POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio, formato }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20). `formato` opcional (padrão `GERAL`): ARQUIVO aceita GERAL, DOCUMENTO (.pdf .doc .docx .odt), SLIDES (.ppt .pptx .odp .pdf), PLANILHA (.xls .xlsx .ods .csv) e COMPACTADO (.zip .rar .7z .tar.gz); LINK aceita GERAL, REPOSITORIO (github.com, gitlab.com, bitbucket.org com `usuario/repositorio`) e VIDEO (youtube.com, youtu.be, vimeo.com, drive.google.com, loom.com, onedrive.live.com). A extensão é conferida no pedido de upload e na entrega; links precisam de http(s) com domínio público, e encurtadores e domínios adultos são recusados (400) | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId/campos/:campoId` | Remove campo; 409 se for o último                                | ADMIN, ORIENTADOR |
 | GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN |
 | GET    | `/programas/:programaId/entregas`        | Entregas (com respostas) de todos os projetos do programa, numa chamada — a matriz do painel; o orientador recebe só as dos projetos que orienta | ADMIN, ORIENTADOR |
@@ -168,6 +173,9 @@ ver [Migração](#migração).
 | GET    | `/materiais`                             | Materiais, do mais novo ao mais antigo; o aluno recebe os gerais (`cursoId` null) e os da turma em que está pré-autorizado | qualquer autenticado |
 | POST   | `/materiais`                             | Publica (`{ titulo, descricao, tipo, url \| arquivo, cursoId }`); `tipo` DOCUMENTO/MODELO/VIDEO/LINK; um link http(s) **ou** a `chave` de `POST /materiais/arquivos` | ADMIN, ORIENTADOR |
 | DELETE | `/materiais/:materialId`                 | Remove e apaga o arquivo; o orientador só remove os que publicou   | ADMIN, ORIENTADOR (autor) |
+| GET    | `/avisos`                                | Avisos, do mais novo ao mais antigo; `?turmaId=` opcional filtra pela turma. Coordenação vê todos, orientador os gerais e os das turmas em que orienta, aluno os gerais e os da própria turma | qualquer autenticado |
+| POST   | `/avisos`                                | Publica (`{ titulo, conteudo, turmaId }`); `turmaId` vazio = geral, só da coordenação; orientador só para turmas em que tem orientandos. Auditoria `aviso.publicado` | ADMIN, ORIENTADOR |
+| DELETE | `/avisos/:avisoId`                       | Exclui; o orientador só exclui os que publicou. Auditoria `aviso.excluido` | ADMIN, ORIENTADOR (autor) |
 | POST   | `/materiais/arquivos`                    | Pede o envio de um arquivo (`{ nome, tamanho }`), como nas entregas | ADMIN, ORIENTADOR |
 | GET    | `/materiais/:materialId/arquivo`         | `{ url, nome }`: link de download de 5 minutos (404 para material de outra turma) | qualquer autenticado |
 
@@ -284,6 +292,25 @@ O pacote `internal/integracao` usa o DynamoDB Local de verdade e servidores
 falsos para o Cognito (`cognito_fake_test.go`), o S3 (`s3_fake_test.go`) e
 Crossref/OpenAlex. Sem o
 script, ele é pulado.
+
+## Massa de teste
+
+`cmd/seed` popula a tabela com volume para teste de carga e apresentação: 2
+cursos e 6 turmas (manhã/noite) com programa e 6 a 8 atividades por turma, 50
+orientadores, 1.000 alunos matriculados e 500 projetos de 2 integrantes, com
+entregas validadas, em validação, devolvidas, atrasadas, perdoadas e grupos
+reprovados por 3 penalidades. Nada é criado no Cognito: nomes vão para a
+tabela e as contas não existem para login. Os cursos levam o sufixo
+"(massa de teste)" e a rodada se recusa a repetir numa tabela que já a tem.
+Sem `-aplicar`, só mostra o plano:
+
+```bash
+TABLE_NAME=<tabela> go run ./cmd/seed             # mostra o plano
+TABLE_NAME=<tabela> go run ./cmd/seed -aplicar    # grava (-paralelo 8, -projetos 500, -orientadores 50)
+```
+
+Contra o DynamoDB Local, exporte `AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000`
+e credenciais quaisquer. Os arquivos das entregas não são criados no S3.
 
 ## Migração
 

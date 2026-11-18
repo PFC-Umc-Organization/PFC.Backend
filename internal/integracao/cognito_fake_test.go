@@ -31,6 +31,8 @@ type fakeUser struct {
 	confirmed bool
 	enabled   bool
 	forced    bool
+	linked    bool
+	mfa       bool
 }
 
 // Simulação
@@ -135,6 +137,10 @@ func (f *fakeCognito) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.confirmForgotPassword(w, in)
 	case "AdminUpdateUserAttributes":
 		f.adminUpdate(w, in)
+	case "AdminGetUser":
+		f.adminGet(w, in)
+	case "AdminSetUserMFAPreference":
+		f.adminMFA(w, in)
 	case "AdminDisableUser", "AdminEnableUser", "AdminUserGlobalSignOut":
 		f.adminState(w, op, in)
 	default:
@@ -326,6 +332,37 @@ func (f *fakeCognito) adminUpdate(w http.ResponseWriter, in map[string]any) {
 		m, _ := a.(map[string]any)
 		u.attrs[str(m, "Name")] = str(m, "Value")
 	}
+	f.ok(w, map[string]any{})
+}
+
+// Consulta
+func (f *fakeCognito) adminGet(w http.ResponseWriter, in map[string]any) {
+	u := f.byUsername(str(in, "Username"))
+	if u == nil {
+		f.fail(w, "UserNotFoundException", "User does not exist.")
+		return
+	}
+	settings := []string{}
+	if u.mfa {
+		settings = append(settings, "SOFTWARE_TOKEN_MFA")
+	}
+	f.ok(w, map[string]any{"Username": u.sub, "UserMFASettingList": settings})
+}
+
+// Preferência
+func (f *fakeCognito) adminMFA(w http.ResponseWriter, in map[string]any) {
+	u := f.byUsername(str(in, "Username"))
+	if u == nil {
+		f.fail(w, "UserNotFoundException", "User does not exist.")
+		return
+	}
+	settings, _ := in["SoftwareTokenMfaSettings"].(map[string]any)
+	enabled, _ := settings["Enabled"].(bool)
+	if enabled && !u.linked {
+		f.fail(w, "InvalidParameterException", "User has not verified software token mfa")
+		return
+	}
+	u.mfa = enabled
 	f.ok(w, map[string]any{})
 }
 

@@ -28,6 +28,7 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/admin/usuarios", httpapi.Admin(msgAdminOnly, h.createAccount, httpapi.Audit("usuario.criado")))
 	r.Handle("PUT", "/admin/usuarios/:usuarioId/nome", httpapi.Admin(msgAdminOnly, h.renameAccount, httpapi.Audit("usuario.nome_alterado")))
 	r.Handle("PUT", "/admin/usuarios/:usuarioId/perfil", httpapi.Admin(msgAdminOnly, h.changeRole, httpapi.Audit("usuario.perfil_alterado")))
+	r.Handle("PUT", "/usuarios/:usuarioId/mfa", httpapi.Admin(msgAdminOnly, h.setMFA, httpapi.Audit("usuario.mfa_alterado")))
 	r.Handle("POST", "/admin/usuarios/:usuarioId/desativar", httpapi.Admin(msgAdminOnly, h.disableAccount, httpapi.Audit("usuario.desativado")))
 	r.Handle("POST", "/admin/usuarios/:usuarioId/reativar", httpapi.Admin(msgAdminOnly, h.enableAccount, httpapi.Audit("usuario.reativado")))
 	r.Handle("POST", "/admin/usuarios/:usuarioId/convite", httpapi.Admin(msgAdminOnly, h.resendInvitation, httpapi.Audit("usuario.convite_reenviado")))
@@ -149,6 +150,16 @@ func (h handlers) changeRole(ctx context.Context, r *httpapi.Request) (httpapi.R
 	}
 	return httpapi.Message("Perfil alterado. A mudança vale a partir da próxima entrada da pessoa no portal.",
 		h.svc.ChangeRole(ctx, r.Actor, r.Param("usuarioId"), in))
+}
+
+// Alternância
+func (h handlers) setMFA(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	var in MFAInput
+	if err := r.Decode(&in); err != nil {
+		return httpapi.Response{}, err
+	}
+	enabled, err := h.svc.SetMFA(ctx, r.Param("usuarioId"), in)
+	return httpapi.Reply(200, map[string]bool{"mfaAtivo": enabled}, err)
 }
 
 // Desativação

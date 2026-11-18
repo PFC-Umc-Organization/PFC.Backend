@@ -14,7 +14,7 @@ import (
 
 const (
 	maxNameLen        = 150
-	maxDescriptionLen = 2000
+	maxDescriptionLen = 1000
 	MaxMembers        = 10
 )
 
@@ -128,10 +128,11 @@ type Advisor struct {
 
 // Modelo
 type Cohort struct {
-	ID     string `json:"id"`
-	Course string `json:"nome"`
-	Shift  string `json:"turno"`
-	Term   string `json:"periodo"`
+	ID       string `json:"id"`
+	CourseID string `json:"graduacaoId,omitempty"`
+	Course   string `json:"nome"`
+	Shift    string `json:"turno"`
+	Term     string `json:"periodo"`
 }
 
 // Resposta
@@ -169,6 +170,7 @@ func group(creator string, classmates []string) []string {
 // ---------------------------------------------------------------------------
 
 const (
+	msgMembersOnlyUpdate    = "Apenas integrantes do projeto ou a coordenação podem editar o projeto."
 	msgAdminOnly            = "Acesso restrito à coordenação."
 	msgStudentsOnly         = "Esta funcionalidade é exclusiva para alunos."
 	msgStudentsOnlyCreate   = "Esta funcionalidade é exclusiva para alunos. A coordenação cadastra projetos pela Gestão de PFC."

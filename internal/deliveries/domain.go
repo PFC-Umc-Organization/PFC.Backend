@@ -39,6 +39,7 @@ type Field struct {
 	Label    string    `json:"rotulo"`
 	Type     FieldType `json:"tipo"`
 	Required bool      `json:"obrigatorio"`
+	Format   string    `json:"formato,omitempty"`
 }
 
 // Entrada
@@ -46,6 +47,7 @@ type FieldInput struct {
 	Label    string    `json:"rotulo"`
 	Type     FieldType `json:"tipo"`
 	Required bool      `json:"obrigatorio"`
+	Format   string    `json:"formato,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -218,9 +220,12 @@ func (in FieldInput) normalized() (FieldInput, string) {
 	}
 	switch in.Type {
 	case FieldFile, FieldText, FieldLongText, FieldLink:
-		return in, ""
+	default:
+		return in, "Tipo de campo inválido."
 	}
-	return in, "Tipo de campo inválido."
+	var msg string
+	in.Format, msg = normalizedFormat(in.Type, in.Format)
+	return in, msg
 }
 
 var defaultFields = []FieldInput{{Label: "Arquivo da entrega", Type: FieldFile, Required: true}}

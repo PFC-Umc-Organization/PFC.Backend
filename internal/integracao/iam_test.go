@@ -18,6 +18,7 @@ var lambdaPolicy = map[string]bool{
 	"cognito-idp:ListUsers": true, "cognito-idp:AdminCreateUser": true,
 	"cognito-idp:AdminUpdateUserAttributes": true, "cognito-idp:AdminDisableUser": true,
 	"cognito-idp:AdminEnableUser": true, "cognito-idp:AdminUserGlobalSignOut": true,
+	"cognito-idp:AdminGetUser": true, "cognito-idp:AdminSetUserMFAPreference": true,
 	"s3:PutObject": true, "s3:GetObject": true, "s3:DeleteObject": true, "s3:ListBucket": true,
 }
 

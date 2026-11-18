@@ -46,6 +46,7 @@ type fieldItem struct {
 	Label    string    `dynamodbav:"rotulo"`
 	Type     FieldType `dynamodbav:"tipo"`
 	Required bool      `dynamodbav:"obrigatorio"`
+	Format   string    `dynamodbav:"formato,omitempty"`
 }
 
 // Item
