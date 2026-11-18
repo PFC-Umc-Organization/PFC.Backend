@@ -516,6 +516,24 @@ func TestContrato(t *testing.T) {
 	}
 	if !bytes.Equal(got, want) {
 		os.WriteFile(goldenPath+".got", got, 0o644)
-		t.Fatalf("a API mudou: compare %s com %s.got", goldenPath, goldenPath)
+		t.Fatalf("a API mudou: compare %s com %s.got\n%s", goldenPath, goldenPath, firstDiff(want, got))
 	}
+}
+
+// Diferença
+func firstDiff(want, got []byte) string {
+	w, g := strings.Split(string(want), "\n"), strings.Split(string(got), "\n")
+	for i := 0; i < len(w) || i < len(g); i++ {
+		var a, b string
+		if i < len(w) {
+			a = w[i]
+		}
+		if i < len(g) {
+			b = g[i]
+		}
+		if a != b {
+			return fmt.Sprintf("linha %d\n- %s\n+ %s", i+1, a, b)
+		}
+	}
+	return ""
 }

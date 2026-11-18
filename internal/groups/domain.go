@@ -129,7 +129,7 @@ type Advisor struct {
 // Modelo
 type Cohort struct {
 	ID       string `json:"id"`
-	CourseID string `json:"graduacaoId,omitempty"`
+	CourseID string `json:"-"`
 	Course   string `json:"nome"`
 	Shift    string `json:"turno"`
 	Term     string `json:"periodo"`
