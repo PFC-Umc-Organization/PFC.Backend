@@ -14,7 +14,7 @@ import (
 
 const (
 	maxNameLen        = 150
-	maxDescriptionLen = 2000
+	maxDescriptionLen = 1000
 	MaxMembers        = 10
 )
 
@@ -170,6 +170,7 @@ func group(creator string, classmates []string) []string {
 // ---------------------------------------------------------------------------
 
 const (
+	msgMembersOnlyUpdate    = "Apenas integrantes do projeto ou a coordenação podem editar o projeto."
 	msgAdminOnly            = "Acesso restrito à coordenação."
 	msgStudentsOnly         = "Esta funcionalidade é exclusiva para alunos."
 	msgStudentsOnlyCreate   = "Esta funcionalidade é exclusiva para alunos. A coordenação cadastra projetos pela Gestão de PFC."

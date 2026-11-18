@@ -23,6 +23,7 @@ internal/
 ├── academic/              # módulo: cursos, turmas, programa da turma e allowlist de RGMs
 ├── groups/                # módulo: projetos, integrantes, orientador e convites
 ├── deliveries/            # módulo: atividades, campos de entrega e entregas dos grupos (com arquivo)
+├── announcements/         # módulo: avisos da coordenação e dos orientadores, por turma ou gerais
 ├── materials/             # módulo: materiais de apoio (link ou arquivo), por turma ou gerais
 ├── references/            # módulo: referências bibliográficas (OpenAlex, Crossref, ABNT)
 └── integracao/            # testes ponta a ponta contra o DynamoDB Local
@@ -81,6 +82,7 @@ em rota nenhuma.
 | Referência | `PROJECT#<id>` | `REF#<hash do DOI>` | — | — |
 | Atividade | `ACTIVITY#<id>` | `PROFILE` | `ACTIVITIES` | `ACTIVITY#<id>` |
 | Material | `MATERIAL#<id>` | `PROFILE` | `MATERIAIS` | `MATERIAL#<id>` |
+| Aviso | `AVISO#<id>` | `PROFILE` | `AVISOS` | `AVISO#<id>` |
 | Nome do aluno | `ALUNO#<rgm>` | `CONTA` | — | — |
 | Nome da equipe | `EQUIPE#<sub>` | `CONTA` | — | — |
 
@@ -140,6 +142,7 @@ ver [Migração](#migração).
 | POST   | `/programas/:programaId/projetos`        | Cria projeto vinculado ao programa (`{ nome, descricao }`; `integrantes` do corpo é ignorado — entram por `PUT /projetos/:id/integrantes`) | ADMIN |
 | GET    | `/programas/:programaId/projetos`        | Lista projetos do programa; o orientador recebe só os que orienta   | ADMIN, ORIENTADOR |
 | GET    | `/projetos/:projetoId`                   | Projeto com os nomes: `{ projeto, integrantes: [{ rgm, nome }], orientador: { id, nome }, turma }` (`nome` null = RGM sem conta). Nomes e turma que falharem ficam vazios em vez de derrubar a tela | integrantes, orientador do projeto, ADMIN |
+| PUT    | `/projetos/:projetoId`                   | Edita título e descrição (`{ nome, descricao }`, descrição opcional de até 1000 caracteres); `descricao` volta nas listagens e no detalhe | integrantes do projeto, ADMIN |
 | PUT    | `/projetos/:projetoId/orientador`        | Associa orientador (`{ orientadorId }`) ao projeto                  | ADMIN |
 | GET    | `/meus-convites`                         | Convites pendentes recebidos pelo aluno logado                      | ALUNO |
 | POST   | `/meus-convites/:projetoId/aceitar`      | Aceita: entra no grupo (revalida turma, se está livre e o limite de 10) e apaga os outros convites dele. 404 sem convite ou grupo apagado, 409 já em projeto/fora da turma/grupo cheio | ALUNO |
@@ -169,6 +172,9 @@ ver [Migração](#migração).
 | GET    | `/materiais`                             | Materiais, do mais novo ao mais antigo; o aluno recebe os gerais (`cursoId` null) e os da turma em que está pré-autorizado | qualquer autenticado |
 | POST   | `/materiais`                             | Publica (`{ titulo, descricao, tipo, url \| arquivo, cursoId }`); `tipo` DOCUMENTO/MODELO/VIDEO/LINK; um link http(s) **ou** a `chave` de `POST /materiais/arquivos` | ADMIN, ORIENTADOR |
 | DELETE | `/materiais/:materialId`                 | Remove e apaga o arquivo; o orientador só remove os que publicou   | ADMIN, ORIENTADOR (autor) |
+| GET    | `/avisos`                                | Avisos, do mais novo ao mais antigo; `?turmaId=` opcional filtra pela turma. Coordenação vê todos, orientador os gerais e os das turmas em que orienta, aluno os gerais e os da própria turma | qualquer autenticado |
+| POST   | `/avisos`                                | Publica (`{ titulo, conteudo, turmaId }`); `turmaId` vazio = geral, só da coordenação; orientador só para turmas em que tem orientandos. Auditoria `aviso.publicado` | ADMIN, ORIENTADOR |
+| DELETE | `/avisos/:avisoId`                       | Exclui; o orientador só exclui os que publicou. Auditoria `aviso.excluido` | ADMIN, ORIENTADOR (autor) |
 | POST   | `/materiais/arquivos`                    | Pede o envio de um arquivo (`{ nome, tamanho }`), como nas entregas | ADMIN, ORIENTADOR |
 | GET    | `/materiais/:materialId/arquivo`         | `{ url, nome }`: link de download de 5 minutos (404 para material de outra turma) | qualquer autenticado |
 

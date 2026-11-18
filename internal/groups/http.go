@@ -22,7 +22,7 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/programas/:programaId/projetos", httpapi.Admin(msgAdminOnly, h.createProject, httpapi.Audit("projeto.criado")))
 	r.Handle("GET", "/programas/:programaId/projetos", httpapi.Staff(msgStaffOnly, h.projectsOfProgram))
 	r.Handle("GET", "/projetos/:projetoId", h.projectDetail)
-	r.Handle("PUT", "/projetos/:projetoId", httpapi.Admin(msgAdminOnly, h.updateProject, httpapi.Audit("projeto.atualizado")))
+	r.Handle("PUT", "/projetos/:projetoId", h.updateProject)
 	r.Handle("DELETE", "/projetos/:projetoId", httpapi.Admin(msgAdminOnly, h.deleteProject, httpapi.Audit("projeto.removido")))
 	r.Handle("PUT", "/projetos/:projetoId/orientador", httpapi.Admin(msgAdminOnly, h.assignAdvisor, httpapi.Audit("projeto.orientador_associado")))
 	r.Handle("DELETE", "/projetos/:projetoId/orientador", httpapi.Admin(msgAdminOnly, h.removeAdvisor, httpapi.Audit("projeto.orientador_removido")))
@@ -85,7 +85,7 @@ func (h handlers) updateProject(ctx context.Context, r *httpapi.Request) (httpap
 	if err := r.Decode(&in); err != nil {
 		return httpapi.Response{}, err
 	}
-	return httpapi.Message("Projeto atualizado.", h.svc.UpdateProject(ctx, r.Param("projetoId"), in))
+	return httpapi.Message("Projeto atualizado.", h.svc.UpdateProject(ctx, r.Actor, r.Param("projetoId"), in))
 }
 
 // Exclusão

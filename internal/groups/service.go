@@ -286,7 +286,15 @@ func (s *Service) MyPFC(ctx context.Context, student actor.Actor) (MyPFC, error)
 }
 
 // Atualização
-func (s *Service) UpdateProject(ctx context.Context, id string, in ProjectInput) error {
+func (s *Service) UpdateProject(ctx context.Context, who actor.Actor, id string, in ProjectInput) error {
+	p, err := s.load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !who.HasRole(actor.RoleAdmin) && !IsMember(who, p) {
+		failure(ctx, "projeto.atualizado", msgMembersOnlyUpdate, projectResource(id), nil)
+		return apperr.Forbidden(msgMembersOnlyUpdate)
+	}
 	in = in.normalized()
 	if msg := in.validate(); msg != "" {
 		return apperr.Invalid(msg)
