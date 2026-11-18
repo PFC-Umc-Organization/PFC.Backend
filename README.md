@@ -163,6 +163,7 @@ ver [Migração](#migração).
 | GET    | `/referencias/doi?doi=`                  | Consulta o DOI no **Crossref** e devolve a referência em ABNT (`abnt`, `abntHtml`) | qualquer autenticado |
 | GET    | `/projetos/:projetoId/referencias`       | Lista de referências do projeto, em ordem alfabética                | integrantes, orientador do projeto, ADMIN |
 | POST   | `/projetos/:projetoId/referencias`       | Adiciona pelo DOI (`{ doi }`); 409 se já estiver na lista           | integrantes do projeto |
+| PUT    | `/projetos/:projetoId/referencias/:referenciaId` | Corrige a referência pelo DOI (`{ doi }`): busca de novo no Crossref e refaz a ABNT, trocando a antiga numa transação; 404 se a referência não existir, 409 se o DOI novo já estiver na lista | integrantes do projeto |
 | DELETE | `/projetos/:projetoId/referencias/:referenciaId` | Remove da lista                                             | integrantes do projeto |
 | GET    | `/materiais`                             | Materiais, do mais novo ao mais antigo; o aluno recebe os gerais (`cursoId` null) e os da turma em que está pré-autorizado | qualquer autenticado |
 | POST   | `/materiais`                             | Publica (`{ titulo, descricao, tipo, url \| arquivo, cursoId }`); `tipo` DOCUMENTO/MODELO/VIDEO/LINK; um link http(s) **ou** a `chave` de `POST /materiais/arquivos` | ADMIN, ORIENTADOR |

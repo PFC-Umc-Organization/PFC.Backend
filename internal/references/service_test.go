@@ -13,17 +13,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
-// ---------------------------------------------------------------------------
-// Dublês
-// ---------------------------------------------------------------------------
-
-// Simulação
 type fakeWorks struct {
 	works map[string]Work
 	down  bool
 }
 
-// Busca
 func (f fakeWorks) Search(context.Context, string, int) (int, []Work, error) {
 	if f.down {
 		return 0, nil, errUnavailable
@@ -31,7 +25,6 @@ func (f fakeWorks) Search(context.Context, string, int) (int, []Work, error) {
 	return 1, []Work{f.works[knownDOI]}, nil
 }
 
-// Consulta
 func (f fakeWorks) WorkByDOI(_ context.Context, doi string) (Work, error) {
 	if f.down {
 		return Work{}, errUnavailable
@@ -43,12 +36,10 @@ func (f fakeWorks) WorkByDOI(_ context.Context, doi string) (Work, error) {
 	return w, nil
 }
 
-// Simulação
 type memoryStore struct {
 	refs map[string]Reference
 }
 
-// Gravação
 func (m *memoryStore) PutReference(_ context.Context, r Reference, _ string) error {
 	if _, ok := m.refs[r.ID]; ok {
 		return errDuplicate
@@ -56,8 +47,6 @@ func (m *memoryStore) PutReference(_ context.Context, r Reference, _ string) err
 	m.refs[r.ID] = r
 	return nil
 }
-
-// Listagem
 func (m *memoryStore) ReferencesOf(context.Context, string) ([]Reference, error) {
 	out := []Reference{}
 	for _, r := range m.refs {
@@ -65,8 +54,6 @@ func (m *memoryStore) ReferencesOf(context.Context, string) ([]Reference, error)
 	}
 	return out, nil
 }
-
-// Exclusão
 func (m *memoryStore) DeleteReference(_ context.Context, _, id string) error {
 	if _, ok := m.refs[id]; !ok {
 		return errNotFound
@@ -75,10 +62,20 @@ func (m *memoryStore) DeleteReference(_ context.Context, _, id string) error {
 	return nil
 }
 
-// Simulação
+func (m *memoryStore) ReplaceReference(_ context.Context, oldID string, r Reference, _ string) error {
+	if _, ok := m.refs[oldID]; !ok {
+		return errNotFound
+	}
+	if _, ok := m.refs[r.ID]; ok && r.ID != oldID {
+		return errDuplicate
+	}
+	delete(m.refs, oldID)
+	m.refs[r.ID] = r
+	return nil
+}
+
 type fakeProjects map[string]groups.Project
 
-// Consulta
 func (f fakeProjects) Project(_ context.Context, id string) (groups.Project, bool, error) {
 	p, ok := f[id]
 	return p, ok, nil
@@ -93,11 +90,6 @@ var chi = Work{
 	Authors: []Author{{Surname: "Amershi", GivenName: "Saleema"}, {Surname: "Weld", GivenName: "Dan"}, {Organization: "Microsoft Research"}},
 }
 
-// ---------------------------------------------------------------------------
-// Auxiliares
-// ---------------------------------------------------------------------------
-
-// Construção
 func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
@@ -107,7 +99,6 @@ func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	return svc, store
 }
 
-// Classificação
 func kind(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -115,11 +106,6 @@ func kind(err error) apperr.Kind {
 	return 0
 }
 
-// ---------------------------------------------------------------------------
-// Busca
-// ---------------------------------------------------------------------------
-
-// Validação
 func TestSearchValidation(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{})
 	for name, q := range map[string][2]string{
@@ -137,7 +123,6 @@ func TestSearchValidation(t *testing.T) {
 	}
 }
 
-// Busca
 func TestServiceSearch(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	result, err := svc.Search(context.Background(), " gestão ", "2")
@@ -150,7 +135,6 @@ func TestServiceSearch(t *testing.T) {
 	}
 }
 
-// Consulta
 func TestLookupDOI(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -173,11 +157,6 @@ func TestLookupDOI(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Referências
-// ---------------------------------------------------------------------------
-
-// Inclusão
 func TestAddAndRemove(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -198,7 +177,57 @@ func TestAddAndRemove(t *testing.T) {
 	}
 }
 
-// Permissão
+const otherDOI = "10.1109/2.485845"
+
+var rbac = Work{
+	DOI: otherDOI, Type: WorkArticle, Title: "Role-based access control models", Venue: "Computer",
+	Volume: "29", Issue: "2", Pages: "38-47", Year: 1996,
+	Authors: []Author{{Surname: "Sandhu", GivenName: "Ravi S."}},
+}
+
+func TestReplace(t *testing.T) {
+	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi, otherDOI: rbac}})
+	ctx := context.Background()
+	member := actor.Actor{Email: "11111111@alunos.umc.br", Name: "Ana", Sub: "s1"}
+	editor := actor.Actor{Email: "11111111@alunos.umc.br", Name: "Bia", Sub: "s2"}
+
+	old, err := svc.Add(ctx, member, "p1", ReferenceInput{DOI: knownDOI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := svc.Replace(ctx, editor, "p1", old.ID, ReferenceInput{DOI: "https://doi.org/" + otherDOI})
+	if err != nil || ref.ID != referenceID(otherDOI) || ref.DOI != otherDOI || ref.AddedBy != "Bia" || !strings.Contains(ref.ABNT, "Role-based") {
+		t.Fatalf("ref = %+v, err = %v", ref, err)
+	}
+	if _, kept := store.refs[old.ID]; kept || len(store.refs) != 1 {
+		t.Fatalf("the old reference must be replaced: %+v", store.refs)
+	}
+
+	// The same DOI again refreshes the reference in place.
+	if again, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: otherDOI}); err != nil || again.ID != ref.ID || len(store.refs) != 1 {
+		t.Fatalf("same DOI: ref = %+v, err = %v", again, err)
+	}
+
+	// A DOI already on the list is refused, and nothing changes.
+	if _, err := svc.Add(ctx, member, "p1", ReferenceInput{DOI: knownDOI}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: knownDOI}); kind(err) != apperr.KindConflict || len(store.refs) != 2 {
+		t.Errorf("duplicate: %v, refs = %d", err, len(store.refs))
+	}
+
+	if _, err := svc.Replace(ctx, member, "p1", "missing", ReferenceInput{DOI: knownDOI}); kind(err) != apperr.KindNotFound {
+		t.Errorf("missing reference: %v", err)
+	}
+	if _, err := svc.Replace(ctx, member, "p1", ref.ID, ReferenceInput{DOI: "abc"}); kind(err) != apperr.KindInvalid {
+		t.Errorf("invalid DOI: %v", err)
+	}
+	outsider := actor.Actor{Role: actor.RoleAdvisor, Email: "alessandro.horas@umc.br", Sub: "prof-sub"}
+	if _, err := svc.Replace(ctx, outsider, "p1", ref.ID, ReferenceInput{DOI: otherDOI}); kind(err) != apperr.KindForbidden {
+		t.Errorf("advisor editing: %v", err)
+	}
+}
+
 func TestPermissions(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -226,7 +255,6 @@ func TestPermissions(t *testing.T) {
 	}
 }
 
-// Ordenação
 func TestReferencesSortedAlphabetically(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{})
 	store.refs = map[string]Reference{"b": {ID: "b", ABNT: "souza"}, "a": {ID: "a", ABNT: "ALVES"}, "c": {ID: "c", ABNT: "Lima"}}

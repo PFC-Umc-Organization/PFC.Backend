@@ -25,6 +25,9 @@ type Store interface {
 	PutReference(ctx context.Context, r Reference, addedByID string) error
 	ReferencesOf(ctx context.Context, projectID string) ([]Reference, error)
 	DeleteReference(ctx context.Context, projectID, id string) error
+	// ReplaceReference swaps reference oldID for r at once: errNotFound when
+	// oldID is gone, errDuplicate when r is already on the list.
+	ReplaceReference(ctx context.Context, oldID string, r Reference, addedByID string) error
 }
 
 // ---------------------------------------------------------------------------
