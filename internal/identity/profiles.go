@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
@@ -32,12 +34,60 @@ type profileItem struct {
 
 // Gravação
 func (p *DynamoProfiles) SaveStudent(ctx context.Context, rgm, name string) error {
-	return dynamo.PutStruct(ctx, p.table, profileItem{PK: studentNamePrefix + rgm, SK: accountSK, Name: name}, dynamo.Write{})
+	_, err := p.table.UpdateItem(ctx, dynamo.Key(studentNamePrefix+rgm, accountSK), "SET nome = :n",
+		dynamo.Write{Values: dynamo.Item{":n": dynamo.S(name)}})
+	return err
 }
 
 // Gravação
 func (p *DynamoProfiles) SaveStaff(ctx context.Context, sub, name string, role actor.Role) error {
-	return dynamo.PutStruct(ctx, p.table, profileItem{PK: staffNamePrefix + sub, SK: accountSK, Name: name, Role: role}, dynamo.Write{})
+	_, err := p.table.UpdateItem(ctx, dynamo.Key(staffNamePrefix+sub, accountSK), "SET nome = :n, perfil = :r",
+		dynamo.Write{Values: dynamo.Item{":n": dynamo.S(name), ":r": dynamo.S(string(role))}})
+	return err
+}
+
+// ---------------------------------------------------------------------------
+// MFA
+// ---------------------------------------------------------------------------
+
+// Chave
+func profileKey(u User) dynamo.Item {
+	if u.Role == actor.RoleStudent {
+		return dynamo.Key(studentNamePrefix+u.RGM, accountSK)
+	}
+	return dynamo.Key(staffNamePrefix+u.ID, accountSK)
+}
+
+// Gravação
+func (p *DynamoProfiles) SaveMFA(ctx context.Context, u User, enabled bool) error {
+	_, err := p.table.UpdateItem(ctx, profileKey(u), "SET mfaAtivo = :m, nome = if_not_exists(nome, :n)",
+		dynamo.Write{Values: dynamo.Item{":m": &types.AttributeValueMemberBOOL{Value: enabled}, ":n": dynamo.S(u.Name)}})
+	return err
+}
+
+// Consulta
+func (p *DynamoProfiles) MFAEnabled(ctx context.Context, users []User) (map[string]bool, error) {
+	keys := make([]dynamo.Item, 0, len(users))
+	owner := make(map[string]string, len(users))
+	for _, u := range users {
+		if u.Role == actor.RoleStudent && u.RGM == "" {
+			continue
+		}
+		k := profileKey(u)
+		keys = append(keys, k)
+		owner[dynamo.String(k, "PK")] = u.ID
+	}
+	items, err := p.table.BatchGet(ctx, keys, "PK", "mfaAtivo")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, it := range items {
+		if v, ok := it["mfaAtivo"].(*types.AttributeValueMemberBOOL); ok && v.Value {
+			out[owner[dynamo.String(it, "PK")]] = true
+		}
+	}
+	return out, nil
 }
 
 // Consulta

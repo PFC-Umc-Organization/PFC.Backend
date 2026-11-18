@@ -327,6 +327,13 @@ func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, er
 			users[i].CohortIDs = []string{c}
 		}
 	}
+	mfa, err := s.profiles.MFAEnabled(ctx, users)
+	if err != nil {
+		slog.WarnContext(ctx, "mfa flags not loaded", "error", fmt.Errorf("mfa flags: %w", err))
+	}
+	for i := range users {
+		users[i].MFAEnabled = mfa[users[i].ID]
+	}
 	slices.SortStableFunc(users, func(a, b User) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
@@ -519,6 +526,9 @@ func (s *Service) SetMFA(ctx context.Context, id string, in MFAInput) (bool, err
 			return false, refuse(ctx, action, id, apperr.Invalid(msgMFANotLinked))
 		}
 		return false, refuse(ctx, action, id, adminError(fmt.Errorf("set mfa: %w", err)))
+	}
+	if err := s.profiles.SaveMFA(ctx, u, enabled); err != nil {
+		return false, refuse(ctx, action, id, apperr.Internal("O MFA foi alterado, mas não foi possível atualizar o registro. Repita a operação.", fmt.Errorf("save mfa: %w", err)))
 	}
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Success, Resource: accountResource(id),
 		Details: map[string]any{"ativo": enabled}})

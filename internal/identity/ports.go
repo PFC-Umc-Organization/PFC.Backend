@@ -72,6 +72,8 @@ type Profiles interface {
 	SaveStaff(ctx context.Context, sub, name string, role actor.Role) error
 	StudentNames(ctx context.Context, rgms []string) (map[string]string, error)
 	Staff(ctx context.Context, sub string) (StaffProfile, bool, error)
+	SaveMFA(ctx context.Context, u User, enabled bool) error
+	MFAEnabled(ctx context.Context, users []User) (map[string]bool, error)
 }
 
 // Modelo

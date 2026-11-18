@@ -127,6 +127,7 @@ func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, err
 type fakeProfiles struct {
 	students map[string]string
 	staff    map[string]StaffProfile
+	mfa      map[string]bool
 }
 
 // Gravação
@@ -159,6 +160,26 @@ func (f *fakeProfiles) Staff(_ context.Context, sub string) (StaffProfile, bool,
 }
 
 // Consulta
+// Gravação
+func (f *fakeProfiles) SaveMFA(_ context.Context, u User, enabled bool) error {
+	if f.mfa == nil {
+		f.mfa = map[string]bool{}
+	}
+	f.mfa[u.ID] = enabled
+	return nil
+}
+
+// Consulta
+func (f *fakeProfiles) MFAEnabled(_ context.Context, users []User) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, u := range users {
+		if f.mfa[u.ID] {
+			out[u.ID] = true
+		}
+	}
+	return out, nil
+}
+
 func profilesOf(s *Service) *fakeProfiles { return s.profiles.(*fakeProfiles) }
 
 // Simulação

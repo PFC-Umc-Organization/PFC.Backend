@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"slices"
-	"sync"
-	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -368,65 +364,12 @@ func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]
 
 // Listagem
 func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
-	users, err := c.listUsers(ctx, "", pageSize)
-	if err != nil {
-		return nil, err
-	}
-	c.fillMFA(ctx, users)
-	return users, nil
+	return c.listUsers(ctx, "", pageSize)
 }
 
 // ---------------------------------------------------------------------------
 // MFA
 // ---------------------------------------------------------------------------
-
-const (
-	softwareTokenMFA = "SOFTWARE_TOKEN_MFA"
-	mfaLookups       = 5
-)
-
-// Leitura
-func (c *Cognito) fillMFA(ctx context.Context, users []User) {
-	var (
-		wg        sync.WaitGroup
-		throttled atomic.Bool
-	)
-	slots := make(chan struct{}, mfaLookups)
-	for i := range users {
-		slots <- struct{}{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-slots }()
-			if throttled.Load() || ctx.Err() != nil {
-				return
-			}
-			enabled, err := c.mfaOf(ctx, users[i].usernameOrID())
-			if err != nil {
-				var limited *types.TooManyRequestsException
-				if errors.As(err, &limited) {
-					throttled.Store(true)
-				}
-				slog.WarnContext(ctx, "mfa lookup failed", "user", users[i].ID, "throttled", throttled.Load(), "error", err)
-				return
-			}
-			users[i].MFAEnabled = enabled
-		}()
-	}
-	wg.Wait()
-}
-
-// Consulta
-func (c *Cognito) mfaOf(ctx context.Context, username string) (bool, error) {
-	out, err := c.client.AdminGetUser(ctx, &cip.AdminGetUserInput{
-		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
-	})
-	if err != nil {
-		return false, fmt.Errorf("get user: %w", err)
-	}
-	return slices.Contains(out.UserMFASettingList, softwareTokenMFA) ||
-		aws.ToString(out.PreferredMfaSetting) == softwareTokenMFA, nil
-}
 
 // Preferência
 func (c *Cognito) SetUserMFA(ctx context.Context, username string, enabled bool) error {

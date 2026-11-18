@@ -32,6 +32,7 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/projetos/:projetoId/entregas/:atividadeId/arquivos", h.requestUpload)
 	r.Handle("GET", "/projetos/:projetoId/entregas/:atividadeId/arquivos/:campoId", h.downloadFile)
 
+	r.Handle("GET", "/programas/:programaId/painel", httpapi.Staff(msgStaffOnly, h.panel))
 	r.Handle("GET", "/programas/:programaId/penalidades", httpapi.Staff(msgStaffOnly, h.penaltiesOfProgram))
 	r.Handle("GET", "/projetos/:projetoId/penalidades", h.penaltiesOfProject)
 	r.Handle("POST", "/projetos/:projetoId/penalidades", httpapi.Staff(msgStaffOnly, h.applyPenalty, httpapi.Audit("penalidade.aplicada")))
@@ -166,6 +167,12 @@ func (h handlers) downloadFile(ctx context.Context, r *httpapi.Request) (httpapi
 // ---------------------------------------------------------------------------
 // Penalidades
 // ---------------------------------------------------------------------------
+
+// Painel
+func (h handlers) panel(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
+	panel, err := h.svc.Panel(ctx, r.Actor, r.Param("programaId"))
+	return httpapi.Reply(200, panel, err)
+}
 
 // Listagem
 func (h handlers) penaltiesOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
