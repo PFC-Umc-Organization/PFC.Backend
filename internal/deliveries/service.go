@@ -133,7 +133,7 @@ func (s *Service) CreateActivity(ctx context.Context, in ActivityInput) (Activit
 		CohortID:    in.CohortID,
 	}
 	for _, f := range inputs {
-		a.Fields = append(a.Fields, Field{ID: s.newID(), Label: f.Label, Type: f.Type, Required: f.Required})
+		a.Fields = append(a.Fields, Field{ID: s.newID(), Label: f.Label, Type: f.Type, Required: f.Required, Format: f.Format})
 	}
 	if err := s.store.CreateActivity(ctx, a); errors.Is(err, errDuplicate) {
 		return Activity{}, apperr.Conflict("Já existe uma atividade com este identificador. Tente novamente.")
@@ -189,7 +189,7 @@ func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput
 	if msg != "" {
 		return Field{}, apperr.Invalid(msg)
 	}
-	f := Field{ID: s.newID(), Label: in.Label, Type: in.Type, Required: in.Required}
+	f := Field{ID: s.newID(), Label: in.Label, Type: in.Type, Required: in.Required, Format: in.Format}
 	switch err := s.store.AddField(ctx, activityID, f); {
 	case errors.Is(err, errNotFound):
 		return Field{}, apperr.NotFound(msgActivityNotFound)
@@ -199,7 +199,7 @@ func (s *Service) AddField(ctx context.Context, activityID string, in FieldInput
 		return Field{}, apperr.Internal("Não foi possível adicionar o campo. Tente novamente em instantes.", err)
 	}
 	audit.Record(ctx, audit.Event{Action: "atividade.campo_adicionado", Result: audit.Success, Resource: activityResource(activityID),
-		Details: map[string]any{"campoId": f.ID, "rotulo": f.Label, "tipo": string(f.Type)}})
+		Details: map[string]any{"campoId": f.ID, "rotulo": f.Label, "tipo": string(f.Type), "formato": f.Format}})
 	return f, nil
 }
 
@@ -317,6 +317,9 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	previous, found, err := s.store.GetSubmission(ctx, p.ID, a.ID)
 	if err != nil {
 		return Submission{}, apperr.Internal("Não foi possível carregar a entrega anterior. Tente novamente em instantes.", err)
+	}
+	if msg := checkAnswers(a.Fields, answers, previous.Answers); msg != "" {
+		return Submission{}, apperr.Invalid(msg)
 	}
 	closed := a.closed(s.now())
 	if closed && !found {
@@ -539,6 +542,9 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	kind, ok := storage.ContentType(name)
 	if !ok {
 		return UploadTicket{}, apperr.Invalid(msgFileType)
+	}
+	if !storage.FileFormatAllows(a.Fields[i].Format, name) {
+		return UploadTicket{}, apperr.Invalid(msgFormatFile(a.Fields[i]))
 	}
 	key := fieldPrefix(p.ID, a.ID, in.FieldID) + s.newID() + "/" + name
 	up, err := s.files.PresignUpload(ctx, key, kind, storage.MaxBytes, uploadTTL)

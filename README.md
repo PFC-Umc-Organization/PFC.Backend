@@ -8,6 +8,7 @@ uma API Gateway REST API.
 ```
 main.go                    # entrypoint do Lambda: app.Load + app.New
 cmd/migrar/                # migração idempotente da tabela pra modelagem atual
+cmd/seed/                  # massa de teste em volume (cursos, turmas, orientadores, alunos, projetos e entregas)
 internal/
 ├── app/                   # composition root: clientes AWS, config e ligação dos módulos
 ├── platform/              # infraestrutura compartilhada pelos módulos
@@ -154,7 +155,7 @@ ver [Migração](#migração).
 | POST   | `/atividades`                            | Cria atividade (`{ titulo, descricao, prazo, turmaId, campos? }`); sem `campos` nasce com 1 campo de arquivo obrigatório. `turmaId` é uma turma cadastrada (400 se não existir) e não muda depois; sem ele a atividade vale para todas as turmas (comportamento antigo). "Todas as turmas" na tela é uma chamada por turma | ADMIN |
 | PUT    | `/atividades/:atividadeId`               | Edita título/descrição/prazo                                       | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId`               | Remove a atividade e as entregas dela                               | ADMIN, ORIENTADOR |
-| POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20) | ADMIN, ORIENTADOR |
+| POST   | `/atividades/:atividadeId/campos`        | Adiciona campo (`{ rotulo, tipo, obrigatorio, formato }`; tipos ARQUIVO/TEXTO/TEXTO_LONGO/LINK; máx. 20). `formato` opcional (padrão `GERAL`): ARQUIVO aceita GERAL, DOCUMENTO (.pdf .doc .docx .odt), SLIDES (.ppt .pptx .odp .pdf), PLANILHA (.xls .xlsx .ods .csv) e COMPACTADO (.zip .rar .7z .tar.gz); LINK aceita GERAL, REPOSITORIO (github.com, gitlab.com, bitbucket.org com `usuario/repositorio`) e VIDEO (youtube.com, youtu.be, vimeo.com, drive.google.com, loom.com, onedrive.live.com). A extensão é conferida no pedido de upload e na entrega; links precisam de http(s) com domínio público, e encurtadores e domínios adultos são recusados (400) | ADMIN, ORIENTADOR |
 | DELETE | `/atividades/:atividadeId/campos/:campoId` | Remove campo; 409 se for o último                                | ADMIN, ORIENTADOR |
 | GET    | `/atividades/:atividadeId/entregas`      | Entregas de todos os projetos naquela atividade                     | ADMIN |
 | GET    | `/programas/:programaId/entregas`        | Entregas (com respostas) de todos os projetos do programa, numa chamada — a matriz do painel; o orientador recebe só as dos projetos que orienta | ADMIN, ORIENTADOR |
@@ -291,6 +292,25 @@ O pacote `internal/integracao` usa o DynamoDB Local de verdade e servidores
 falsos para o Cognito (`cognito_fake_test.go`), o S3 (`s3_fake_test.go`) e
 Crossref/OpenAlex. Sem o
 script, ele é pulado.
+
+## Massa de teste
+
+`cmd/seed` popula a tabela com volume para teste de carga e apresentação: 2
+cursos e 6 turmas (manhã/noite) com programa e 6 a 8 atividades por turma, 50
+orientadores, 1.000 alunos matriculados e 500 projetos de 2 integrantes, com
+entregas validadas, em validação, devolvidas, atrasadas, perdoadas e grupos
+reprovados por 3 penalidades. Nada é criado no Cognito: nomes vão para a
+tabela e as contas não existem para login. Os cursos levam o sufixo
+"(massa de teste)" e a rodada se recusa a repetir numa tabela que já a tem.
+Sem `-aplicar`, só mostra o plano:
+
+```bash
+TABLE_NAME=<tabela> go run ./cmd/seed             # mostra o plano
+TABLE_NAME=<tabela> go run ./cmd/seed -aplicar    # grava (-paralelo 8, -projetos 500, -orientadores 50)
+```
+
+Contra o DynamoDB Local, exporte `AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000`
+e credenciais quaisquer. Os arquivos das entregas não são criados no S3.
 
 ## Migração
 
