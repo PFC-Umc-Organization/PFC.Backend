@@ -49,7 +49,16 @@ func TestSetMFA(t *testing.T) {
 	if !profilesOf(svc).mfa["11111111-1111-4111-8111-111111111111"] {
 		t.Error("flag must be saved")
 	}
-	users, err := svc.ListUsers(ctx, actor.Actor{Role: actor.RoleAdmin})
+	plain, err := svc.ListUsers(ctx, actor.Actor{Role: actor.RoleAdmin}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range plain {
+		if u.MFAEnabled {
+			t.Errorf("%s: mfa must not load without incluirMfa", u.Name)
+		}
+	}
+	users, err := svc.ListUsers(ctx, actor.Actor{Role: actor.RoleAdmin}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

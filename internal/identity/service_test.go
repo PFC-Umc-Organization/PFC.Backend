@@ -347,12 +347,12 @@ func TestListUsers(t *testing.T) {
 		{ID: "2", Name: "coord", Email: "coord@umc.br", Role: actor.RoleAdmin},
 		{ID: "1", Name: "Aluno", Email: "12345678901@alunos.umc.br", Role: actor.RoleStudent, RGM: "12345678901"},
 	}}
-	users, err := newTestService(t, d).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin})
+	users, err := newTestService(t, d).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin}, false)
 	if err != nil || len(users) != 2 || users[0].Name != "Aluno" || !reflect.DeepEqual(users[0].CohortIDs, []string{"turma-1"}) ||
 		!reflect.DeepEqual(users[1].CohortIDs, []string{}) || users[1].Email != "coord@umc.br" {
 		t.Fatalf("users = %+v, err = %v", users, err)
 	}
-	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin}); err == nil {
+	if _, err := newTestService(t, &fakeDirectory{err: errors.New("AccessDenied")}).ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdmin}, false); err == nil {
 		t.Error("directory failure must fail")
 	}
 }
@@ -375,11 +375,11 @@ func TestListUsersForAnAdvisor(t *testing.T) {
 	}}
 	svc := newTestService(t, d)
 	svc.UseAdvising(advising{"prof": {"12345678901"}})
-	users, err := svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "prof"})
+	users, err := svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "prof"}, false)
 	if err != nil || len(users) != 1 || users[0].ID != "c" {
 		t.Fatalf("users = %+v, err = %v", users, err)
 	}
-	users, err = svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "sem-projetos"})
+	users, err = svc.ListUsers(context.Background(), actor.Actor{Role: actor.RoleAdvisor, Sub: "sem-projetos"}, false)
 	if err != nil || len(users) != 0 || users == nil {
 		t.Fatalf("advisor without projects = %#v, err = %v", users, err)
 	}

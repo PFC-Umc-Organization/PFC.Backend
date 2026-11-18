@@ -300,7 +300,7 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 // ---------------------------------------------------------------------------
 
 // Listagem
-func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, error) {
+func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor, includeMFA bool) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar os usuários. Tente novamente em instantes.", err)
@@ -327,17 +327,25 @@ func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, er
 			users[i].CohortIDs = []string{c}
 		}
 	}
-	mfa, err := s.profiles.MFAEnabled(ctx, users)
-	if err != nil {
-		slog.WarnContext(ctx, "mfa flags not loaded", "error", fmt.Errorf("mfa flags: %w", err))
-	}
-	for i := range users {
-		users[i].MFAEnabled = mfa[users[i].ID]
+	if includeMFA && viewer.HasRole(actor.RoleAdmin, actor.RoleAdvisor) {
+		s.fillMFA(ctx, users)
 	}
 	slices.SortStableFunc(users, func(a, b User) int {
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 	return users, nil
+}
+
+// Leitura
+func (s *Service) fillMFA(ctx context.Context, users []User) {
+	mfa, err := s.profiles.MFAEnabled(ctx, users)
+	if err != nil {
+		slog.WarnContext(ctx, "mfa flags not loaded", "error", fmt.Errorf("mfa flags: %w", err))
+		return
+	}
+	for i := range users {
+		users[i].MFAEnabled = mfa[users[i].ID]
+	}
 }
 
 // Consulta

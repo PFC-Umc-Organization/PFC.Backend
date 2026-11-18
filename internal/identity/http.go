@@ -129,7 +129,7 @@ func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response,
 
 // Listagem
 func (h handlers) listUsers(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
-	users, err := h.svc.ListUsers(ctx, r.Actor)
+	users, err := h.svc.ListUsers(ctx, r.Actor, r.Query("incluirMfa") == "true")
 	return httpapi.Reply(200, users, err)
 }
 
