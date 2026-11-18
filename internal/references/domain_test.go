@@ -2,6 +2,7 @@ package references
 
 import "testing"
 
+// Normalização
 func TestNormalizeDOI(t *testing.T) {
 	valid := map[string]string{
 		"10.1145/3290605.3300233":                    "10.1145/3290605.3300233",
@@ -26,6 +27,7 @@ func TestNormalizeDOI(t *testing.T) {
 	}
 }
 
+// Identificação
 func TestReferenceID(t *testing.T) {
 	a := referenceID("10.1145/ABC.123")
 	if a != referenceID("10.1145/abc.123") {

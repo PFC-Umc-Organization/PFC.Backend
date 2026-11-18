@@ -6,8 +6,14 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// ---------------------------------------------------------------------------
+// Rotas
+// ---------------------------------------------------------------------------
+
+// Rotas
 type handlers struct{ svc *Service }
 
+// Rotas
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
@@ -32,11 +38,17 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/projetos/:projetoId/penalidades/:penalidadeId/perdao", httpapi.Staff(msgStaffOnly, h.waivePenalty, httpapi.Audit("penalidade.perdoada")))
 }
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (h handlers) listActivities(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	activities, err := h.svc.ListActivitiesFor(ctx, r.Actor)
 	return httpapi.Reply(200, activities, err)
 }
 
+// Criação
 func (h handlers) createActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ActivityInput
 	if err := r.Decode(&in); err != nil {
@@ -46,6 +58,7 @@ func (h handlers) createActivity(ctx context.Context, r *httpapi.Request) (httpa
 	return httpapi.Reply(201, a, err)
 }
 
+// Atualização
 func (h handlers) updateActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ActivityInput
 	if err := r.Decode(&in); err != nil {
@@ -55,10 +68,16 @@ func (h handlers) updateActivity(ctx context.Context, r *httpapi.Request) (httpa
 	return httpapi.Reply(200, a, err)
 }
 
+// Exclusão
 func (h handlers) deleteActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Atividade excluída.", h.svc.DeleteActivity(ctx, r.Param("atividadeId")))
 }
 
+// ---------------------------------------------------------------------------
+// Campos
+// ---------------------------------------------------------------------------
+
+// Adição
 func (h handlers) addField(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in FieldInput
 	if err := r.Decode(&in); err != nil {
@@ -68,25 +87,34 @@ func (h handlers) addField(ctx context.Context, r *httpapi.Request) (httpapi.Res
 	return httpapi.Reply(201, f, err)
 }
 
+// Remoção
 func (h handlers) removeField(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Campo removido.", h.svc.RemoveField(ctx, r.Param("atividadeId"), r.Param("campoId")))
 }
 
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (h handlers) submissionsOfActivity(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	submissions, err := h.svc.SubmissionsOfActivity(ctx, r.Param("atividadeId"))
 	return httpapi.Reply(200, submissions, err)
 }
 
+// Listagem
 func (h handlers) submissionsOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	submissions, err := h.svc.SubmissionsOfProgram(ctx, r.Actor, r.Param("programaId"))
 	return httpapi.Reply(200, submissions, err)
 }
 
+// Listagem
 func (h handlers) submissionsOfProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	submissions, err := h.svc.SubmissionsOfProject(ctx, r.Actor, r.Param("projetoId"))
 	return httpapi.Reply(200, submissions, err)
 }
 
+// Envio
 func (h handlers) submit(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in SubmissionInput
 	if err := r.Decode(&in); err != nil {
@@ -96,10 +124,16 @@ func (h handlers) submit(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 	return httpapi.Reply(200, sub, err)
 }
 
+// Devolução
 func (h handlers) removeSubmission(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Entrega devolvida ao grupo.", h.svc.RemoveSubmission(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId")))
 }
 
+// ---------------------------------------------------------------------------
+// Validação
+// ---------------------------------------------------------------------------
+
+// Validação
 func (h handlers) validate(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ValidationInput
 	if err := r.Decode(&in); err != nil {
@@ -109,6 +143,11 @@ func (h handlers) validate(ctx context.Context, r *httpapi.Request) (httpapi.Res
 	return httpapi.Reply(200, sub, err)
 }
 
+// ---------------------------------------------------------------------------
+// Arquivos
+// ---------------------------------------------------------------------------
+
+// Solicitação
 func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in UploadRequest
 	if err := r.Decode(&in); err != nil {
@@ -118,21 +157,29 @@ func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Reply(201, ticket, err)
 }
 
+// Download
 func (h handlers) downloadFile(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	d, err := h.svc.DownloadFile(ctx, r.Actor, r.Param("projetoId"), r.Param("atividadeId"), r.Param("campoId"))
 	return httpapi.Reply(200, d, err)
 }
 
+// ---------------------------------------------------------------------------
+// Penalidades
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (h handlers) penaltiesOfProgram(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	penalties, err := h.svc.PenaltiesOfProgram(ctx, r.Actor, r.Param("programaId"))
 	return httpapi.Reply(200, penalties, err)
 }
 
+// Listagem
 func (h handlers) penaltiesOfProject(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	penalties, err := h.svc.PenaltiesOfProject(ctx, r.Actor, r.Param("projetoId"))
 	return httpapi.Reply(200, penalties, err)
 }
 
+// Penalidade
 func (h handlers) applyPenalty(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in PenaltyInput
 	if err := r.Decode(&in); err != nil {
@@ -142,6 +189,7 @@ func (h handlers) applyPenalty(ctx context.Context, r *httpapi.Request) (httpapi
 	return httpapi.Reply(201, penalties, err)
 }
 
+// Perdão
 func (h handlers) waivePenalty(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in WaiverInput
 	if err := r.Decode(&in); err != nil {

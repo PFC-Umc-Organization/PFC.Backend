@@ -15,6 +15,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Simulação
 type fakeDirectory struct {
 	Directory
 	err       error
@@ -26,47 +31,75 @@ type fakeDirectory struct {
 	calls     []string
 }
 
+// Atualização
 func (f *fakeDirectory) SetName(_ context.Context, username, name string) error {
 	f.calls = append(f.calls, "name "+username+" "+name)
 	return f.err
 }
+
+// Atualização
 func (f *fakeDirectory) SetRole(_ context.Context, username string, role actor.Role) error {
 	f.calls = append(f.calls, "role "+username+" "+string(role))
 	return f.err
 }
+
+// Desativação
 func (f *fakeDirectory) Disable(_ context.Context, username string) error {
 	f.calls = append(f.calls, "disable "+username)
 	return f.err
 }
+
+// Reativação
 func (f *fakeDirectory) Enable(_ context.Context, username string) error {
 	f.calls = append(f.calls, "enable "+username)
 	return f.err
 }
+
+// Reenvio
 func (f *fakeDirectory) ResendInvitation(_ context.Context, email string) error {
 	f.calls = append(f.calls, "resend "+email)
 	return f.err
 }
 
+// Login
 func (f *fakeDirectory) SignIn(context.Context, string, string) (SignInResult, error) {
 	return SignInResult{IDToken: f.token, NewPasswordSession: f.challenge}, f.err
 }
+
+// Nova senha
 func (f *fakeDirectory) CompleteNewPassword(context.Context, string, string, string) (string, error) {
 	return f.token, f.err
 }
+
+// Recuperação
 func (f *fakeDirectory) ForgotPassword(context.Context, string) error { return f.err }
+
+// Redefinição
 func (f *fakeDirectory) ConfirmForgotPassword(context.Context, string, string, string) error {
 	return f.err
 }
+
+// Cadastro
 func (f *fakeDirectory) SignUp(context.Context, string, string, string) error { return f.err }
-func (f *fakeDirectory) ConfirmSignUp(context.Context, string, string) error  { return f.err }
-func (f *fakeDirectory) ResendCode(context.Context, string) error             { return f.err }
+
+// Confirmação
+func (f *fakeDirectory) ConfirmSignUp(context.Context, string, string) error { return f.err }
+
+// Reenvio
+func (f *fakeDirectory) ResendCode(context.Context, string) error { return f.err }
+
+// Listagem
 func (f *fakeDirectory) ListUsers(context.Context) ([]User, error) {
 	return append([]User(nil), f.users...), f.err
 }
+
+// Criação
 func (f *fakeDirectory) CreateAccount(_ context.Context, name, email string, role actor.Role) (string, error) {
 	f.created = append(f.created, NewAccount{Name: name, Email: email, Role: role})
 	return "sub-" + email, f.err
 }
+
+// Busca
 func (f *fakeDirectory) UsersWithEmailPrefix(_ context.Context, prefix string) ([]User, error) {
 	f.queried++
 	var out []User
@@ -77,6 +110,8 @@ func (f *fakeDirectory) UsersWithEmailPrefix(_ context.Context, prefix string) (
 	}
 	return out, f.err
 }
+
+// Busca
 func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, error) {
 	f.queried++
 	var out []User
@@ -88,19 +123,25 @@ func (f *fakeDirectory) UsersWithSub(_ context.Context, sub string) ([]User, err
 	return out, nil
 }
 
+// Simulação
 type fakeProfiles struct {
 	students map[string]string
 	staff    map[string]StaffProfile
 }
 
+// Gravação
 func (f *fakeProfiles) SaveStudent(_ context.Context, rgm, name string) error {
 	f.students[rgm] = name
 	return nil
 }
+
+// Gravação
 func (f *fakeProfiles) SaveStaff(_ context.Context, sub, name string, role actor.Role) error {
 	f.staff[sub] = StaffProfile{Name: name, Role: role}
 	return nil
 }
+
+// Consulta
 func (f *fakeProfiles) StudentNames(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, r := range rgms {
@@ -110,16 +151,23 @@ func (f *fakeProfiles) StudentNames(_ context.Context, rgms []string) (map[strin
 	}
 	return out, nil
 }
+
+// Consulta
 func (f *fakeProfiles) Staff(_ context.Context, sub string) (StaffProfile, bool, error) {
 	p, ok := f.staff[sub]
 	return p, ok, nil
 }
 
+// Consulta
 func profilesOf(s *Service) *fakeProfiles { return s.profiles.(*fakeProfiles) }
 
+// Simulação
 type cohorts map[string]string
 
+// Consulta
 func (c cohorts) CohortOf(_ context.Context, rgm string) (string, error) { return c[rgm], nil }
+
+// Consulta
 func (c cohorts) CohortsOf(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, r := range rgms {
@@ -130,18 +178,25 @@ func (c cohorts) CohortsOf(_ context.Context, rgms []string) (map[string]string,
 	return out, nil
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Construção
 func newTestService(t *testing.T, d *fakeDirectory) *Service {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
 	return NewService(d, cohorts{"12345678901": "turma-1"}, &fakeProfiles{students: map[string]string{}, staff: map[string]StaffProfile{}})
 }
 
+// Geração
 func token(claims map[string]any) string {
 	payload, _ := json.Marshal(claims)
 	enc := base64.RawURLEncoding.EncodeToString
 	return enc([]byte(`{"alg":"none"}`)) + "." + enc(payload) + ".sig"
 }
 
+// Resposta
 func status(err error) (apperr.Kind, string) {
 	e, _ := apperr.As(err)
 	if e == nil {
@@ -150,6 +205,11 @@ func status(err error) (apperr.Kind, string) {
 	return e.Kind, e.Message
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Login
 func TestLogin(t *testing.T) {
 	d := &fakeDirectory{token: token(map[string]any{"sub": "s1", "email": "12345678901@alunos.umc.br", "name": "Ana"})}
 	s, err := newTestService(t, d).Login(context.Background(), Credentials{Email: " 12345678901@ALUNOS.umc.br ", Password: "x"})
@@ -176,6 +236,11 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Mensagens
 func TestSignUpErrorsHaveTheirOwnMessage(t *testing.T) {
 	cases := map[error]apperr.Kind{
 		errWeakPassword:       apperr.KindInvalid,
@@ -199,6 +264,7 @@ func TestSignUpErrorsHaveTheirOwnMessage(t *testing.T) {
 	}
 }
 
+// Validação
 func TestConfirmValidatesInput(t *testing.T) {
 	svc := newTestService(t, &fakeDirectory{err: errors.New("must not be called")})
 	for _, in := range []Confirmation{{Email: "123@alunos.umc.br"}, {Code: "123456"}, {Email: " ", Code: " "}} {
@@ -208,6 +274,7 @@ func TestConfirmValidatesInput(t *testing.T) {
 	}
 }
 
+// Privacidade
 func TestConfirmDoesNotRevealAccounts(t *testing.T) {
 	for _, err := range []error{errWrongCode, errNoAccount, errAlreadyConfirmed} {
 		k, msg := status(newTestService(t, &fakeDirectory{err: err}).Confirm(context.Background(), Confirmation{Email: "a@b", Code: "1"}))
@@ -222,6 +289,11 @@ func TestConfirmDoesNotRevealAccounts(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Usuários
+// ---------------------------------------------------------------------------
+
+// Mapeamento
 func TestUserFromAttributes(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -248,6 +320,7 @@ func TestUserFromAttributes(t *testing.T) {
 	}
 }
 
+// Listagem
 func TestListUsers(t *testing.T) {
 	d := &fakeDirectory{users: []User{
 		{ID: "2", Name: "coord", Email: "coord@umc.br", Role: actor.RoleAdmin},
@@ -263,12 +336,15 @@ func TestListUsers(t *testing.T) {
 	}
 }
 
+// Simulação
 type advising map[string][]string
 
+// Consulta
 func (a advising) MembersAdvisedBy(_ context.Context, sub string) ([]string, error) {
 	return a[sub], nil
 }
 
+// Listagem
 func TestListUsersForAnAdvisor(t *testing.T) {
 	d := &fakeDirectory{users: []User{
 		{ID: "a", Name: "Coord", Role: actor.RoleAdmin},
@@ -288,6 +364,10 @@ func TestListUsersForAnAdvisor(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
 const (
 	coordSub   = "0c8f5a7e-0000-4000-8000-000000000001"
 	coord2Sub  = "0c8f5a7e-0000-4000-8000-000000000002"
@@ -296,6 +376,7 @@ const (
 	newSub     = "0c8f5a7e-0000-4000-8000-000000000005"
 )
 
+// Simulação
 func accounts() *fakeDirectory {
 	return &fakeDirectory{users: []User{
 		{ID: coordSub, Username: coordSub, Name: "Coord", Email: "coord@umc.br", Role: actor.RoleAdmin, Status: StatusActive},
@@ -306,6 +387,7 @@ func accounts() *fakeDirectory {
 	}}
 }
 
+// Gestão
 func TestAccountManagement(t *testing.T) {
 	ctx := context.Background()
 	me := actor.Actor{Role: actor.RoleAdmin, Sub: coordSub}
@@ -364,6 +446,7 @@ func TestAccountManagement(t *testing.T) {
 	}
 }
 
+// Regra
 func TestLastAdminIgnoresPendingInvitation(t *testing.T) {
 	d := accounts()
 	for i := range d.users {
@@ -378,6 +461,7 @@ func TestLastAdminIgnoresPendingInvitation(t *testing.T) {
 	}
 }
 
+// Nomes
 func TestNamesComeFromTheProfiles(t *testing.T) {
 	ctx := context.Background()
 	sub := "0c8f5a7e-1111-4222-8333-944455556666"
@@ -407,6 +491,7 @@ func TestNamesComeFromTheProfiles(t *testing.T) {
 	}
 }
 
+// Sincronização
 func TestSyncNames(t *testing.T) {
 	d := &fakeDirectory{users: []User{
 		{ID: "s1", Name: "Ana", Role: actor.RoleStudent, RGM: "11111111111"},
@@ -425,6 +510,7 @@ func TestSyncNames(t *testing.T) {
 	}
 }
 
+// Criação
 func TestCreateAccount(t *testing.T) {
 	ctx := context.Background()
 	d := &fakeDirectory{}
@@ -450,6 +536,7 @@ func TestCreateAccount(t *testing.T) {
 	}
 }
 
+// Verificação
 func TestAdvisorExists(t *testing.T) {
 	const sub = "0a1b2c3d-0000-4000-8000-0123456789ab"
 	const admin = "11111111-0000-4000-8000-000000000000"
@@ -466,6 +553,11 @@ func TestAdvisorExists(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Login
 func TestLoginWithTemporaryPassword(t *testing.T) {
 	res, err := newTestService(t, &fakeDirectory{challenge: "sess"}).Login(context.Background(), Credentials{Email: "prof@umc.br", Password: "Temp#123"})
 	if err != nil || res.Challenge != ChallengeNewPassword || res.Session != "sess" || res.User != nil || res.Token != "" {
@@ -473,6 +565,11 @@ func TestLoginWithTemporaryPassword(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Senhas
+// ---------------------------------------------------------------------------
+
+// Nova senha
 func TestCompleteNewPassword(t *testing.T) {
 	tok := token(map[string]any{"sub": "s9", "email": "prof@umc.br", "name": "Prof", "custom:perfil": "ORIENTADOR"})
 	s, err := newTestService(t, &fakeDirectory{token: tok}).CompleteNewPassword(context.Background(), NewPasswordInput{Email: " Prof@UMC.br", Session: "sess", Password: "Nova#1234"})
@@ -490,6 +587,7 @@ func TestCompleteNewPassword(t *testing.T) {
 	}
 }
 
+// Privacidade
 func TestForgotPasswordDoesNotRevealAccounts(t *testing.T) {
 	for _, cause := range []error{nil, errNoAccount, errInvalidInput} {
 		if err := newTestService(t, &fakeDirectory{err: cause}).ForgotPassword(context.Background(), ForgotPasswordInput{Email: "x@umc.br"}); err != nil {
@@ -501,6 +599,7 @@ func TestForgotPasswordDoesNotRevealAccounts(t *testing.T) {
 	}
 }
 
+// Redefinição
 func TestResetPassword(t *testing.T) {
 	ctx := context.Background()
 	in := ResetPasswordInput{Email: "a@umc.br", Code: "123456", Password: "Nova#1234"}
@@ -517,6 +616,11 @@ func TestResetPassword(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Sessão
+// ---------------------------------------------------------------------------
+
+// Perfil
 func TestMe(t *testing.T) {
 	svc := newTestService(t, &fakeDirectory{})
 	u, err := svc.Me(context.Background(), actor.Actor{Sub: "s1", Name: "Ana", Email: "12345678901@alunos.umc.br"})

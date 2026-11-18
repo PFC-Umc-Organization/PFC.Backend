@@ -19,9 +19,7 @@ const (
 	firstBackoff  = 50 * time.Millisecond
 )
 
-// retryUnprocessed calls send until it reports nothing pending, with
-// exponential backoff: under throttling DynamoDB returns part of a batch as
-// unprocessed instead of failing.
+// Reenvio
 func retryUnprocessed(ctx context.Context, send func() (pending int, err error)) error {
 	backoff := firstBackoff
 	for attempt := 0; ; attempt++ {
@@ -41,7 +39,7 @@ func retryUnprocessed(ctx context.Context, send func() (pending int, err error))
 	}
 }
 
-// BatchGet returns the items that exist, in no particular order.
+// Consulta
 func (t *Table) BatchGet(ctx context.Context, keys []Item, projection ...string) ([]Item, error) {
 	var items []Item
 	for start := 0; start < len(keys); start += BatchGetSize {
@@ -66,6 +64,7 @@ func (t *Table) BatchGet(ctx context.Context, keys []Item, projection ...string)
 	return items, nil
 }
 
+// Gravação
 func (t *Table) BatchWrite(ctx context.Context, writes []types.WriteRequest) error {
 	for start := 0; start < len(writes); start += BatchWriteSize {
 		pending := writes[start:min(start+BatchWriteSize, len(writes))]
@@ -86,6 +85,7 @@ func (t *Table) BatchWrite(ctx context.Context, writes []types.WriteRequest) err
 	return nil
 }
 
+// Exclusão
 func (t *Table) DeleteKeys(ctx context.Context, keys []Item) error {
 	writes := make([]types.WriteRequest, 0, len(keys))
 	for _, k := range keys {

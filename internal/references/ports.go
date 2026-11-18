@@ -7,11 +7,20 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/groups"
 )
 
+// ---------------------------------------------------------------------------
+// Erros
+// ---------------------------------------------------------------------------
+
 var (
 	errNotFound  = errors.New("not found")
 	errDuplicate = errors.New("already exists")
 )
 
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
+// Repositório
 type Store interface {
 	PutReference(ctx context.Context, r Reference, addedByID string) error
 	ReferencesOf(ctx context.Context, projectID string) ([]Reference, error)
@@ -21,13 +30,17 @@ type Store interface {
 	ReplaceReference(ctx context.Context, oldID string, r Reference, addedByID string) error
 }
 
-// Works returns errWorkNotFound for an unknown DOI; any other error means
-// the external service failed.
+// ---------------------------------------------------------------------------
+// Dependências
+// ---------------------------------------------------------------------------
+
+// Dependência
 type Works interface {
 	Search(ctx context.Context, term string, page int) (total int, works []Work, err error)
 	WorkByDOI(ctx context.Context, doi string) (Work, error)
 }
 
+// Dependência
 type Projects interface {
 	Project(ctx context.Context, id string) (groups.Project, bool, error)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/app"
 )
 
+// Execução
 func main() {
 	deps, err := app.Load(context.Background())
 	if err != nil {

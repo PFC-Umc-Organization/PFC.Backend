@@ -12,6 +12,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// Permissão
 func TestStudentGuard(t *testing.T) {
 	var buf bytes.Buffer
 	t.Cleanup(audit.SetOutput(&buf))

@@ -5,7 +5,10 @@ import (
 	"errors"
 )
 
-// Store errors: the service turns them into the message of each operation.
+// ---------------------------------------------------------------------------
+// Erros
+// ---------------------------------------------------------------------------
+
 var (
 	errNotFound  = errors.New("not found")
 	errDuplicate = errors.New("uniqueness lock held by another item")
@@ -15,14 +18,19 @@ var (
 	errNoCourse  = errors.New("course does not exist")
 )
 
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
+// Repositório
 type Store interface {
 	CreateCourse(ctx context.Context, c Course) error
 	GetCourse(ctx context.Context, id string) (Course, bool, error)
 	ListCourses(ctx context.Context) ([]Course, error)
-	// CourseByName ignores case and returns the course with its stored name.
+
 	CourseByName(ctx context.Context, name string) (Course, bool, error)
 	UpdateCourse(ctx context.Context, current, next Course) error
-	// DeleteCourse returns errInUse while the course still has cohorts.
+
 	DeleteCourse(ctx context.Context, c Course) error
 
 	CreateCohort(ctx context.Context, c Cohort) error
@@ -44,15 +52,18 @@ type Store interface {
 	PutEnrollments(ctx context.Context, rgms []string, cohortID string) error
 	DeleteEnrollments(ctx context.Context, rgms []string) error
 	EnrollmentExists(ctx context.Context, rgm string) (bool, error)
-	// EnrolledAmong returns which of rgms have an enrollment, in any cohort.
+
 	EnrolledAmong(ctx context.Context, rgms []string) (map[string]bool, error)
 	CohortHasEnrollments(ctx context.Context, cohortID string) (bool, error)
 	CohortOfStudent(ctx context.Context, rgm string) (string, error)
 	CohortsOfStudents(ctx context.Context, rgms []string) (map[string]string, error)
 }
 
-// Projects belong to the groups module; academic only asks whether a
-// program still has any.
+// ---------------------------------------------------------------------------
+// Dependências
+// ---------------------------------------------------------------------------
+
+// Dependência
 type Projects interface {
 	ProgramHasProjects(ctx context.Context, programID string) (bool, error)
 }

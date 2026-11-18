@@ -6,6 +6,7 @@ import (
 	"sort"
 )
 
+// Configuração
 type Config struct {
 	TableName         string
 	IndexName         string
@@ -14,17 +15,16 @@ type Config struct {
 
 	CrossrefURL string
 	OpenAlexURL string
-	// ContactEmail identifies us to Crossref and OpenAlex, which serve
-	// identified clients first. Optional, like OpenAlexAPIKey.
+
 	ContactEmail   string
 	OpenAlexAPIKey string
 
-	// UploadsBucket is optional: without it, file fields keep only the name.
 	UploadsBucket string
-	// S3PathStyle is for a local S3 (tests), which has no per-bucket host.
+
 	S3PathStyle bool
 }
 
+// Leitura
 func FromEnv() (Config, error) {
 	c := Config{
 		TableName:         os.Getenv("TABLE_NAME"),
@@ -56,6 +56,7 @@ func FromEnv() (Config, error) {
 	return c, nil
 }
 
+// Leitura
 func envOr(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {
 		return v

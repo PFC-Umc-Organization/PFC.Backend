@@ -13,6 +13,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Serviço
+// ---------------------------------------------------------------------------
+
+// Serviço
 type Service struct {
 	directory Directory
 	academic  Academic
@@ -20,12 +25,15 @@ type Service struct {
 	profiles  Profiles
 }
 
+// Construção
 func NewService(directory Directory, academic Academic, profiles Profiles) *Service {
 	return &Service{directory: directory, academic: academic, profiles: profiles}
 }
 
+// Configuração
 func (s *Service) UseAdvising(a Advising) { s.advising = a }
 
+// Consulta
 func (s *Service) cohortsOf(ctx context.Context, rgm string) []string {
 	cohort, err := s.academic.CohortOf(ctx, rgm)
 	if err != nil {
@@ -37,10 +45,16 @@ func (s *Service) cohortsOf(ctx context.Context, rgm string) []string {
 	return []string{cohort}
 }
 
+// Auditoria
 func record(ctx context.Context, action, result, reason string, who *audit.Actor) {
 	audit.Record(ctx, audit.Event{Action: action, Result: result, Reason: reason, Actor: who})
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Login
 func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error) {
 	email := normalizeEmail(in.Email)
 	if email == "" || in.Password == "" {
@@ -52,7 +66,7 @@ func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error
 		return LoginResult{}, apperr.Forbidden(msgNotConfirmed)
 	}
 	if err != nil {
-		// Any Cognito refusal reads as "wrong password" to the user; the log says which one it was.
+
 		slog.WarnContext(ctx, "sign-in failed", "email", email, "error", err)
 		record(ctx, "auth.login", audit.Failure, "credenciais inválidas", &audit.Actor{Email: email})
 		return LoginResult{}, apperr.Unauthorized(msgBadCredentials)
@@ -68,6 +82,7 @@ func (s *Service) Login(ctx context.Context, in Credentials) (LoginResult, error
 	return LoginResult{User: &session.User, Token: session.Token}, nil
 }
 
+// Montagem
 func (s *Service) session(ctx context.Context, token string) (Session, error) {
 	claims, err := claimsOf(token)
 	if err != nil {
@@ -81,6 +96,7 @@ func (s *Service) session(ctx context.Context, token string) (Session, error) {
 	return Session{User: u, Token: token}, nil
 }
 
+// Nova senha
 func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) (Session, error) {
 	email := normalizeEmail(in.Email)
 	if email == "" || in.Session == "" || in.Password == "" {
@@ -106,6 +122,11 @@ func (s *Service) CompleteNewPassword(ctx context.Context, in NewPasswordInput) 
 	return s.session(ctx, token)
 }
 
+// ---------------------------------------------------------------------------
+// Senhas
+// ---------------------------------------------------------------------------
+
+// Recuperação
 func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) error {
 	email := normalizeEmail(in.Email)
 	if email == "" {
@@ -125,6 +146,7 @@ func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) er
 	return nil
 }
 
+// Redefinição
 func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) error {
 	email := normalizeEmail(in.Email)
 	code := strings.TrimSpace(in.Code)
@@ -153,6 +175,11 @@ func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) erro
 	return appErr
 }
 
+// ---------------------------------------------------------------------------
+// Sessão
+// ---------------------------------------------------------------------------
+
+// Perfil
 func (s *Service) Me(ctx context.Context, who actor.Actor) (SessionUser, error) {
 	if who.Sub == "" {
 		return SessionUser{}, apperr.Unauthorized(msgNoSession)
@@ -168,6 +195,11 @@ func (s *Service) Me(ctx context.Context, who actor.Actor) (SessionUser, error) 
 	return u, nil
 }
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Tradução
 func signUpError(err error) error {
 	switch {
 	case errors.Is(err, errWeakPassword):
@@ -184,6 +216,7 @@ func signUpError(err error) error {
 	return apperr.Invalid("Não foi possível concluir o cadastro. Tente novamente em instantes.")
 }
 
+// Tradução
 func confirmationError(err error) error {
 	switch {
 	case errors.Is(err, errWrongCode), errors.Is(err, errNoAccount), errors.Is(err, errAlreadyConfirmed):
@@ -196,11 +229,13 @@ func confirmationError(err error) error {
 	return apperr.Invalid("Não foi possível confirmar a conta. Tente novamente em instantes.")
 }
 
+// Mensagem
 func message(err error) string {
 	e, _ := apperr.As(err)
 	return e.Message
 }
 
+// Cadastro
 func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 	name := strings.TrimSpace(in.Name)
 	email := normalizeEmail(in.Email)
@@ -221,6 +256,7 @@ func (s *Service) SignUp(ctx context.Context, in SignUpInput) error {
 	return nil
 }
 
+// Confirmação
 func (s *Service) Confirm(ctx context.Context, in Confirmation) error {
 	email := normalizeEmail(in.Email)
 	code := strings.TrimSpace(in.Code)
@@ -237,6 +273,7 @@ func (s *Service) Confirm(ctx context.Context, in Confirmation) error {
 	return nil
 }
 
+// Reenvio
 func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	email := normalizeEmail(in.Email)
 	if email == "" {
@@ -247,7 +284,7 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	case err == nil:
 		record(ctx, "auth.codigo_reenviado", audit.Success, "", &audit.Actor{Email: email})
 	case errors.Is(err, errNoAccount), errors.Is(err, errInvalidInput):
-		// Cognito answers InvalidParameter for an account already confirmed.
+
 		record(ctx, "auth.codigo_reenviado", audit.Failure, "conta inexistente ou já confirmada", &audit.Actor{Email: email})
 	case errors.Is(err, errThrottled):
 		return apperr.TooManyRequests(msgThrottled)
@@ -257,6 +294,11 @@ func (s *Service) ResendCode(ctx context.Context, in ResendInput) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, error) {
 	users, err := s.directory.ListUsers(ctx)
 	if err != nil {
@@ -290,6 +332,7 @@ func (s *Service) ListUsers(ctx context.Context, viewer actor.Actor) ([]User, er
 	return users, nil
 }
 
+// Consulta
 func (s *Service) advisees(ctx context.Context, advisor actor.Actor, users []User) ([]User, error) {
 	if s.advising == nil || !advisor.HasRole(actor.RoleAdvisor) {
 		return []User{}, nil
@@ -303,9 +346,10 @@ func (s *Service) advisees(ctx context.Context, advisor actor.Actor, users []Use
 	}), nil
 }
 
+// Auditoria
 func accountResource(id string) *audit.Resource { return &audit.Resource{Type: "usuario", ID: id} }
 
-// account finds an account by its sub, the id the account list shows.
+// Consulta
 func (s *Service) account(ctx context.Context, id string) (User, error) {
 	if !subFormat.MatchString(id) {
 		return User{}, apperr.NotFound(msgAccountNotFound)
@@ -325,6 +369,7 @@ func (s *Service) account(ctx context.Context, id string) (User, error) {
 	return u, nil
 }
 
+// Verificação
 func (s *Service) lastActiveAdmin(ctx context.Context, u User) (bool, error) {
 	if u.Role != actor.RoleAdmin || u.Status != StatusActive {
 		return false, nil
@@ -341,6 +386,7 @@ func (s *Service) lastActiveAdmin(ctx context.Context, u User) (bool, error) {
 	return true, nil
 }
 
+// Gravação
 func (s *Service) saveName(ctx context.Context, u User) error {
 	if u.Role == actor.RoleStudent {
 		return s.profiles.SaveStudent(ctx, u.RGM, u.Name)
@@ -348,6 +394,7 @@ func (s *Service) saveName(ctx context.Context, u User) error {
 	return s.profiles.SaveStaff(ctx, u.ID, u.Name, u.Role)
 }
 
+// Tradução
 func adminError(err error) error {
 	switch {
 	case errors.Is(err, errNoAccount):
@@ -358,11 +405,13 @@ func adminError(err error) error {
 	return apperr.Internal("Não foi possível alterar a conta. Tente novamente em instantes.", err)
 }
 
+// Recusa
 func refuse(ctx context.Context, action, id string, err error) error {
 	audit.Record(ctx, audit.Event{Action: action, Result: audit.Failure, Reason: message(err), Resource: accountResource(id)})
 	return err
 }
 
+// Renomeação
 func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) error {
 	const action = "usuario.nome_alterado"
 	name := strings.TrimSpace(in.Name)
@@ -387,6 +436,7 @@ func (s *Service) RenameAccount(ctx context.Context, id string, in NameInput) er
 	return nil
 }
 
+// Troca
 func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, in RoleInput) error {
 	const action = "usuario.perfil_alterado"
 	if in.Role != actor.RoleAdvisor && in.Role != actor.RoleAdmin {
@@ -425,6 +475,7 @@ func (s *Service) ChangeRole(ctx context.Context, admin actor.Actor, id string, 
 	return nil
 }
 
+// Desativação
 func (s *Service) DisableAccount(ctx context.Context, admin actor.Actor, id string) error {
 	const action = "usuario.desativado"
 	if id == admin.Sub {
@@ -451,6 +502,7 @@ func (s *Service) DisableAccount(ctx context.Context, admin actor.Actor, id stri
 	return nil
 }
 
+// Reativação
 func (s *Service) EnableAccount(ctx context.Context, id string) error {
 	const action = "usuario.reativado"
 	u, err := s.account(ctx, id)
@@ -467,6 +519,7 @@ func (s *Service) EnableAccount(ctx context.Context, id string) error {
 	return nil
 }
 
+// Reenvio
 func (s *Service) ResendInvitation(ctx context.Context, id string) error {
 	const action = "usuario.convite_reenviado"
 	u, err := s.account(ctx, id)
@@ -488,6 +541,7 @@ func (s *Service) ResendInvitation(ctx context.Context, id string) error {
 	return nil
 }
 
+// Criação
 func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 	name := strings.TrimSpace(in.Name)
 	email := normalizeEmail(in.Email)
@@ -495,7 +549,7 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 	case name == "" || email == "":
 		return apperr.Invalid(msgAccountRequired)
 	case !strings.HasSuffix(email, "@umc.br"):
-		// @alunos.umc.br is the students' domain.
+
 		return apperr.Invalid(msgInstitutionalEmail)
 	case in.Role != actor.RoleAdvisor && in.Role != actor.RoleAdmin:
 		return apperr.Invalid(msgStaffRole)
@@ -523,6 +577,11 @@ func (s *Service) CreateAccount(ctx context.Context, in NewAccount) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Consultas
+// ---------------------------------------------------------------------------
+
+// Verificação
 func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 	if !digitsOnly.MatchString(rgm) {
 		return false, nil
@@ -534,11 +593,12 @@ func (s *Service) StudentExists(ctx context.Context, rgm string) (bool, error) {
 	return slices.ContainsFunc(users, func(u User) bool { return u.Role == actor.RoleStudent && u.RGM == rgm }), nil
 }
 
-// StudentNames maps each RGM with a student account to its name.
+// Consulta
 func (s *Service) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
 	return s.profiles.StudentNames(ctx, rgms)
 }
 
+// Consulta
 func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, error) {
 	if !subFormat.MatchString(sub) {
 		return "", false, nil
@@ -550,6 +610,7 @@ func (s *Service) AdvisorName(ctx context.Context, sub string) (string, bool, er
 	return p.Name, true, nil
 }
 
+// Sincronização
 func SyncNames(ctx context.Context, d Directory, p Profiles, apply bool) (students, staff int, err error) {
 	users, err := d.ListUsers(ctx)
 	if err != nil {
@@ -574,6 +635,7 @@ func SyncNames(ctx context.Context, d Directory, p Profiles, apply bool) (studen
 	return students, staff, nil
 }
 
+// Verificação
 func (s *Service) AdvisorExists(ctx context.Context, sub string) (bool, error) {
 	if !subFormat.MatchString(sub) {
 		return false, nil

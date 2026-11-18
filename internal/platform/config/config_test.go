@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// Configuração
 func TestFromEnv(t *testing.T) {
 	t.Setenv("TABLE_NAME", "table")
 	t.Setenv("GSI_NAME", "")

@@ -8,12 +8,17 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 )
 
+// ---------------------------------------------------------------------------
+// Projetos
+// ---------------------------------------------------------------------------
+
 const (
 	maxNameLen        = 150
 	maxDescriptionLen = 2000
 	MaxMembers        = 10
 )
 
+// Modelo
 type Project struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"nome"`
@@ -23,18 +28,21 @@ type Project struct {
 	AdvisorID   string   `json:"orientadorId,omitempty"`
 }
 
+// Entrada
 type ProjectInput struct {
 	Name        string   `json:"nome"`
 	Description string   `json:"descricao"`
 	Members     []string `json:"integrantes"`
 }
 
+// Normalização
 func (in ProjectInput) normalized() ProjectInput {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
 	return in
 }
 
+// Validação
 func (in ProjectInput) validate() string {
 	switch {
 	case in.Name == "":
@@ -47,14 +55,25 @@ func (in ProjectInput) validate() string {
 	return ""
 }
 
+// ---------------------------------------------------------------------------
+// Membros e orientador
+// ---------------------------------------------------------------------------
+
+// Entrada
 type MemberInput struct {
 	RGM string `json:"rgm"`
 }
 
+// Entrada
 type AdvisorInput struct {
 	AdvisorID string `json:"orientadorId"`
 }
 
+// ---------------------------------------------------------------------------
+// Convites
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Invitation struct {
 	ProjectID   string `json:"projetoId"`
 	ProjectName string `json:"projetoNome"`
@@ -64,8 +83,14 @@ type Invitation struct {
 	CreatedAt   string `json:"criadoEm"`
 }
 
+// ---------------------------------------------------------------------------
+// Permissões
+// ---------------------------------------------------------------------------
+
+// Verificação
 func isStaff(a actor.Actor) bool { return a.HasRole(actor.RoleAdmin, actor.RoleAdvisor) }
 
+// Verificação
 func IsMember(a actor.Actor, p Project) bool {
 	if isStaff(a) {
 		return false
@@ -74,24 +99,34 @@ func IsMember(a actor.Actor, p Project) bool {
 	return rgm != "" && slices.Contains(p.Members, rgm)
 }
 
+// Verificação
 func Advises(a actor.Actor, p Project) bool {
 	return a.HasRole(actor.RoleAdvisor) && a.Sub != "" && p.AdvisorID == a.Sub
 }
 
+// Permissão
 func CanReview(a actor.Actor, p Project) bool { return a.HasRole(actor.RoleAdmin) || Advises(a, p) }
 
+// Permissão
 func CanView(a actor.Actor, p Project) bool { return CanReview(a, p) || IsMember(a, p) }
 
+// ---------------------------------------------------------------------------
+// Visões
+// ---------------------------------------------------------------------------
+
+// Modelo
 type Member struct {
 	RGM  string  `json:"rgm"`
 	Name *string `json:"nome"`
 }
 
+// Modelo
 type Advisor struct {
 	ID   string `json:"id"`
 	Name string `json:"nome"`
 }
 
+// Modelo
 type Cohort struct {
 	ID     string `json:"id"`
 	Course string `json:"nome"`
@@ -99,6 +134,7 @@ type Cohort struct {
 	Term   string `json:"periodo"`
 }
 
+// Resposta
 type Detail struct {
 	Project Project  `json:"projeto"`
 	Members []Member `json:"integrantes"`
@@ -106,12 +142,14 @@ type Detail struct {
 	Cohort  *Cohort  `json:"turma"`
 }
 
+// Resposta
 type MyPFC struct {
 	Cohort    *Cohort `json:"turma"`
 	ProgramID string  `json:"programaId,omitempty"`
 	Group     *Detail `json:"grupo"`
 }
 
+// Montagem
 func group(creator string, classmates []string) []string {
 	seen := map[string]bool{creator: true}
 	out := []string{creator}
@@ -125,6 +163,10 @@ func group(creator string, classmates []string) []string {
 	}
 	return out
 }
+
+// ---------------------------------------------------------------------------
+// Mensagens
+// ---------------------------------------------------------------------------
 
 const (
 	msgAdminOnly            = "Acesso restrito à coordenação."
@@ -157,16 +199,29 @@ const (
 	msgCannotJoin           = "Não foi possível entrar no grupo: ele já atingiu o limite de integrantes ou você já faz parte dele."
 )
 
-func msgAlreadyMember(rgm string) string  { return "O RGM " + rgm + " já é integrante do grupo." }
-func msgNotMember(rgm string) string      { return "O RGM " + rgm + " não é integrante do grupo." }
+// Mensagem
+func msgAlreadyMember(rgm string) string { return "O RGM " + rgm + " já é integrante do grupo." }
+
+// Mensagem
+func msgNotMember(rgm string) string { return "O RGM " + rgm + " não é integrante do grupo." }
+
+// Mensagem
 func msgInOtherProject(rgm string) string { return "O RGM " + rgm + " já faz parte de outro projeto." }
+
+// Mensagem
 func msgNotInCohort(rgm string) string {
 	return "O RGM " + rgm + " não está pré-autorizado na sua turma. Peça à coordenação a pré-autorização."
 }
+
+// Mensagem
 func msgNotInGroupCohort(rgm string) string {
 	return "O RGM " + rgm + " não está pré-autorizado na turma do grupo. Peça à coordenação a pré-autorização."
 }
+
+// Mensagem
 func msgAlreadyInvited(rgm string) string { return "O RGM " + rgm + " já tem um convite deste grupo." }
+
+// Mensagem
 func msgInNamedProject(rgm, name string) string {
 	return "O RGM " + rgm + " já faz parte do projeto \"" + name + "\"."
 }

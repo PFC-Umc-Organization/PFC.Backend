@@ -1,5 +1,3 @@
-// Package app is the composition root: it builds the shared clients and
-// wires every module into the router.
 package app
 
 import (
@@ -22,6 +20,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/references"
 )
 
+// ---------------------------------------------------------------------------
+// Composição
+// ---------------------------------------------------------------------------
+
+// Dependências
 type Deps struct {
 	Config  config.Config
 	Table   *dynamo.Table
@@ -29,6 +32,7 @@ type Deps struct {
 	S3      *s3.Client
 }
 
+// Carga
 func Load(ctx context.Context) (Deps, error) {
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -46,6 +50,7 @@ func Load(ctx context.Context) (Deps, error) {
 	}, nil
 }
 
+// Construção
 func New(d Deps) *httpapi.Router {
 	groupsStore := groups.NewDynamoStore(d.Table)
 	academicSvc := academic.NewService(academic.NewDynamoStore(d.Table), groupsStore)
@@ -59,8 +64,6 @@ func New(d Deps) *httpapi.Router {
 		OpenAlexAPIKey: d.Config.OpenAlexAPIKey,
 	})
 
-	// Without a bucket the interfaces stay nil (not a nil *storage.Bucket):
-	// file fields keep only names and materials are links only.
 	var deliveryFiles deliveries.Files
 	var materialFiles materials.Files
 	if d.Config.UploadsBucket != "" {
@@ -80,10 +83,14 @@ func New(d Deps) *httpapi.Router {
 	return r
 }
 
-// academicForGroups hands groups the cohort in its own type, so neither
-// module imports the other.
+// ---------------------------------------------------------------------------
+// Acadêmico
+// ---------------------------------------------------------------------------
+
+// Adaptador
 type academicForGroups struct{ *academic.Service }
 
+// Consulta
 func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
 	programs, err := a.Service.ListPrograms(ctx)
 	ids := make([]string, 0, len(programs))
@@ -93,24 +100,31 @@ func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
 	return ids, err
 }
 
+// Consulta
 func (a academicForGroups) Cohort(ctx context.Context, id string) (groups.Cohort, bool, error) {
 	c, found, err := a.Service.Cohort(ctx, id)
 	return groups.Cohort{ID: c.ID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
 }
 
-// deliveriesCohorts answers deliveries' cohort questions from the academic
-// module, so neither imports the other.
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Adaptador
 type deliveriesCohorts struct{ *academic.Service }
 
+// Consulta
 func (c deliveriesCohorts) OfProject(ctx context.Context, p groups.Project) (string, error) {
 	id, _, err := c.Service.CohortOfProgram(ctx, p.ProgramID)
 	return id, err
 }
 
+// Consulta
 func (c deliveriesCohorts) OfStudent(ctx context.Context, rgm string) (string, error) {
 	return c.Service.CohortOf(ctx, rgm)
 }
 
+// Verificação
 func (c deliveriesCohorts) Exists(ctx context.Context, id string) (bool, error) {
 	_, found, err := c.Service.Cohort(ctx, id)
 	return found, err

@@ -12,20 +12,32 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 )
 
+// ---------------------------------------------------------------------------
+// Cliente
+// ---------------------------------------------------------------------------
+
 const pageSize = 60
 
+// Cliente
 type Cognito struct {
 	client     *cip.Client
 	clientID   string
 	userPoolID string
 }
 
+// Construção
 func NewCognito(client *cip.Client, clientID, userPoolID string) *Cognito {
 	return &Cognito{client: client, clientID: clientID, userPoolID: userPoolID}
 }
 
+// Classificação
 func classify(err error, target error) error { return fmt.Errorf("%w: %w", target, err) }
 
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
+
+// Login
 func (c *Cognito) SignIn(ctx context.Context, email, password string) (SignInResult, error) {
 	out, err := c.client.InitiateAuth(ctx, &cip.InitiateAuthInput{
 		AuthFlow:       types.AuthFlowTypeUserPasswordAuth,
@@ -49,6 +61,7 @@ func (c *Cognito) SignIn(ctx context.Context, email, password string) (SignInRes
 	return tokenOf(out.AuthenticationResult)
 }
 
+// Extração
 func tokenOf(r *types.AuthenticationResultType) (SignInResult, error) {
 	if r == nil || r.IdToken == nil {
 		return SignInResult{}, errors.New("Cognito returned no token")
@@ -56,6 +69,11 @@ func tokenOf(r *types.AuthenticationResultType) (SignInResult, error) {
 	return SignInResult{IDToken: *r.IdToken}, nil
 }
 
+// ---------------------------------------------------------------------------
+// Senhas
+// ---------------------------------------------------------------------------
+
+// Nova senha
 func (c *Cognito) CompleteNewPassword(ctx context.Context, email, session, password string) (string, error) {
 	out, err := c.client.RespondToAuthChallenge(ctx, &cip.RespondToAuthChallengeInput{
 		ClientId:           aws.String(c.clientID),
@@ -82,11 +100,13 @@ func (c *Cognito) CompleteNewPassword(ctx context.Context, email, session, passw
 	return r.IDToken, err
 }
 
+// Recuperação
 func (c *Cognito) ForgotPassword(ctx context.Context, email string) error {
 	_, err := c.client.ForgotPassword(ctx, &cip.ForgotPasswordInput{ClientId: aws.String(c.clientID), Username: aws.String(email)})
 	return classifyConfirmation(err)
 }
 
+// Redefinição
 func (c *Cognito) ConfirmForgotPassword(ctx context.Context, email, code, password string) error {
 	_, err := c.client.ConfirmForgotPassword(ctx, &cip.ConfirmForgotPasswordInput{
 		ClientId:         aws.String(c.clientID),
@@ -101,6 +121,11 @@ func (c *Cognito) ConfirmForgotPassword(ctx context.Context, email, code, passwo
 	return classifyConfirmation(err)
 }
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Montagem
 func signUpAttributes(name, email string) []types.AttributeType {
 	return []types.AttributeType{
 		{Name: aws.String("email"), Value: aws.String(email)},
@@ -109,6 +134,7 @@ func signUpAttributes(name, email string) []types.AttributeType {
 	}
 }
 
+// Cadastro
 func (c *Cognito) SignUp(ctx context.Context, name, email, password string) error {
 	_, err := c.client.SignUp(ctx, &cip.SignUpInput{
 		ClientId:       aws.String(c.clientID),
@@ -119,6 +145,7 @@ func (c *Cognito) SignUp(ctx context.Context, name, email, password string) erro
 	return classifySignUp(err)
 }
 
+// Classificação
 func classifySignUp(err error) error {
 	var (
 		weak      *types.InvalidPasswordException
@@ -144,6 +171,7 @@ func classifySignUp(err error) error {
 	return err
 }
 
+// Confirmação
 func (c *Cognito) ConfirmSignUp(ctx context.Context, email, code string) error {
 	_, err := c.client.ConfirmSignUp(ctx, &cip.ConfirmSignUpInput{
 		ClientId:         aws.String(c.clientID),
@@ -153,6 +181,7 @@ func (c *Cognito) ConfirmSignUp(ctx context.Context, email, code string) error {
 	return classifyConfirmation(err)
 }
 
+// Reenvio
 func (c *Cognito) ResendCode(ctx context.Context, email string) error {
 	_, err := c.client.ResendConfirmationCode(ctx, &cip.ResendConfirmationCodeInput{
 		ClientId: aws.String(c.clientID),
@@ -161,6 +190,7 @@ func (c *Cognito) ResendCode(ctx context.Context, email string) error {
 	return classifyConfirmation(err)
 }
 
+// Classificação
 func classifyConfirmation(err error) error {
 	var (
 		wrong     *types.CodeMismatchException
@@ -180,7 +210,7 @@ func classifyConfirmation(err error) error {
 	case errors.As(err, &expired):
 		return classify(err, errExpiredCode)
 	case errors.As(err, &confirmed):
-		// ConfirmSignUp on a CONFIRMED account answers NotAuthorized.
+
 		return classify(err, errAlreadyConfirmed)
 	case errors.As(err, &missing):
 		return classify(err, errNoAccount)
@@ -192,6 +222,11 @@ func classifyConfirmation(err error) error {
 	return err
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
+// Criação
 func (c *Cognito) CreateAccount(ctx context.Context, name, email string, role actor.Role) (string, error) {
 	out, err := c.client.AdminCreateUser(ctx, &cip.AdminCreateUserInput{
 		UserPoolId: aws.String(c.userPoolID),
@@ -218,6 +253,7 @@ func (c *Cognito) CreateAccount(ctx context.Context, name, email string, role ac
 	return toUser(*out.User).ID, nil
 }
 
+// Mapeamento
 func toUser(u types.UserType) User {
 	attrs := make(map[string]string, len(u.Attributes))
 	for _, a := range u.Attributes {
@@ -228,6 +264,7 @@ func toUser(u types.UserType) User {
 	return user
 }
 
+// Classificação
 func classifyAdmin(err error) error {
 	var (
 		missing   *types.UserNotFoundException
@@ -247,6 +284,7 @@ func classifyAdmin(err error) error {
 	return err
 }
 
+// Atualização
 func (c *Cognito) setAttribute(ctx context.Context, username, name, value string) error {
 	_, err := c.client.AdminUpdateUserAttributes(ctx, &cip.AdminUpdateUserAttributesInput{
 		UserPoolId:     aws.String(c.userPoolID),
@@ -256,14 +294,17 @@ func (c *Cognito) setAttribute(ctx context.Context, username, name, value string
 	return classifyAdmin(err)
 }
 
+// Atualização
 func (c *Cognito) SetName(ctx context.Context, username, name string) error {
 	return c.setAttribute(ctx, username, "name", name)
 }
 
+// Atualização
 func (c *Cognito) SetRole(ctx context.Context, username string, role actor.Role) error {
 	return c.setAttribute(ctx, username, "custom:perfil", string(role))
 }
 
+// Desativação
 func (c *Cognito) Disable(ctx context.Context, username string) error {
 	if _, err := c.client.AdminDisableUser(ctx, &cip.AdminDisableUserInput{
 		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
@@ -276,6 +317,7 @@ func (c *Cognito) Disable(ctx context.Context, username string) error {
 	return classifyAdmin(err)
 }
 
+// Reativação
 func (c *Cognito) Enable(ctx context.Context, username string) error {
 	_, err := c.client.AdminEnableUser(ctx, &cip.AdminEnableUserInput{
 		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
@@ -283,6 +325,7 @@ func (c *Cognito) Enable(ctx context.Context, username string) error {
 	return classifyAdmin(err)
 }
 
+// Reenvio
 func (c *Cognito) ResendInvitation(ctx context.Context, email string) error {
 	_, err := c.client.AdminCreateUser(ctx, &cip.AdminCreateUserInput{
 		UserPoolId:    aws.String(c.userPoolID),
@@ -292,6 +335,11 @@ func (c *Cognito) ResendInvitation(ctx context.Context, email string) error {
 	return classifyAdmin(err)
 }
 
+// ---------------------------------------------------------------------------
+// Usuários
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]User, error) {
 	users := []User{}
 	var token *string
@@ -314,14 +362,17 @@ func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]
 	}
 }
 
+// Listagem
 func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
 	return c.listUsers(ctx, "", pageSize)
 }
 
+// Busca
 func (c *Cognito) UsersWithEmailPrefix(ctx context.Context, prefix string) ([]User, error) {
 	return c.listUsers(ctx, fmt.Sprintf(`email ^= "%s"`, prefix), pageSize)
 }
 
+// Busca
 func (c *Cognito) UsersWithSub(ctx context.Context, sub string) ([]User, error) {
 	return c.listUsers(ctx, fmt.Sprintf(`sub = "%s"`, sub), 1)
 }

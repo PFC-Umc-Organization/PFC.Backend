@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// Validação
 func TestActivityInputValidation(t *testing.T) {
 	if msg := (ActivityInput{Title: "  Tema  ", Description: "d", Deadline: "2026-10-15T23:59"}).normalized().validate(); msg != "" {
 		t.Errorf("valid input refused: %s", msg)
@@ -20,6 +21,7 @@ func TestActivityInputValidation(t *testing.T) {
 	}
 }
 
+// Validação
 func TestFieldInputValidation(t *testing.T) {
 	if f, msg := (FieldInput{Label: " Repo ", Type: FieldLink}).normalized(); msg != "" || f.Label != "Repo" {
 		t.Errorf("valid field refused: %q %s", f.Label, msg)
@@ -32,6 +34,7 @@ func TestFieldInputValidation(t *testing.T) {
 	}
 }
 
+// Normalização
 func TestNormalizedFields(t *testing.T) {
 	fields, msg := normalizedFields(nil)
 	if msg != "" || len(fields) != 1 || fields[0].Type != FieldFile || !fields[0].Required {
@@ -48,6 +51,7 @@ func TestNormalizedFields(t *testing.T) {
 	}
 }
 
+// Validação
 func TestValidAnswers(t *testing.T) {
 	fields := []Field{
 		{ID: "c1", Label: "Arquivo", Type: FieldFile, Required: true},

@@ -10,21 +10,21 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table):
-//
-//	material  PK=MATERIAL#<id>  SK=PROFILE  GSI1PK=MATERIAIS  GSI1SK=MATERIAL#<id>
 const (
 	materialPrefix = "MATERIAL#"
 	partition      = "MATERIAIS"
 	profileSK      = "PROFILE"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// Item
 type item struct {
 	PK          string  `dynamodbav:"PK"`
 	SK          string  `dynamodbav:"SK"`
@@ -42,6 +42,7 @@ type item struct {
 	AuthorSub   string  `dynamodbav:"autorSub"`
 }
 
+// Mapeamento
 func (it item) material() Material {
 	return Material{
 		ID:          strings.TrimPrefix(it.PK, materialPrefix),
@@ -58,8 +59,10 @@ func (it item) material() Material {
 	}
 }
 
+// Chave
 func key(id string) dynamo.Item { return dynamo.Key(materialPrefix+id, profileSK) }
 
+// Criação
 func (s *DynamoStore) Create(ctx context.Context, m Material) error {
 	err := dynamo.PutStruct(ctx, s.table, item{
 		PK: materialPrefix + m.ID, SK: profileSK, GSI1PK: partition, GSI1SK: materialPrefix + m.ID,
@@ -72,11 +75,13 @@ func (s *DynamoStore) Create(ctx context.Context, m Material) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) Get(ctx context.Context, id string) (Material, bool, error) {
 	it, found, err := dynamo.Get[item](ctx, s.table, key(id))
 	return it.material(), found, err
 }
 
+// Listagem
 func (s *DynamoStore) List(ctx context.Context) ([]Material, error) {
 	items, err := dynamo.QueryIndex[item](ctx, s.table, partition)
 	if err != nil {
@@ -89,6 +94,7 @@ func (s *DynamoStore) List(ctx context.Context) ([]Material, error) {
 	return out, nil
 }
 
+// Exclusão
 func (s *DynamoStore) Delete(ctx context.Context, id string) (Material, error) {
 	old, err := s.table.DeleteItem(ctx, key(id), dynamo.Write{Condition: "attribute_exists(PK)", Return: types.ReturnValueAllOld})
 	if dynamo.ConditionFailed(err) {

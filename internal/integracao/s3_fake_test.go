@@ -14,20 +14,22 @@ import (
 	"sync"
 )
 
+// Simulação
 type fakeObject struct {
 	data        []byte
 	contentType string
 }
 
-// fakeS3 answers path-style requests (/<bucket>/<key>) and the browser's
-// form POST, enforcing the policy's Content-Type and size like S3 does.
+// Simulação
 type fakeS3 struct {
 	mu      sync.Mutex
 	objects map[string]fakeObject
 }
 
+// Construção
 func newFakeS3() *fakeS3 { return &fakeS3{objects: map[string]fakeObject{}} }
 
+// Despacho
 func (f *fakeS3) serve(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -41,6 +43,7 @@ func (f *fakeS3) serve(endpoint string) error {
 	return nil
 }
 
+// Verificação
 func (f *fakeS3) has(key string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -48,6 +51,7 @@ func (f *fakeS3) has(key string) bool {
 	return ok
 }
 
+// Atendimento
 func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -86,6 +90,7 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Envio
 func (f *fakeS3) post(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -135,7 +140,7 @@ func (f *fakeS3) post(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// list answers ListObjectsV2 in a single page.
+// Listagem
 func (f *fakeS3) list(w http.ResponseWriter, prefix string) {
 	type object struct{ Key string }
 	out := struct {
@@ -152,6 +157,7 @@ func (f *fakeS3) list(w http.ResponseWriter, prefix string) {
 	xml.NewEncoder(w).Encode(out)
 }
 
+// Exclusão
 func (f *fakeS3) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Object []struct{ Key string }

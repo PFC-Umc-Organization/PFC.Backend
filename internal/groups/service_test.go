@@ -14,6 +14,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Cenário
 type world struct {
 	Store
 	projects    map[string]Project
@@ -25,6 +30,7 @@ type world struct {
 	joined      []string
 }
 
+// Construção
 func newWorld() *world {
 	return &world{
 		projects:    map[string]Project{"p1": {ID: "p1", Name: "Athena", ProgramID: "prog-a", Members: []string{"111"}}},
@@ -35,11 +41,14 @@ func newWorld() *world {
 	}
 }
 
+// Consulta
 func (w *world) GetProject(_ context.Context, id string) (Project, bool, error) {
 	p, ok := w.projects[id]
 	p.Members = slices.Clone(p.Members)
 	return p, ok, nil
 }
+
+// Criação
 func (w *world) CreateProject(_ context.Context, p Project) error {
 	for _, m := range p.Members {
 		if _, ok := w.taken[m]; ok {
@@ -49,6 +58,8 @@ func (w *world) CreateProject(_ context.Context, p Project) error {
 	w.projects[p.ID] = p
 	return nil
 }
+
+// Consulta
 func (w *world) ProjectOfMember(ctx context.Context, rgm string) (Project, bool, error) {
 	id, ok := w.taken[rgm]
 	if !ok {
@@ -56,6 +67,8 @@ func (w *world) ProjectOfMember(ctx context.Context, rgm string) (Project, bool,
 	}
 	return w.GetProject(ctx, id)
 }
+
+// Consulta
 func (w *world) ProjectsOfMembers(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, r := range rgms {
@@ -65,6 +78,8 @@ func (w *world) ProjectsOfMembers(_ context.Context, rgms []string) (map[string]
 	}
 	return out, nil
 }
+
+// Vinculação
 func (w *world) AddMember(_ context.Context, id, rgm string, _ []string) error {
 	if w.full {
 		return errStale
@@ -72,6 +87,8 @@ func (w *world) AddMember(_ context.Context, id, rgm string, _ []string) error {
 	w.joined = append(w.joined, id+"|"+rgm)
 	return nil
 }
+
+// Criação
 func (w *world) CreateInvitation(_ context.Context, inv Invitation) error {
 	key := inv.ProjectID + "|" + inv.RGM
 	if w.invitations[key] {
@@ -80,9 +97,13 @@ func (w *world) CreateInvitation(_ context.Context, inv Invitation) error {
 	w.invitations[key] = true
 	return nil
 }
+
+// Verificação
 func (w *world) InvitationExists(_ context.Context, projectID, rgm string) (bool, error) {
 	return w.invitations[projectID+"|"+rgm], nil
 }
+
+// Filtro
 func (w *world) invitationsWhere(match func(project, rgm string) bool) []Invitation {
 	out := []Invitation{}
 	for key := range w.invitations {
@@ -93,12 +114,18 @@ func (w *world) invitationsWhere(match func(project, rgm string) bool) []Invitat
 	}
 	return out
 }
+
+// Listagem
 func (w *world) InvitationsOfProject(_ context.Context, projectID string) ([]Invitation, error) {
 	return w.invitationsWhere(func(p, _ string) bool { return p == projectID }), nil
 }
+
+// Listagem
 func (w *world) InvitationsOfStudent(_ context.Context, rgm string) ([]Invitation, error) {
 	return w.invitationsWhere(func(_, r string) bool { return r == rgm }), nil
 }
+
+// Exclusão
 func (w *world) DeleteInvitation(_ context.Context, projectID, rgm string) error {
 	key := projectID + "|" + rgm
 	if !w.invitations[key] {
@@ -108,7 +135,10 @@ func (w *world) DeleteInvitation(_ context.Context, projectID, rgm string) error
 	return nil
 }
 
+// Verificação
 func (w *world) ProgramExists(context.Context, string) (bool, error) { return true, nil }
+
+// Consulta
 func (w *world) CohortOfProgram(_ context.Context, program string) (string, bool, error) {
 	for cohort, p := range w.programs {
 		if p == program {
@@ -117,12 +147,16 @@ func (w *world) CohortOfProgram(_ context.Context, program string) (string, bool
 	}
 	return "", false, nil
 }
+
+// Consulta
 func (w *world) Cohort(_ context.Context, id string) (Cohort, bool, error) {
 	if id == "" {
 		return Cohort{}, false, nil
 	}
 	return Cohort{ID: id, Course: "Curso " + id, Shift: "NOITE", Term: "2026.2"}, true, nil
 }
+
+// Listagem
 func (w *world) ProjectsOfProgram(_ context.Context, program string) ([]Project, error) {
 	out := []Project{}
 	for _, p := range w.projects {
@@ -133,14 +167,20 @@ func (w *world) ProjectsOfProgram(_ context.Context, program string) ([]Project,
 	slices.SortFunc(out, func(a, b Project) int { return strings.Compare(a.ID, b.ID) })
 	return out, nil
 }
+
+// Consulta
 func (w *world) ProgramOfCohort(_ context.Context, cohort string) (string, bool, error) {
 	id, ok := w.programs[cohort]
 	return id, ok, nil
 }
+
+// Verificação
 func (w *world) IsEnrolled(_ context.Context, rgm string) (bool, error) {
 	_, ok := w.cohorts[rgm]
 	return ok, nil
 }
+
+// Consulta
 func (w *world) ProgramIDs(context.Context) ([]string, error) {
 	ids := []string{}
 	for _, p := range w.programs {
@@ -148,7 +188,11 @@ func (w *world) ProgramIDs(context.Context) ([]string, error) {
 	}
 	return ids, nil
 }
+
+// Consulta
 func (w *world) CohortOf(_ context.Context, rgm string) (string, error) { return w.cohorts[rgm], nil }
+
+// Consulta
 func (w *world) CohortsOf(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, r := range rgms {
@@ -159,10 +203,16 @@ func (w *world) CohortsOf(_ context.Context, rgms []string) (map[string]string, 
 	return out, nil
 }
 
+// Simulação
 type noAccounts struct{}
 
+// Verificação
 func (noAccounts) StudentExists(context.Context, string) (bool, error) { return false, nil }
+
+// Verificação
 func (noAccounts) AdvisorExists(context.Context, string) (bool, error) { return false, nil }
+
+// Consulta
 func (noAccounts) StudentNames(_ context.Context, rgms []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, r := range rgms {
@@ -172,10 +222,17 @@ func (noAccounts) StudentNames(_ context.Context, rgms []string) (map[string]str
 	}
 	return out, nil
 }
+
+// Consulta
 func (noAccounts) AdvisorName(_ context.Context, sub string) (string, bool, error) {
 	return "Prof " + sub, true, nil
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Construção
 func (w *world) service(t *testing.T) (*Service, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -187,12 +244,14 @@ func (w *world) service(t *testing.T) (*Service, *bytes.Buffer) {
 	return svc, &buf
 }
 
+// Construção
 func studentActor(rgm string) actor.Actor {
 	return actor.Actor{Role: actor.RoleStudent, Email: rgm + "@alunos.umc.br", Name: "Aluno " + rgm}
 }
 
 var advisor = actor.Actor{Role: actor.RoleAdvisor, Email: "prof@umc.br", Sub: "prof-sub"}
 
+// Classificação
 func kindOf(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -200,12 +259,18 @@ func kindOf(err error) apperr.Kind {
 	return 0
 }
 
+// ---------------------------------------------------------------------------
+// Projetos
+// ---------------------------------------------------------------------------
+
+// Regras
 func TestGroup(t *testing.T) {
 	if got := group("1", []string{"2", " 2 ", "", "1", "3"}); !slices.Equal(got, []string{"1", "2", "3"}) {
 		t.Errorf("group = %v", got)
 	}
 }
 
+// Criação
 func TestCreateOwnProject(t *testing.T) {
 	w := newWorld()
 	delete(w.taken, "111")
@@ -227,6 +292,7 @@ func TestCreateOwnProject(t *testing.T) {
 	}
 }
 
+// Recusa
 func TestCreateOwnProjectRefusals(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -262,6 +328,11 @@ func TestCreateOwnProjectRefusals(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Convites
+// ---------------------------------------------------------------------------
+
+// Convite
 func TestAcceptInvitation(t *testing.T) {
 	w := newWorld()
 	svc, _ := w.service(t)
@@ -277,6 +348,7 @@ func TestAcceptInvitation(t *testing.T) {
 	}
 }
 
+// Recusa
 func TestAcceptInvitationRefusals(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -307,6 +379,7 @@ func TestAcceptInvitationRefusals(t *testing.T) {
 	}
 }
 
+// Exclusão
 func TestAcceptInvitationToDeletedGroupDropsIt(t *testing.T) {
 	w := newWorld()
 	svc, _ := w.service(t)
@@ -316,6 +389,7 @@ func TestAcceptInvitationToDeletedGroupDropsIt(t *testing.T) {
 	}
 }
 
+// Convite
 func TestDeclineInvitation(t *testing.T) {
 	w := newWorld()
 	svc, _ := w.service(t)
@@ -327,6 +401,7 @@ func TestDeclineInvitation(t *testing.T) {
 	}
 }
 
+// Convite
 func TestInvite(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -374,6 +449,7 @@ func TestInvite(t *testing.T) {
 	}
 }
 
+// Visibilidade
 func TestInvitationsOfProjectVisibility(t *testing.T) {
 	for viewer, allowed := range map[*actor.Actor]bool{
 		ptr(studentActor("111")):                true,
@@ -398,14 +474,21 @@ func TestInvitationsOfProjectVisibility(t *testing.T) {
 	}
 }
 
+// Ponteiro
 func ptr[T any](v T) *T { return &v }
 
+// Vinculação
 func (w *world) advise(id string) {
 	p := w.projects[id]
 	p.AdvisorID = advisor.Sub
 	w.projects[id] = p
 }
 
+// ---------------------------------------------------------------------------
+// Projetos
+// ---------------------------------------------------------------------------
+
+// Escopo
 func TestProjectsOfProgramScope(t *testing.T) {
 	w := newWorld()
 	w.projects["p2"] = Project{ID: "p2", Name: "Outro", ProgramID: "prog-a", Members: []string{}}
@@ -427,6 +510,7 @@ func TestProjectsOfProgramScope(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestDetail(t *testing.T) {
 	w := newWorld()
 	p := w.projects["p1"]
@@ -457,6 +541,7 @@ func TestDetail(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestMyPFC(t *testing.T) {
 	w := newWorld()
 	w.programs = map[string]string{"turma-a": "prog-a"}
@@ -481,6 +566,11 @@ func TestMyPFC(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Convites
+// ---------------------------------------------------------------------------
+
+// Cancelamento
 func TestCancelInvitation(t *testing.T) {
 	w := newWorld()
 	svc, _ := w.service(t)
@@ -497,6 +587,11 @@ func TestCancelInvitation(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Membros
+// ---------------------------------------------------------------------------
+
+// Pré-autorização
 func TestAddMemberRequiresPreauthorization(t *testing.T) {
 	w := newWorld()
 	svc, buf := w.service(t)
@@ -509,6 +604,7 @@ func TestAddMemberRequiresPreauthorization(t *testing.T) {
 	}
 }
 
+// Vínculo
 func TestMembership(t *testing.T) {
 	p := Project{Members: []string{"111"}}
 	staff := actor.Actor{Role: actor.RoleAdmin, Email: "111@alunos.umc.br"}
@@ -520,6 +616,7 @@ func TestMembership(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestMembersAdvisedBy(t *testing.T) {
 	w := newWorld()
 	w.projects["p2"] = Project{ID: "p2", ProgramID: "prog-b", Members: []string{"333"}}

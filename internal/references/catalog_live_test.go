@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-// These hit the real APIs and are off by default:
-//
-//	REFERENCIAS_INTEGRACAO=1 go test ./internal/references -run Live -v
+// Conexão real
 func liveCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	if os.Getenv("REFERENCIAS_INTEGRACAO") == "" {
@@ -18,6 +16,7 @@ func liveCatalog(t *testing.T) *Catalog {
 	return NewCatalog(CatalogConfig{CrossrefURL: "https://api.crossref.org", OpenAlexURL: "https://api.openalex.org"})
 }
 
+// Integração
 func TestLiveCrossref(t *testing.T) {
 	c := liveCatalog(t)
 	w, err := c.WorkByDOI(context.Background(), "10.1145/3290605.3300233")
@@ -34,6 +33,7 @@ func TestLiveCrossref(t *testing.T) {
 	}
 }
 
+// Integração
 func TestLiveOpenAlex(t *testing.T) {
 	c := liveCatalog(t)
 	total, works, err := c.Search(context.Background(), "gerenciamento de projetos acadêmicos", 1)

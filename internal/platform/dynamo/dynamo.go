@@ -12,21 +12,30 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+// ---------------------------------------------------------------------------
+// Tabela
+// ---------------------------------------------------------------------------
+
+// Item
 type Item = map[string]types.AttributeValue
 
-// Table is the single table plus its overloaded GSI (GSI1PK/GSI1SK).
+// Cliente
 type Table struct {
 	Client *dynamodb.Client
 	Name   string
 	Index  string
 }
 
+// Conversão
 func S(v string) types.AttributeValue { return &types.AttributeValueMemberS{Value: v} }
 
+// Conversão
 func N(v int) types.AttributeValue { return &types.AttributeValueMemberN{Value: fmt.Sprint(v)} }
 
+// Chave
 func Key(pk, sk string) Item { return Item{"PK": S(pk), "SK": S(sk)} }
 
+// Texto
 func String(it Item, attr string) string {
 	if v, ok := it[attr].(*types.AttributeValueMemberS); ok {
 		return v.Value
@@ -34,8 +43,11 @@ func String(it Item, attr string) string {
 	return ""
 }
 
-// QueryAll follows LastEvaluatedKey: a single Query stops at 1 MB without
-// reporting it.
+// ---------------------------------------------------------------------------
+// Consultas
+// ---------------------------------------------------------------------------
+
+// Consulta
 func (t *Table) QueryAll(ctx context.Context, in *dynamodb.QueryInput) ([]Item, error) {
 	in.TableName = aws.String(t.Name)
 	var items []Item
@@ -52,7 +64,7 @@ func (t *Table) QueryAll(ctx context.Context, in *dynamodb.QueryInput) ([]Item, 
 	}
 }
 
-// Query never returns nil, so empty results encode as [] instead of null.
+// Consulta
 func Query[T any](ctx context.Context, t *Table, in *dynamodb.QueryInput) ([]T, error) {
 	items, err := t.QueryAll(ctx, in)
 	if err != nil {
@@ -65,6 +77,7 @@ func Query[T any](ctx context.Context, t *Table, in *dynamodb.QueryInput) ([]T, 
 	return out, nil
 }
 
+// Consulta
 func QueryIndex[T any](ctx context.Context, t *Table, gsi1pk string) ([]T, error) {
 	return Query[T](ctx, t, &dynamodb.QueryInput{
 		IndexName:                 aws.String(t.Index),
@@ -73,6 +86,7 @@ func QueryIndex[T any](ctx context.Context, t *Table, gsi1pk string) ([]T, error
 	})
 }
 
+// Consulta
 func QueryPartition[T any](ctx context.Context, t *Table, pk, skPrefix string) ([]T, error) {
 	return Query[T](ctx, t, &dynamodb.QueryInput{
 		KeyConditionExpression:    aws.String("PK = :pk AND begins_with(SK, :sk)"),
@@ -80,6 +94,7 @@ func QueryPartition[T any](ctx context.Context, t *Table, pk, skPrefix string) (
 	})
 }
 
+// Consulta
 func Get[T any](ctx context.Context, t *Table, key Item, projection ...string) (v T, found bool, err error) {
 	in := &dynamodb.GetItemInput{TableName: aws.String(t.Name), Key: key}
 	if len(projection) > 0 {
@@ -95,25 +110,38 @@ func Get[T any](ctx context.Context, t *Table, key Item, projection ...string) (
 	return v, true, nil
 }
 
+// Verificação
 func (t *Table) Exists(ctx context.Context, key Item) (bool, error) {
 	_, found, err := Get[struct{}](ctx, t, key, "PK")
 	return found, err
 }
 
+// ---------------------------------------------------------------------------
+// Erros
+// ---------------------------------------------------------------------------
+
 var ErrConditionFailed = errors.New("dynamo: condition failed")
 
-// ConditionFailedError carries the stored item when the write asked for
-// ReturnValuesOnConditionCheckFailure=ALL_OLD.
+// Erro
 type ConditionFailedError struct {
 	Old   Item
 	cause error
 }
 
-func (e *ConditionFailedError) Error() string        { return ErrConditionFailed.Error() }
-func (e *ConditionFailedError) Is(target error) bool { return target == ErrConditionFailed }
-func (e *ConditionFailedError) Unwrap() error        { return e.cause }
+// Mensagem
+func (e *ConditionFailedError) Error() string { return ErrConditionFailed.Error() }
 
-// Write holds the optional parts of a single-item write.
+// Comparação
+func (e *ConditionFailedError) Is(target error) bool { return target == ErrConditionFailed }
+
+// Desembrulho
+func (e *ConditionFailedError) Unwrap() error { return e.cause }
+
+// ---------------------------------------------------------------------------
+// Escrita
+// ---------------------------------------------------------------------------
+
+// Escrita
 type Write struct {
 	Condition string
 	Values    Item
@@ -121,6 +149,7 @@ type Write struct {
 	OldOnFail bool
 }
 
+// Retorno
 func (w Write) failureReturn() types.ReturnValuesOnConditionCheckFailure {
 	if w.OldOnFail {
 		return types.ReturnValuesOnConditionCheckFailureAllOld
@@ -128,6 +157,7 @@ func (w Write) failureReturn() types.ReturnValuesOnConditionCheckFailure {
 	return ""
 }
 
+// Tradução
 func conditionError(err error) error {
 	var c *types.ConditionalCheckFailedException
 	if errors.As(err, &c) {
@@ -136,6 +166,7 @@ func conditionError(err error) error {
 	return err
 }
 
+// Gravação
 func (t *Table) PutItem(ctx context.Context, item Item, w Write) error {
 	_, err := t.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:                           aws.String(t.Name),
@@ -147,7 +178,7 @@ func (t *Table) PutItem(ctx context.Context, item Item, w Write) error {
 	return conditionError(err)
 }
 
-// UpdateItem returns the attributes selected by w.Return, if any.
+// Atualização
 func (t *Table) UpdateItem(ctx context.Context, key Item, expression string, w Write) (Item, error) {
 	out, err := t.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:                           aws.String(t.Name),
@@ -164,7 +195,7 @@ func (t *Table) UpdateItem(ctx context.Context, key Item, expression string, w W
 	return out.Attributes, nil
 }
 
-// DeleteItem returns the attributes selected by w.Return, if any.
+// Exclusão
 func (t *Table) DeleteItem(ctx context.Context, key Item, w Write) (Item, error) {
 	out, err := t.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName:                           aws.String(t.Name),
@@ -180,6 +211,7 @@ func (t *Table) DeleteItem(ctx context.Context, key Item, w Write) (Item, error)
 	return out.Attributes, nil
 }
 
+// Gravação
 func PutStruct(ctx context.Context, t *Table, v any, w Write) error {
 	item, err := attributevalue.MarshalMap(v)
 	if err != nil {
@@ -188,6 +220,7 @@ func PutStruct(ctx context.Context, t *Table, v any, w Write) error {
 	return t.PutItem(ctx, item, w)
 }
 
+// Verificação
 func ConditionFailed(err error) bool {
 	var c *types.ConditionalCheckFailedException
 	return errors.Is(err, ErrConditionFailed) || errors.As(err, &c)

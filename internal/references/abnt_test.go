@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// 26/09/2026 12:00 in Brasília.
 var accessDate = time.Date(2026, 9, 26, 15, 0, 0, 0, time.UTC)
 
+// Formatação
 func TestFormatABNT(t *testing.T) {
 	cases := []struct {
 		name string
@@ -55,7 +55,7 @@ func TestFormatABNT(t *testing.T) {
 				Venue:    "Revista de Administração",
 				Volume:   "16",
 				Issue:    "3",
-				Pages:    "283–300", // en dash, as Crossref sometimes sends
+				Pages:    "283–300",
 				Year:     2015,
 			},
 			text: "SILVA, Ana; SOUZA, Carlos. Gestão de projetos: um estudo de caso. " +
@@ -139,6 +139,7 @@ func TestFormatABNT(t *testing.T) {
 	}
 }
 
+// Formatação
 func TestABNTAuthorship(t *testing.T) {
 	three := []Author{
 		{Surname: "Silva", GivenName: "Ana"},
@@ -153,10 +154,11 @@ func TestABNTAuthorship(t *testing.T) {
 	}
 }
 
+// Formatação
 func TestABNTDate(t *testing.T) {
 	cases := map[string]time.Time{
 		"5 maio 2026": time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC),
-		// 02:00 UTC on the 1st is still the 30th in Brasília.
+
 		"30 set. 2026": time.Date(2026, 10, 1, 2, 0, 0, 0, time.UTC),
 		"1 jan. 2027":  time.Date(2027, 1, 1, 15, 0, 0, 0, time.UTC),
 	}
@@ -167,6 +169,7 @@ func TestABNTDate(t *testing.T) {
 	}
 }
 
+// Mapeamento
 func TestAuthorFromFullName(t *testing.T) {
 	cases := []struct {
 		name string

@@ -19,6 +19,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
 
+// ---------------------------------------------------------------------------
+// Dublês
+// ---------------------------------------------------------------------------
+
+// Simulação
 type fakeStore struct {
 	Store
 	activities map[string]Activity
@@ -26,14 +31,17 @@ type fakeStore struct {
 	removed    []int
 	penalties  map[string][]penaltyRecord
 	createErr  error
-	// beforePut runs when a save starts, to play a concurrent writer.
+
 	beforePut func(*fakeStore)
 	putErr    error
 }
 
+// Listagem
 func (f *fakeStore) PenaltiesOfProject(_ context.Context, projectID string) ([]penaltyRecord, error) {
 	return f.penalties[projectID], nil
 }
+
+// Penalidade
 func (f *fakeStore) AddPenalty(_ context.Context, projectID string, r penaltyRecord) error {
 	if f.createErr != nil {
 		return f.createErr
@@ -44,6 +52,8 @@ func (f *fakeStore) AddPenalty(_ context.Context, projectID string, r penaltyRec
 	f.penalties[projectID] = append(f.penalties[projectID], r)
 	return nil
 }
+
+// Perdão
 func (f *fakeStore) WaivePenalty(_ context.Context, projectID, penaltyID string, w Waiver) error {
 	for i, r := range f.penalties[projectID] {
 		if r.ID == penaltyID {
@@ -57,10 +67,13 @@ func (f *fakeStore) WaivePenalty(_ context.Context, projectID, penaltyID string,
 	return f.AddPenalty(context.Background(), projectID, penaltyRecord{ID: penaltyID, Waiver: &w})
 }
 
+// Consulta
 func (f *fakeStore) GetActivity(_ context.Context, id string) (Activity, bool, error) {
 	a, ok := f.activities[id]
 	return a, ok, nil
 }
+
+// Criação
 func (f *fakeStore) CreateActivity(_ context.Context, a Activity) error {
 	if f.createErr != nil {
 		return f.createErr
@@ -71,6 +84,8 @@ func (f *fakeStore) CreateActivity(_ context.Context, a Activity) error {
 	f.activities[a.ID] = a
 	return nil
 }
+
+// Listagem
 func (f *fakeStore) ListActivities(context.Context) ([]Activity, error) {
 	out := []Activity{}
 	for _, a := range f.activities {
@@ -78,10 +93,14 @@ func (f *fakeStore) ListActivities(context.Context) ([]Activity, error) {
 	}
 	return out, nil
 }
+
+// Remoção
 func (f *fakeStore) RemoveField(_ context.Context, _ string, position int, _ string) error {
 	f.removed = append(f.removed, position)
 	return nil
 }
+
+// Gravação
 func (f *fakeStore) PutSubmission(_ context.Context, s Submission, expected *Submission) error {
 	if f.beforePut != nil {
 		f.beforePut(f)
@@ -105,6 +124,7 @@ func (f *fakeStore) PutSubmission(_ context.Context, s Submission, expected *Sub
 	return nil
 }
 
+// Listagem
 func (f *fakeStore) SubmissionsOfProject(_ context.Context, projectID string) ([]Submission, error) {
 	out := []Submission{}
 	for _, s := range f.saved {
@@ -114,6 +134,8 @@ func (f *fakeStore) SubmissionsOfProject(_ context.Context, projectID string) ([
 	}
 	return out, nil
 }
+
+// Consulta
 func (f *fakeStore) GetSubmission(_ context.Context, projectID, activityID string) (Submission, bool, error) {
 	for _, s := range f.saved {
 		if s.ProjectID == projectID && s.ActivityID == activityID {
@@ -122,6 +144,8 @@ func (f *fakeStore) GetSubmission(_ context.Context, projectID, activityID strin
 	}
 	return Submission{}, false, nil
 }
+
+// Validação
 func (f *fakeStore) SetValidation(_ context.Context, projectID, activityID string, v Validation) (Submission, error) {
 	for i, s := range f.saved {
 		if s.ProjectID == projectID && s.ActivityID == activityID {
@@ -131,6 +155,8 @@ func (f *fakeStore) SetValidation(_ context.Context, projectID, activityID strin
 	}
 	return Submission{}, errNotFound
 }
+
+// Exclusão
 func (f *fakeStore) DeleteSubmission(_ context.Context, projectID, activityID string) (Submission, error) {
 	for i, s := range f.saved {
 		if s.ProjectID == projectID && s.ActivityID == activityID {
@@ -141,14 +167,16 @@ func (f *fakeStore) DeleteSubmission(_ context.Context, projectID, activityID st
 	return Submission{}, nil
 }
 
+// Simulação
 type fakeProjects map[string]groups.Project
 
+// Consulta
 func (f fakeProjects) Project(_ context.Context, id string) (groups.Project, bool, error) {
 	p, ok := f[id]
 	return p, ok, nil
 }
 
-// ProjectsOfProgram returns every project; the advisor filter lives in groups.
+// Listagem
 func (f fakeProjects) ProjectsOfProgram(context.Context, actor.Actor, string) ([]groups.Project, error) {
 	out := []groups.Project{}
 	for _, p := range f {
@@ -157,6 +185,11 @@ func (f fakeProjects) ProjectsOfProgram(context.Context, actor.Actor, string) ([
 	return out, nil
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Construção
 func newTestService(t *testing.T, store *fakeStore) *Service {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
@@ -168,17 +201,20 @@ func newTestService(t *testing.T, store *fakeStore) *Service {
 	return svc
 }
 
-// fakeCohorts maps projects and RGMs to a cohort; t1 and t2 exist.
+// Simulação
 type fakeCohorts struct{ project, student map[string]string }
 
+// Consulta
 func (f fakeCohorts) OfProject(_ context.Context, p groups.Project) (string, error) {
 	return f.project[p.ID], nil
 }
 
+// Consulta
 func (f fakeCohorts) OfStudent(_ context.Context, rgm string) (string, error) {
 	return f.student[rgm], nil
 }
 
+// Verificação
 func (f fakeCohorts) Exists(_ context.Context, id string) (bool, error) {
 	return id == "t1" || id == "t2", nil
 }
@@ -188,6 +224,7 @@ var testProjects = fakeProjects{
 	"p2": {ID: "p2", Members: []string{"222"}},
 }
 
+// Mensagem
 func message(err error) string {
 	if e, ok := apperr.As(err); ok {
 		return e.Message
@@ -197,6 +234,11 @@ func message(err error) string {
 
 var tcc = Activity{ID: "a1", Fields: []Field{{ID: "f1", Label: "Arquivo", Type: FieldFile, Required: true}, {ID: "f2", Label: "Repo", Type: FieldLink}}}
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Ordenação
 func TestListActivitiesByDeadline(t *testing.T) {
 	svc := newTestService(t, &fakeStore{activities: map[string]Activity{
 		"b": {ID: "b", Deadline: "2026-11-01T10:00"}, "a": {ID: "a", Deadline: "2026-10-01T10:00"}, "c": {ID: "c", Deadline: "2026-12-01T10:00"},
@@ -208,6 +250,7 @@ func TestListActivitiesByDeadline(t *testing.T) {
 	}
 }
 
+// Remoção
 func TestRemoveField(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc, "one": {ID: "one", Fields: tcc.Fields[:1]}}}
 	svc := newTestService(t, store)
@@ -227,6 +270,11 @@ func TestRemoveField(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Envio
 func TestSubmit(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
 	svc := newTestService(t, store)
@@ -262,6 +310,7 @@ func TestSubmit(t *testing.T) {
 	}
 }
 
+// Prazo
 func TestDeadline(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{
 		"open":   {ID: "open", Deadline: "2026-10-16T09:30", Fields: tcc.Fields},
@@ -273,7 +322,6 @@ func TestDeadline(t *testing.T) {
 	bia := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Bia"}
 	file := func(name string) SubmissionInput { return SubmissionInput{Answers: map[string]string{"f1": name}} }
 
-	// 12:00 UTC is 09:00 in Brasília.
 	if _, err := svc.Submit(ctx, ana, "p1", "open", file("v1.pdf")); err != nil {
 		t.Fatal(err)
 	}
@@ -299,6 +347,11 @@ func TestDeadline(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Permissão
 func TestWritesAreStaffOnly(t *testing.T) {
 	r := httpapi.NewRouter()
 	Routes(r, newTestService(t, &fakeStore{}))
@@ -319,6 +372,7 @@ func TestWritesAreStaffOnly(t *testing.T) {
 	}
 }
 
+// Permissão
 func TestActivitiesAreCoordinationOnly(t *testing.T) {
 	r := httpapi.NewRouter()
 	Routes(r, newTestService(t, &fakeStore{}))
@@ -337,6 +391,11 @@ func TestActivitiesAreCoordinationOnly(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Validação
+// ---------------------------------------------------------------------------
+
+// Validação
 func TestValidate(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
 	svc := newTestService(t, store)
@@ -382,6 +441,11 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Envio
 func TestSubmissionsOfProgram(t *testing.T) {
 	store := &fakeStore{saved: []Submission{{ActivityID: "a1", ProjectID: "p1"}, {ActivityID: "a1", ProjectID: "p2"}, {ActivityID: "a2", ProjectID: "p1"}}}
 	got, err := newTestService(t, store).SubmissionsOfProgram(context.Background(), actor.Actor{Role: actor.RoleAdmin}, "prog")
@@ -394,6 +458,7 @@ func TestSubmissionsOfProgram(t *testing.T) {
 	}
 }
 
+// Permissão
 func TestRemoveSubmissionNeedsReviewer(t *testing.T) {
 	svc := newTestService(t, &fakeStore{})
 	ctx := context.Background()
@@ -419,6 +484,11 @@ func TestRemoveSubmissionNeedsReviewer(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Arquivos
+// ---------------------------------------------------------------------------
+
+// Simulação
 type fakeFiles struct {
 	sizes   map[string]int64
 	deleted []string
@@ -428,26 +498,36 @@ type fakeFiles struct {
 	deleteErr error
 }
 
+// Assinatura
 func (f *fakeFiles) PresignUpload(_ context.Context, key, contentType string, maxBytes int64, _ time.Duration) (storage.Upload, error) {
 	return storage.Upload{URL: "https://bucket", Fields: map[string]string{"key": key, "Content-Type": contentType}}, nil
 }
+
+// Assinatura
 func (f *fakeFiles) PresignDownload(_ context.Context, key, name string, _ time.Duration) (string, error) {
 	return "https://bucket/" + key + "?nome=" + name, nil
 }
+
+// Consulta
 func (f *fakeFiles) Size(_ context.Context, key string) (int64, bool, error) {
 	n, ok := f.sizes[key]
 	return n, ok, nil
 }
+
+// Exclusão
 func (f *fakeFiles) DeleteKeys(_ context.Context, keys []string) error {
 	f.calls++
 	f.deleted = append(f.deleted, keys...)
 	return f.deleteErr
 }
+
+// Exclusão
 func (f *fakeFiles) DeletePrefix(_ context.Context, prefix string) error {
 	f.folders = append(f.folders, prefix)
 	return nil
 }
 
+// Upload
 func TestFiles(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
 	files := &fakeFiles{sizes: map[string]int64{}}
@@ -515,6 +595,7 @@ func TestFiles(t *testing.T) {
 	}
 }
 
+// Fallback
 func TestWithoutStorage(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
 	svc := newTestService(t, store)
@@ -527,6 +608,7 @@ func TestWithoutStorage(t *testing.T) {
 	}
 }
 
+// Classificação
 func kind(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -534,6 +616,11 @@ func kind(err error) apperr.Kind {
 	return 0
 }
 
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
+// Ordem
 func TestSubmitOrder(t *testing.T) {
 	fields := tcc.Fields
 	store := &fakeStore{activities: map[string]Activity{
@@ -547,7 +634,6 @@ func TestSubmitOrder(t *testing.T) {
 	ana := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
 	file := SubmissionInput{Answers: map[string]string{"f1": "v1.pdf"}}
 
-	// The overdue activity does not hold anything back; the nearest open one does.
 	if _, err := svc.Submit(ctx, ana, "p1", "second", file); message(err) != msgBlockedBy("Primeira") {
 		t.Fatalf("second before first: err = %v", err)
 	}
@@ -566,12 +652,17 @@ func TestSubmitOrder(t *testing.T) {
 	if _, err := svc.Submit(ctx, ana, "p1", "third", file); err != nil {
 		t.Fatalf("third: %v", err)
 	}
-	// Editing what was already submitted is not held back.
+
 	if _, err := svc.Submit(ctx, ana, "p1", "first", file); err != nil {
 		t.Fatalf("editing first: %v", err)
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Filtro
 func TestActivitiesByCohort(t *testing.T) {
 	fields := tcc.Fields
 	store := &fakeStore{activities: map[string]Activity{
@@ -620,12 +711,17 @@ func TestActivitiesByCohort(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Penalidades
+// ---------------------------------------------------------------------------
+
+// Isolamento
 func TestOrderAndPenaltiesIgnoreOtherCohorts(t *testing.T) {
 	fields := tcc.Fields
 	store := &fakeStore{activities: map[string]Activity{
-		// Open and earlier, but of another cohort: it must not hold anything back.
+
 		"elsewhere": {ID: "elsewhere", Title: "Da outra", Deadline: "2026-10-18T10:00", Fields: fields, CohortID: "t2"},
-		// Overdue, of another cohort: it must not cost the group a penalty.
+
 		"missed": {ID: "missed", Title: "Perdida", Deadline: "2026-10-01T10:00", Fields: fields, CohortID: "t2"},
 		"mine":   {ID: "mine", Title: "Da turma", Deadline: "2026-10-20T10:00", Fields: fields, CohortID: "t1"},
 	}}
@@ -642,6 +738,7 @@ func TestOrderAndPenaltiesIgnoreOtherCohorts(t *testing.T) {
 	}
 }
 
+// Conflito
 func TestDuplicateIDsAreConflicts(t *testing.T) {
 	svc := newTestService(t, &fakeStore{createErr: errDuplicate, activities: map[string]Activity{"a1": tcc}})
 	ctx := context.Background()
@@ -652,6 +749,11 @@ func TestDuplicateIDsAreConflicts(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Concorrência
+// ---------------------------------------------------------------------------
+
+// Concorrência
 func TestSubmitConcurrency(t *testing.T) {
 	member := actor.Actor{Role: actor.RoleStudent, Email: "111@alunos.umc.br", Name: "Ana"}
 	in := SubmissionInput{Answers: map[string]string{"f1": "tema.pdf"}}
@@ -693,6 +795,11 @@ func TestSubmitConcurrency(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Arquivos
+// ---------------------------------------------------------------------------
+
+// Exclusão
 func TestDeleteFilesBatchedAndBestEffort(t *testing.T) {
 	files := &fakeFiles{sizes: map[string]int64{}, deleteErr: errors.New("s3 down")}
 	svc := newTestService(t, &fakeStore{})

@@ -6,8 +6,14 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// ---------------------------------------------------------------------------
+// Rotas
+// ---------------------------------------------------------------------------
+
+// Rotas
 type handlers struct{ svc *Service }
 
+// Rotas
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 	r.Public("POST", "/auth/login", h.login)
@@ -27,6 +33,11 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("POST", "/admin/usuarios/:usuarioId/convite", httpapi.Admin(msgAdminOnly, h.resendInvitation, httpapi.Audit("usuario.convite_reenviado")))
 }
 
+// ---------------------------------------------------------------------------
+// Autenticação
+// ---------------------------------------------------------------------------
+
+// Login
 func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in Credentials
 	if err := r.Decode(&in); err != nil {
@@ -36,6 +47,11 @@ func (h handlers) login(ctx context.Context, r *httpapi.Request) (httpapi.Respon
 	return httpapi.Reply(200, session, err)
 }
 
+// ---------------------------------------------------------------------------
+// Cadastro
+// ---------------------------------------------------------------------------
+
+// Cadastro
 func (h handlers) signUp(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in SignUpInput
 	if err := r.Decode(&in); err != nil {
@@ -46,6 +62,7 @@ func (h handlers) signUp(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 	}, h.svc.SignUp(ctx, in))
 }
 
+// Confirmação
 func (h handlers) confirm(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in Confirmation
 	if err := r.Decode(&in); err != nil {
@@ -54,6 +71,7 @@ func (h handlers) confirm(ctx context.Context, r *httpapi.Request) (httpapi.Resp
 	return httpapi.Message("Conta confirmada. Você já pode entrar.", h.svc.Confirm(ctx, in))
 }
 
+// Reenvio
 func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ResendInput
 	if err := r.Decode(&in); err != nil {
@@ -62,6 +80,11 @@ func (h handlers) resendCode(ctx context.Context, r *httpapi.Request) (httpapi.R
 	return httpapi.Message("Se houver um cadastro aguardando confirmação com este e-mail, um novo código foi enviado. Verifique também a caixa de spam.", h.svc.ResendCode(ctx, in))
 }
 
+// ---------------------------------------------------------------------------
+// Senhas
+// ---------------------------------------------------------------------------
+
+// Nova senha
 func (h handlers) completeNewPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in NewPasswordInput
 	if err := r.Decode(&in); err != nil {
@@ -71,6 +94,7 @@ func (h handlers) completeNewPassword(ctx context.Context, r *httpapi.Request) (
 	return httpapi.Reply(200, session, err)
 }
 
+// Recuperação
 func (h handlers) forgotPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ForgotPasswordInput
 	if err := r.Decode(&in); err != nil {
@@ -79,6 +103,7 @@ func (h handlers) forgotPassword(ctx context.Context, r *httpapi.Request) (httpa
 	return httpapi.Message("Se houver uma conta com este e-mail, um código para redefinir a senha foi enviado.", h.svc.ForgotPassword(ctx, in))
 }
 
+// Redefinição
 func (h handlers) resetPassword(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in ResetPasswordInput
 	if err := r.Decode(&in); err != nil {
@@ -87,16 +112,27 @@ func (h handlers) resetPassword(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Message("Senha alterada. Você já pode entrar.", h.svc.ResetPassword(ctx, in))
 }
 
+// ---------------------------------------------------------------------------
+// Sessão
+// ---------------------------------------------------------------------------
+
+// Perfil
 func (h handlers) me(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	u, err := h.svc.Me(ctx, r.Actor)
 	return httpapi.Reply(200, u, err)
 }
 
+// ---------------------------------------------------------------------------
+// Contas
+// ---------------------------------------------------------------------------
+
+// Listagem
 func (h handlers) listUsers(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	users, err := h.svc.ListUsers(ctx, r.Actor)
 	return httpapi.Reply(200, users, err)
 }
 
+// Renomeação
 func (h handlers) renameAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in NameInput
 	if err := r.Decode(&in); err != nil {
@@ -105,6 +141,7 @@ func (h handlers) renameAccount(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Message("Nome atualizado.", h.svc.RenameAccount(ctx, r.Param("usuarioId"), in))
 }
 
+// Troca
 func (h handlers) changeRole(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in RoleInput
 	if err := r.Decode(&in); err != nil {
@@ -114,20 +151,24 @@ func (h handlers) changeRole(ctx context.Context, r *httpapi.Request) (httpapi.R
 		h.svc.ChangeRole(ctx, r.Actor, r.Param("usuarioId"), in))
 }
 
+// Desativação
 func (h handlers) disableAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Conta desativada. A pessoa não consegue mais entrar no portal.",
 		h.svc.DisableAccount(ctx, r.Actor, r.Param("usuarioId")))
 }
 
+// Reativação
 func (h handlers) enableAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Conta reativada.", h.svc.EnableAccount(ctx, r.Param("usuarioId")))
 }
 
+// Reenvio
 func (h handlers) resendInvitation(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Convite reenviado. A pessoa receberá por e-mail uma nova senha temporária.",
 		h.svc.ResendInvitation(ctx, r.Param("usuarioId")))
 }
 
+// Criação
 func (h handlers) createAccount(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in NewAccount
 	if err := r.Decode(&in); err != nil {

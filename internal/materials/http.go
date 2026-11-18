@@ -6,8 +6,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/httpapi"
 )
 
+// Rotas
 type handlers struct{ svc *Service }
 
+// Rotas
 func Routes(r *httpapi.Router, svc *Service) {
 	h := handlers{svc}
 
@@ -18,11 +20,13 @@ func Routes(r *httpapi.Router, svc *Service) {
 	r.Handle("GET", "/materiais/:materialId/arquivo", h.download)
 }
 
+// Listagem
 func (h handlers) list(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	list, err := h.svc.List(ctx, r.Actor)
 	return httpapi.Reply(200, list, err)
 }
 
+// Criação
 func (h handlers) create(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in MaterialInput
 	if err := r.Decode(&in); err != nil {
@@ -32,10 +36,12 @@ func (h handlers) create(ctx context.Context, r *httpapi.Request) (httpapi.Respo
 	return httpapi.Reply(201, m, err)
 }
 
+// Exclusão
 func (h handlers) remove(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	return httpapi.Message("Material removido.", h.svc.Delete(ctx, r.Actor, r.Param("materialId")))
 }
 
+// Solicitação
 func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	var in UploadRequest
 	if err := r.Decode(&in); err != nil {
@@ -45,6 +51,7 @@ func (h handlers) requestUpload(ctx context.Context, r *httpapi.Request) (httpap
 	return httpapi.Reply(201, t, err)
 }
 
+// Download
 func (h handlers) download(ctx context.Context, r *httpapi.Request) (httpapi.Response, error) {
 	d, err := h.svc.Download(ctx, r.Actor, r.Param("materialId"))
 	return httpapi.Reply(200, d, err)

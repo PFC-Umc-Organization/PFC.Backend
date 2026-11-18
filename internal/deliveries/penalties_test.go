@@ -9,11 +9,12 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 )
 
-// The test clock is 2026-10-16 12:00 UTC.
+// Cálculo
 func missed(id string) Activity {
 	return Activity{ID: id, Title: "Atividade " + id, Deadline: "2026-10-0" + id[1:] + "T23:59", Fields: tcc.Fields}
 }
 
+// Penalidade
 func TestPenaltiesOf(t *testing.T) {
 	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	activities := []Activity{missed("a1"), missed("a2"), {ID: "open", Deadline: "2026-11-01T23:59"}, {ID: "sem-prazo"}}
@@ -34,12 +35,14 @@ func TestPenaltiesOf(t *testing.T) {
 	}
 }
 
+// Falha
 func failedStore() *fakeStore {
 	return &fakeStore{
 		activities: map[string]Activity{"a1": missed("a1"), "a2": missed("a2"), "a3": missed("a3"), "open": {ID: "open", Deadline: "2099-01-01T23:59", Fields: []Field{{ID: "f2", Label: "Repo", Type: FieldLink, Required: true}}}},
 	}
 }
 
+// Reprovação
 func TestFailedGroupCannotSubmitUntilAWaiver(t *testing.T) {
 	store := failedStore()
 	svc := newTestService(t, store)
@@ -74,6 +77,7 @@ func TestFailedGroupCannotSubmitUntilAWaiver(t *testing.T) {
 	}
 }
 
+// Penalidade
 func TestApplyPenalty(t *testing.T) {
 	store := &fakeStore{activities: map[string]Activity{"a1": tcc}}
 	svc := newTestService(t, store)
@@ -103,6 +107,7 @@ func TestApplyPenalty(t *testing.T) {
 	}
 }
 
+// Visibilidade
 func TestPenaltiesVisibility(t *testing.T) {
 	svc := newTestService(t, failedStore())
 	ctx := context.Background()

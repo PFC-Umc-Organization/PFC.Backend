@@ -13,6 +13,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Fakes
+// ---------------------------------------------------------------------------
+
 type fakeWorks struct {
 	works map[string]Work
 	down  bool
@@ -90,6 +94,11 @@ var chi = Work{
 	Authors: []Author{{Surname: "Amershi", GivenName: "Saleema"}, {Surname: "Weld", GivenName: "Dan"}, {Organization: "Microsoft Research"}},
 }
 
+// ---------------------------------------------------------------------------
+// Montagem
+// ---------------------------------------------------------------------------
+
+// Montagem
 func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	t.Helper()
 	t.Cleanup(audit.SetOutput(io.Discard))
@@ -99,6 +108,7 @@ func newTestService(t *testing.T, works fakeWorks) (*Service, *memoryStore) {
 	return svc, store
 }
 
+// Erros
 func kind(err error) apperr.Kind {
 	if e, ok := apperr.As(err); ok {
 		return e.Kind
@@ -106,6 +116,11 @@ func kind(err error) apperr.Kind {
 	return 0
 }
 
+// ---------------------------------------------------------------------------
+// Testes
+// ---------------------------------------------------------------------------
+
+// Busca
 func TestSearchValidation(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{})
 	for name, q := range map[string][2]string{
@@ -123,6 +138,7 @@ func TestSearchValidation(t *testing.T) {
 	}
 }
 
+// Busca
 func TestServiceSearch(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	result, err := svc.Search(context.Background(), " gestão ", "2")
@@ -135,6 +151,7 @@ func TestServiceSearch(t *testing.T) {
 	}
 }
 
+// Consulta
 func TestLookupDOI(t *testing.T) {
 	svc, _ := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -157,6 +174,7 @@ func TestLookupDOI(t *testing.T) {
 	}
 }
 
+// Criação
 func TestAddAndRemove(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi}})
 	ctx := context.Background()
@@ -185,6 +203,7 @@ var rbac = Work{
 	Authors: []Author{{Surname: "Sandhu", GivenName: "Ravi S."}},
 }
 
+// Substituição
 func TestReplace(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{works: map[string]Work{knownDOI: chi, otherDOI: rbac}})
 	ctx := context.Background()
@@ -228,6 +247,7 @@ func TestReplace(t *testing.T) {
 	}
 }
 
+// Permissão
 func TestPermissions(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -255,6 +275,7 @@ func TestPermissions(t *testing.T) {
 	}
 }
 
+// Listagem
 func TestReferencesSortedAlphabetically(t *testing.T) {
 	svc, store := newTestService(t, fakeWorks{})
 	store.refs = map[string]Reference{"b": {ID: "b", ABNT: "souza"}, "a": {ID: "a", ABNT: "ALVES"}, "c": {ID: "c", ABNT: "Lima"}}

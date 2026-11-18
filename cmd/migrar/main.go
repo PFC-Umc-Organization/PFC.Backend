@@ -1,13 +1,3 @@
-// Command migrar brings a table written by older versions to the current
-// model (see the README, "Modelagem no DynamoDB"): GSI on cohorts, programs
-// and enrollments (these by cohort), the uniqueness locks and links, and
-// courses for cohorts that predate them. It is idempotent; without -aplicar
-// it only reports what it would do. Conflicts are listed for manual repair,
-// since the uniqueness rules would reject them. With COGNITO_USER_POOL_ID it
-// also copies the accounts' names from Cognito into the table.
-//
-//	TABLE_NAME=... COGNITO_USER_POOL_ID=... go run ./cmd/migrar
-//	TABLE_NAME=... COGNITO_USER_POOL_ID=... go run ./cmd/migrar -aplicar
 package main
 
 import (
@@ -32,22 +22,25 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
+// ---------------------------------------------------------------------------
+// Execução
+// ---------------------------------------------------------------------------
+
 var apply = flag.Bool("aplicar", false, "grava as mudanças (sem a flag, só simula)")
 
+// Migração
 type migration struct {
 	table                                      *dynamo.Table
 	indexed, locks, courses, linked, conflicts int
-	// planned holds the locks of this run (PK|SK → owner) and plannedCourses
-	// the courses it creates (lower-case name → id), so a dry run also sees
-	// what it has not written.
+
 	planned        map[string]string
 	plannedCourses map[string]string
 	cohorts        map[string]bool
-	// spellings counts, per lower-case course name, how cohorts write it;
-	// a new course takes the most common one.
+
 	spellings map[string]map[string]int
 }
 
+// Execução
 func main() {
 	flag.Parse()
 	name := os.Getenv("TABLE_NAME")
@@ -103,6 +96,11 @@ func main() {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Varredura
+// ---------------------------------------------------------------------------
+
+// Varredura
 func (m *migration) scan(ctx context.Context) ([]dynamo.Item, error) {
 	var items []dynamo.Item
 	in := &dynamodb.ScanInput{TableName: aws.String(m.table.Name)}
@@ -119,6 +117,11 @@ func (m *migration) scan(ctx context.Context) ([]dynamo.Item, error) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Migração
+// ---------------------------------------------------------------------------
+
+// Migração
 func (m *migration) migrate(ctx context.Context, it dynamo.Item) {
 	if dynamo.String(it, "SK") != "PROFILE" {
 		return
@@ -170,6 +173,7 @@ func (m *migration) migrate(ctx context.Context, it dynamo.Item) {
 	}
 }
 
+// Indexação
 func (m *migration) index(ctx context.Context, it dynamo.Item, partition string) {
 	if dynamo.String(it, "GSI1PK") == partition {
 		return
@@ -191,8 +195,7 @@ func (m *migration) index(ctx context.Context, it dynamo.Item, partition string)
 	}
 }
 
-// lock creates the lock/link item unless it exists. An existing one owned
-// by another item is a conflict; owned by the same one, already migrated.
+// Trava
 func (m *migration) lock(ctx context.Context, item dynamo.Item, ownerAttr, conflict string) {
 	owner := dynamo.String(item, ownerAttr)
 	key := dynamo.String(item, "PK") + "|" + dynamo.String(item, "SK")
@@ -228,6 +231,7 @@ func (m *migration) lock(ctx context.Context, item dynamo.Item, ownerAttr, confl
 	}
 }
 
+// Conflito
 func (m *migration) conflict(msg string) {
 	m.conflicts++
 	fmt.Println("CONFLITO:", msg)
@@ -235,9 +239,11 @@ func (m *migration) conflict(msg string) {
 
 var termFormat = regexp.MustCompile(`^\d{4}\.[12]$`)
 
-// linkCourse points a cohort written before courses existed to its course,
-// creating the course from the cohort's name when needed, and swaps its
-// name-keyed lock for the id-keyed one, counting the cohort on the course.
+// ---------------------------------------------------------------------------
+// Cursos
+// ---------------------------------------------------------------------------
+
+// Vínculo
 func (m *migration) linkCourse(ctx context.Context, it dynamo.Item) {
 	pk := dynamo.String(it, "PK")
 	cohortID := strings.TrimPrefix(pk, "CURSO#")
@@ -286,8 +292,7 @@ func (m *migration) linkCourse(ctx context.Context, it dynamo.Item) {
 	}
 }
 
-// course returns the id of the course with this name (ignoring case),
-// creating it when no course has it.
+// Resolução
 func (m *migration) course(ctx context.Context, name string) (string, error) {
 	lower := strings.ToLower(name)
 	if id, ok := m.plannedCourses[lower]; ok {
@@ -323,9 +328,7 @@ func (m *migration) course(ctx context.Context, name string) (string, error) {
 	)
 }
 
-// spelling picks the most common way cohorts write the course name; on a tie,
-// the one with more capitals ("Engenharia de Software" over "engenharia de
-// software"), then the first in alphabetical order.
+// Correção
 func (m *migration) spelling(lower, fallback string) string {
 	best, bestCount := fallback, 0
 	for name, n := range m.spellings[lower] {
@@ -338,6 +341,7 @@ func (m *migration) spelling(lower, fallback string) string {
 	return best
 }
 
+// Capitalização
 func capitals(s string) int {
 	n := 0
 	for _, r := range s {
@@ -348,6 +352,7 @@ func capitals(s string) int {
 	return n
 }
 
+// Consulta
 func (m *migration) get(ctx context.Context, key dynamo.Item) (dynamo.Item, bool, error) {
 	out, err := m.table.Client.GetItem(ctx, &dynamodb.GetItemInput{TableName: aws.String(m.table.Name), Key: key})
 	if err != nil {

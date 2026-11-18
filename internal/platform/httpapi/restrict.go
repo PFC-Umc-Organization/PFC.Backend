@@ -8,8 +8,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
-// Policy is a route's role requirement. AuditAction, when set, records
-// denials under that action, about AuditResource when that is set too.
+// ---------------------------------------------------------------------------
+// Política
+// ---------------------------------------------------------------------------
+
+// Política
 type Policy struct {
 	Roles         []actor.Role
 	Message       string
@@ -19,16 +22,15 @@ type Policy struct {
 	rgmMessage string
 }
 
-// Option adjusts the Policy built by Admin, Staff and Student.
+// Opção
 type Option func(*Policy)
 
-// Audit records denials under action.
+// Auditoria
 func Audit(action string) Option {
 	return func(p *Policy) { p.AuditAction = action }
 }
 
-// AuditParam makes the audited denial about the resource of the given type
-// whose id is the path parameter param.
+// Auditoria
 func AuditParam(resourceType, param string) Option {
 	return func(p *Policy) {
 		p.AuditResource = func(r *Request) *audit.Resource {
@@ -37,11 +39,12 @@ func AuditParam(resourceType, param string) Option {
 	}
 }
 
-// NeedRGM, for Student routes, denies accounts whose e-mail yields no RGM.
+// Exigência
 func NeedRGM(message string) Option {
 	return func(p *Policy) { p.rgmMessage = message }
 }
 
+// Montagem
 func build(roles []actor.Role, msg string, opts []Option) Policy {
 	p := Policy{Roles: roles, Message: msg}
 	for _, o := range opts {
@@ -50,18 +53,21 @@ func build(roles []actor.Role, msg string, opts []Option) Policy {
 	return p
 }
 
-// Admin admits the coordination only.
+// ---------------------------------------------------------------------------
+// Perfis
+// ---------------------------------------------------------------------------
+
+// Restrição
 func Admin(msg string, h Handler, opts ...Option) Handler {
 	return Restrict(build([]actor.Role{actor.RoleAdmin}, msg, opts), h)
 }
 
-// Staff admits the coordination and advisors.
+// Restrição
 func Staff(msg string, h Handler, opts ...Option) Handler {
 	return Restrict(build([]actor.Role{actor.RoleAdmin, actor.RoleAdvisor}, msg, opts), h)
 }
 
-// Student refuses the staff with msg. An account without role counts as a
-// student (self-registered accounts carry none).
+// Restrição
 func Student(msg string, h Handler, opts ...Option) Handler {
 	p := build(nil, msg, opts)
 	deny := func(ctx context.Context, reason, message string) (Response, error) {
@@ -81,6 +87,7 @@ func Student(msg string, h Handler, opts ...Option) Handler {
 	}
 }
 
+// Restrição
 func Restrict(p Policy, h Handler) Handler {
 	return func(ctx context.Context, r *Request) (Response, error) {
 		if !r.Actor.HasRole(p.Roles...) {

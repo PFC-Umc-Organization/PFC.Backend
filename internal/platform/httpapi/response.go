@@ -7,11 +7,13 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 )
 
+// Resposta
 type Response struct {
 	Status int
 	Body   string
 }
 
+// Resposta
 func JSON(status int, v any) Response {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -20,6 +22,7 @@ func JSON(status int, v any) Response {
 	return Response{Status: status, Body: string(b)}
 }
 
+// Erro
 func Error(status int, msg string) Response {
 	b, _ := json.Marshal(map[string]string{"erro": msg})
 	return Response{Status: status, Body: string(b)}
@@ -38,11 +41,12 @@ var jsonHeaders = func() map[string]string {
 	return h
 }()
 
+// Conversão
 func ToLambda(r Response) events.APIGatewayProxyResponse {
 	return events.APIGatewayProxyResponse{StatusCode: r.Status, Headers: jsonHeaders, Body: r.Body}
 }
 
-// Reply ends a handler: a non-nil err wins over the body.
+// Resposta
 func Reply(status int, v any, err error) (Response, error) {
 	if err != nil {
 		return Response{}, err
@@ -50,6 +54,7 @@ func Reply(status int, v any, err error) (Response, error) {
 	return JSON(status, v), nil
 }
 
+// Resposta
 func Message(msg string, err error) (Response, error) {
 	return Reply(200, map[string]string{"mensagem": msg}, err)
 }

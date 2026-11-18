@@ -14,14 +14,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table):
-//
-//	activity    PK=ACTIVITY#<id>  SK=PROFILE        GSI1PK=ACTIVITIES      GSI1SK=ACTIVITY#<id>  campos (list)
-//	submission  PK=PROJECT#<pid>  SK=ENTREGA#<aid>  GSI1PK=ENTREGAS#<aid>  GSI1SK=PROJECT#<pid>
-//	penalty     PK=PROJECT#<pid>  SK=PENALIDADE#<id>  (manual penalty or waiver)
-//
-// A submission lives in the project's partition (a group's submissions are
-// one Query) and the GSI lists an activity's submissions.
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
 const (
 	activityPrefix      = "ACTIVITY#"
 	projectPrefix       = "PROJECT#"
@@ -32,12 +28,19 @@ const (
 	profileSK           = "PROFILE"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// ---------------------------------------------------------------------------
+// Itens e chaves
+// ---------------------------------------------------------------------------
+
+// Item
 type fieldItem struct {
 	ID       string    `dynamodbav:"id"`
 	Label    string    `dynamodbav:"rotulo"`
@@ -45,6 +48,7 @@ type fieldItem struct {
 	Required bool      `dynamodbav:"obrigatorio"`
 }
 
+// Item
 type activityItem struct {
 	PK          string      `dynamodbav:"PK"`
 	SK          string      `dynamodbav:"SK"`
@@ -58,6 +62,7 @@ type activityItem struct {
 	CohortID    string      `dynamodbav:"turmaId,omitempty"`
 }
 
+// Mapeamento
 func (it activityItem) activity() Activity {
 	fields := make([]Field, 0, len(it.Fields))
 	for _, f := range it.Fields {
@@ -74,6 +79,7 @@ func (it activityItem) activity() Activity {
 	}
 }
 
+// Item
 type submissionItem struct {
 	PK          string            `dynamodbav:"PK"`
 	SK          string            `dynamodbav:"SK"`
@@ -87,6 +93,7 @@ type submissionItem struct {
 	Validation  *validationItem   `dynamodbav:"validacao,omitempty"`
 }
 
+// Item
 type validationItem struct {
 	Status  ValidationStatus `dynamodbav:"status"`
 	Comment string           `dynamodbav:"comentario,omitempty"`
@@ -95,6 +102,7 @@ type validationItem struct {
 	At      string           `dynamodbav:"em"`
 }
 
+// Mapeamento
 func (it submissionItem) submission() Submission {
 	answers := it.Answers
 	if answers == nil {
@@ -116,11 +124,19 @@ func (it submissionItem) submission() Submission {
 	return sub
 }
 
+// Chave
 func activityKey(id string) dynamo.Item { return dynamo.Key(activityPrefix+id, profileSK) }
+
+// Chave
 func submissionKey(projectID, activityID string) dynamo.Item {
 	return dynamo.Key(projectPrefix+projectID, submissionPrefix+activityID)
 }
 
+// ---------------------------------------------------------------------------
+// Atividades
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) CreateActivity(ctx context.Context, a Activity) error {
 	fields := make([]fieldItem, 0, len(a.Fields))
 	for _, f := range a.Fields {
@@ -136,6 +152,7 @@ func (s *DynamoStore) CreateActivity(ctx context.Context, a Activity) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) GetActivity(ctx context.Context, id string) (Activity, bool, error) {
 	it, found, err := dynamo.Get[activityItem](ctx, s.table, activityKey(id))
 	if err != nil || !found {
@@ -144,6 +161,7 @@ func (s *DynamoStore) GetActivity(ctx context.Context, id string) (Activity, boo
 	return it.activity(), true, nil
 }
 
+// Listagem
 func (s *DynamoStore) ListActivities(ctx context.Context) ([]Activity, error) {
 	items, err := dynamo.QueryIndex[activityItem](ctx, s.table, activitiesPartition)
 	if err != nil {
@@ -156,7 +174,7 @@ func (s *DynamoStore) ListActivities(ctx context.Context) ([]Activity, error) {
 	return out, nil
 }
 
-// UpdateActivity returns the updated item (ALL_NEW), saving a second read.
+// Atualização
 func (s *DynamoStore) UpdateActivity(ctx context.Context, id string, in ActivityInput) (Activity, error) {
 	attrs, err := s.table.UpdateItem(ctx, activityKey(id), "SET titulo = :t, descricao = :d, prazo = :p", dynamo.Write{
 		Condition: "attribute_exists(PK)",
@@ -178,6 +196,7 @@ func (s *DynamoStore) UpdateActivity(ctx context.Context, id string, in Activity
 	return it.activity(), nil
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) ([]string, error) {
 	_, err := s.table.DeleteItem(ctx, activityKey(id), dynamo.Write{Condition: "attribute_exists(PK)"})
 	if dynamo.ConditionFailed(err) {
@@ -206,6 +225,7 @@ func (s *DynamoStore) DeleteActivity(ctx context.Context, id string) ([]string, 
 	return projects, s.table.DeleteKeys(ctx, keys)
 }
 
+// Adição
 func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) error {
 	value, err := attributevalue.Marshal(fieldItem(f))
 	if err != nil {
@@ -217,8 +237,7 @@ func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) 
 			":f":   &types.AttributeValueMemberL{Value: []types.AttributeValue{value}},
 			":max": dynamo.N(maxFields),
 		},
-		// On rejection DynamoDB returns the item as it was, which tells a
-		// missing activity from a full one without a second read.
+
 		OldOnFail: true,
 	})
 	var rejected *dynamo.ConditionFailedError
@@ -231,8 +250,7 @@ func (s *DynamoStore) AddField(ctx context.Context, activityID string, f Field) 
 	return err
 }
 
-// RemoveField conditions on the field still being at position, so a
-// concurrent change surfaces as errStale.
+// Remoção
 func (s *DynamoStore) RemoveField(ctx context.Context, activityID string, position int, fieldID string) error {
 	_, err := s.table.UpdateItem(ctx, activityKey(activityID), fmt.Sprintf("REMOVE campos[%d]", position), dynamo.Write{
 		Condition: fmt.Sprintf("size(campos) > :one AND campos[%d].id = :id", position),
@@ -244,10 +262,13 @@ func (s *DynamoStore) RemoveField(ctx context.Context, activityID string, positi
 	return err
 }
 
-// projectProfileSK mirrors the project item's sort key in groups/store.go;
-// deliveries cannot import that package's store.
+// ---------------------------------------------------------------------------
+// Entregas
+// ---------------------------------------------------------------------------
+
 const projectProfileSK = "PROFILE"
 
+// Gravação
 func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, expected *Submission) error {
 	item, err := attributevalue.MarshalMap(submissionItem{
 		PK: projectPrefix + sub.ProjectID, SK: submissionPrefix + sub.ActivityID,
@@ -280,8 +301,7 @@ func (s *DynamoStore) PutSubmission(ctx context.Context, sub Submission, expecte
 	return err
 }
 
-// SetValidation only touches a submission still there; the group's next
-// edit replaces the whole item, which drops the validation with it.
+// Validação
 func (s *DynamoStore) SetValidation(ctx context.Context, projectID, activityID string, v Validation) (Submission, error) {
 	value, err := attributevalue.Marshal(validationItem(v))
 	if err != nil {
@@ -305,6 +325,7 @@ func (s *DynamoStore) SetValidation(ctx context.Context, projectID, activityID s
 	return it.submission(), nil
 }
 
+// Consulta
 func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID string) (Submission, bool, error) {
 	it, found, err := dynamo.Get[submissionItem](ctx, s.table, submissionKey(projectID, activityID))
 	if err != nil || !found {
@@ -313,6 +334,7 @@ func (s *DynamoStore) GetSubmission(ctx context.Context, projectID, activityID s
 	return it.submission(), true, nil
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityID string) (Submission, error) {
 	old, err := s.table.DeleteItem(ctx, submissionKey(projectID, activityID), dynamo.Write{Condition: "attribute_exists(PK)", Return: types.ReturnValueAllOld})
 	if dynamo.ConditionFailed(err) {
@@ -328,14 +350,17 @@ func (s *DynamoStore) DeleteSubmission(ctx context.Context, projectID, activityI
 	return it.submission(), nil
 }
 
+// Listagem
 func (s *DynamoStore) SubmissionsOfProject(ctx context.Context, projectID string) ([]Submission, error) {
 	return submissions(dynamo.QueryPartition[submissionItem](ctx, s.table, projectPrefix+projectID, submissionPrefix))
 }
 
+// Listagem
 func (s *DynamoStore) SubmissionsOfActivity(ctx context.Context, activityID string) ([]Submission, error) {
 	return submissions(dynamo.QueryIndex[submissionItem](ctx, s.table, submissionsPrefix+activityID))
 }
 
+// Listagem
 func submissions(items []submissionItem, err error) ([]Submission, error) {
 	if err != nil {
 		return nil, err
@@ -347,6 +372,11 @@ func submissions(items []submissionItem, err error) ([]Submission, error) {
 	return out, nil
 }
 
+// ---------------------------------------------------------------------------
+// Penalidades
+// ---------------------------------------------------------------------------
+
+// Item
 type penaltyItem struct {
 	PK         string `dynamodbav:"PK"`
 	SK         string `dynamodbav:"SK"`
@@ -359,6 +389,7 @@ type penaltyItem struct {
 	WaivedAt   string `dynamodbav:"perdoadaEm,omitempty"`
 }
 
+// Mapeamento
 func (it penaltyItem) record() penaltyRecord {
 	r := penaltyRecord{
 		ID:         strings.TrimPrefix(it.SK, penaltyPrefix),
@@ -373,6 +404,7 @@ func (it penaltyItem) record() penaltyRecord {
 	return r
 }
 
+// Listagem
 func (s *DynamoStore) PenaltiesOfProject(ctx context.Context, projectID string) ([]penaltyRecord, error) {
 	items, err := dynamo.QueryPartition[penaltyItem](ctx, s.table, projectPrefix+projectID, penaltyPrefix)
 	if err != nil {
@@ -385,6 +417,7 @@ func (s *DynamoStore) PenaltiesOfProject(ctx context.Context, projectID string) 
 	return out, nil
 }
 
+// Penalidade
 func (s *DynamoStore) AddPenalty(ctx context.Context, projectID string, r penaltyRecord) error {
 	err := dynamo.PutStruct(ctx, s.table, penaltyItem{
 		PK: projectPrefix + projectID, SK: penaltyPrefix + r.ID,
@@ -396,8 +429,7 @@ func (s *DynamoStore) AddPenalty(ctx context.Context, projectID string, r penalt
 	return err
 }
 
-// WaivePenalty creates the item for a deadline penalty, which is not stored
-// until waived.
+// Perdão
 func (s *DynamoStore) WaivePenalty(ctx context.Context, projectID, penaltyID string, w Waiver) error {
 	_, err := s.table.UpdateItem(ctx, dynamo.Key(projectPrefix+projectID, penaltyPrefix+penaltyID),
 		"SET perdaoMotivo = :motivo, perdoadaPor = :por, perdoadaEm = :em", dynamo.Write{

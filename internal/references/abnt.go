@@ -8,15 +8,6 @@ import (
 	"time"
 )
 
-// ABNT NBR 6023:2018 for the work types Crossref returns. It covers the
-// usual cases of a final paper, not the whole standard: editors, edition
-// and translators are left out because the APIs rarely provide them.
-//
-// The HTML version marks the highlighted element with <strong>, which the
-// standard requires and which survives pasting into Word.
-
-// Brazil no longer has daylight saving time; a fixed UTC-3 avoids depending
-// on tzdata in the Lambda runtime.
 var brasilia = time.FixedZone("BRT", -3*60*60)
 
 var abntMonths = [12]string{
@@ -31,16 +22,26 @@ const (
 	noVenue     = "[S. t.]"
 )
 
+// ---------------------------------------------------------------------------
+// Montagem
+// ---------------------------------------------------------------------------
+
+// Trecho
 type segment struct {
 	text      string
 	highlight bool
 }
 
+// Montagem
 type builder []segment
 
-func (b *builder) add(text string)       { *b = append(*b, segment{text: text}) }
+// Adição
+func (b *builder) add(text string) { *b = append(*b, segment{text: text}) }
+
+// Destaque
 func (b *builder) highlight(text string) { *b = append(*b, segment{text: text, highlight: true}) }
 
+// Texto
 func (b builder) text() string {
 	var sb strings.Builder
 	for _, s := range b {
@@ -49,6 +50,7 @@ func (b builder) text() string {
 	return sb.String()
 }
 
+// Renderização
 func (b builder) html() string {
 	var sb strings.Builder
 	for _, s := range b {
@@ -61,8 +63,11 @@ func (b builder) html() string {
 	return sb.String()
 }
 
-// formatABNT returns the reference as text and HTML; accessed is the date
-// in "Acesso em:".
+// ---------------------------------------------------------------------------
+// Formatação
+// ---------------------------------------------------------------------------
+
+// Formatação
 func formatABNT(w Work, accessed time.Time) (text, htmlText string) {
 	var b builder
 
@@ -114,6 +119,7 @@ func formatABNT(w Work, accessed time.Time) (text, htmlText string) {
 	return b.text(), b.html()
 }
 
+// Formatação
 func (a Author) abnt() string {
 	if a.Organization != "" {
 		return strings.ToUpper(a.Organization)
@@ -124,8 +130,7 @@ func (a Author) abnt() string {
 	return strings.ToUpper(a.Surname) + ", " + a.GivenName
 }
 
-// abntAuthorship lists up to three authors; from four on the standard
-// allows the first one followed by "et al.".
+// Formatação
 func abntAuthorship(authors []Author) string {
 	if len(authors) == 0 {
 		return ""
@@ -140,6 +145,11 @@ func abntAuthorship(authors []Author) string {
 	return strings.Join(names, "; ")
 }
 
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
+
+// Composição
 func fullTitle(w Work) string {
 	if w.Subtitle == "" {
 		return w.Title
@@ -147,12 +157,15 @@ func fullTitle(w Work) string {
 	return w.Title + ": " + w.Subtitle
 }
 
+// Formatação
 func imprint(w Work) string {
 	return fmt.Sprintf("%s: %s, %s", orDefault(w.Place, noPlace), orDefault(w.Publisher, noPublisher), year(w.Year))
 }
 
+// Formatação
 func pages(p string) string { return "p. " + strings.ReplaceAll(p, "–", "-") }
 
+// Formatação
 func year(y int) string {
 	if y == 0 {
 		return noDate
@@ -160,6 +173,7 @@ func year(y int) string {
 	return strconv.Itoa(y)
 }
 
+// Formatação
 func workLink(w Work) string {
 	if w.DOI != "" {
 		return "https://doi.org/" + w.DOI
@@ -167,13 +181,13 @@ func workLink(w Work) string {
 	return w.URL
 }
 
+// Formatação
 func abntDate(t time.Time) string {
 	t = t.In(brasilia)
 	return fmt.Sprintf("%d %s %d", t.Day(), abntMonths[t.Month()-1], t.Year())
 }
 
-// withPeriod does not double a period after "et al." or an initial, nor
-// add one after ? or !.
+// Formatação
 func withPeriod(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" || strings.HasSuffix(s, ".") || strings.HasSuffix(s, "?") || strings.HasSuffix(s, "!") {
@@ -182,6 +196,7 @@ func withPeriod(s string) string {
 	return s + "."
 }
 
+// Capitalização
 func upperFirstWord(s string) string {
 	word, rest, ok := strings.Cut(s, " ")
 	if !ok {
@@ -190,6 +205,7 @@ func upperFirstWord(s string) string {
 	return strings.ToUpper(word) + " " + rest
 }
 
+// Valor padrão
 func orDefault(v, fallback string) string {
 	if strings.TrimSpace(v) == "" {
 		return fallback

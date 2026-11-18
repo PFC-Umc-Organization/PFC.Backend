@@ -14,16 +14,10 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
-// Items (single table):
-//
-//	project      PK=PROJECT#<id>  SK=PROFILE       GSI1PK=PROGRAM#<pid>  GSI1SK=PROJECT#<id>  integrantes, orientadorId, ...
-//	membership   PK=MEMBRO#<rgm>  SK=PROJETO       projetoId
-//	invitation   PK=PROJECT#<id>  SK=CONVITE#<rgm> GSI1PK=CONVITE#<rgm>  GSI1SK=PROJECT#<id>
-//
-// The membership item is written with attribute_not_exists in the same
-// transaction that changes `integrantes`, which is what keeps a student in a
-// single project under concurrent requests. Every write to `integrantes`
-// moves memberships along.
+// ---------------------------------------------------------------------------
+// Repositório
+// ---------------------------------------------------------------------------
+
 const (
 	projectPrefix    = "PROJECT#"
 	programPrefix    = "PROGRAM#"
@@ -36,12 +30,19 @@ const (
 	present = "attribute_exists(PK)"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// ---------------------------------------------------------------------------
+// Itens e chaves
+// ---------------------------------------------------------------------------
+
+// Item
 type projectItem struct {
 	PK          string   `dynamodbav:"PK"`
 	SK          string   `dynamodbav:"SK"`
@@ -54,8 +55,7 @@ type projectItem struct {
 	AdvisorID   string   `dynamodbav:"orientadorId"`
 }
 
-// project never returns nil Members: the frontend calls
-// integrantes.includes and breaks on null.
+// Mapeamento
 func (it projectItem) project() Project {
 	if it.Members == nil {
 		it.Members = []string{}
@@ -70,6 +70,7 @@ func (it projectItem) project() Project {
 	}
 }
 
+// Item
 type invitationItem struct {
 	PK          string `dynamodbav:"PK"`
 	SK          string `dynamodbav:"SK"`
@@ -80,6 +81,7 @@ type invitationItem struct {
 	CreatedAt   string `dynamodbav:"criadoEm"`
 }
 
+// Mapeamento
 func (it invitationItem) invitation() Invitation {
 	return Invitation{
 		ProjectID:   strings.TrimPrefix(it.PK, projectPrefix),
@@ -90,24 +92,31 @@ func (it invitationItem) invitation() Invitation {
 	}
 }
 
-func projectKey(id string) dynamo.Item     { return dynamo.Key(projectPrefix+id, profileSK) }
+// Chave
+func projectKey(id string) dynamo.Item { return dynamo.Key(projectPrefix+id, profileSK) }
+
+// Chave
 func membershipKey(rgm string) dynamo.Item { return dynamo.Key(memberPrefix+rgm, membershipSK) }
+
+// Chave
 func invitationKey(projectID, rgm string) dynamo.Item {
 	return dynamo.Key(projectPrefix+projectID, invitationPrefix+rgm)
 }
 
+// Vínculo
 func (s *DynamoStore) join(rgm, projectID string) types.TransactWriteItem {
 	m := membershipKey(rgm)
 	m["projetoId"] = dynamo.S(projectID)
 	return s.table.Put(m, absent, nil)
 }
 
-// leave only deletes a membership that points to this project (or none).
+// Desvínculo
 func (s *DynamoStore) leave(rgm, projectID string) types.TransactWriteItem {
 	return s.table.Delete(membershipKey(rgm), "attribute_not_exists(PK) OR projetoId = :project",
 		dynamo.Item{":project": dynamo.S(projectID)})
 }
 
+// Extração
 func rgmList(rgms []string) *types.AttributeValueMemberL {
 	values := make([]types.AttributeValue, 0, len(rgms))
 	for _, r := range rgms {
@@ -116,6 +125,11 @@ func rgmList(rgms []string) *types.AttributeValueMemberL {
 	return &types.AttributeValueMemberL{Value: values}
 }
 
+// ---------------------------------------------------------------------------
+// Projetos
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) CreateProject(ctx context.Context, p Project) error {
 	item, err := attributevalue.MarshalMap(projectItem{
 		PK: projectPrefix + p.ID, SK: profileSK, GSI1PK: programPrefix + p.ProgramID, GSI1SK: projectPrefix + p.ID,
@@ -136,6 +150,7 @@ func (s *DynamoStore) CreateProject(ctx context.Context, p Project) error {
 	return err
 }
 
+// Consulta
 func (s *DynamoStore) GetProject(ctx context.Context, id string) (Project, bool, error) {
 	it, found, err := dynamo.Get[projectItem](ctx, s.table, projectKey(id))
 	if err != nil || !found {
@@ -144,6 +159,7 @@ func (s *DynamoStore) GetProject(ctx context.Context, id string) (Project, bool,
 	return it.project(), true, nil
 }
 
+// Listagem
 func (s *DynamoStore) ProjectsOfProgram(ctx context.Context, programID string) ([]Project, error) {
 	items, err := dynamo.QueryIndex[projectItem](ctx, s.table, programPrefix+programID)
 	if err != nil {
@@ -156,6 +172,7 @@ func (s *DynamoStore) ProjectsOfProgram(ctx context.Context, programID string) (
 	return projects, nil
 }
 
+// Verificação
 func (s *DynamoStore) ProgramHasProjects(ctx context.Context, programID string) (bool, error) {
 	out, err := s.table.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 aws.String(s.table.Name),
@@ -171,6 +188,7 @@ func (s *DynamoStore) ProgramHasProjects(ctx context.Context, programID string) 
 	return len(out.Items) > 0, nil
 }
 
+// Consulta
 func (s *DynamoStore) ProjectOfMember(ctx context.Context, rgm string) (Project, bool, error) {
 	m, found, err := dynamo.Get[struct {
 		ProjectID string `dynamodbav:"projetoId"`
@@ -181,7 +199,7 @@ func (s *DynamoStore) ProjectOfMember(ctx context.Context, rgm string) (Project,
 	return s.GetProject(ctx, m.ProjectID)
 }
 
-// ProjectsOfMembers maps each RGM that already has a project to its id.
+// Consulta
 func (s *DynamoStore) ProjectsOfMembers(ctx context.Context, rgms []string) (map[string]string, error) {
 	keys := make([]dynamo.Item, 0, len(rgms))
 	for _, rgm := range rgms {
@@ -198,6 +216,7 @@ func (s *DynamoStore) ProjectsOfMembers(ctx context.Context, rgms []string) (map
 	return taken, nil
 }
 
+// Atualização
 func (s *DynamoStore) update(ctx context.Context, id, expression string, values dynamo.Item) error {
 	_, err := s.table.UpdateItem(ctx, projectKey(id), expression, dynamo.Write{Condition: present, Values: values})
 	if dynamo.ConditionFailed(err) {
@@ -206,23 +225,30 @@ func (s *DynamoStore) update(ctx context.Context, id, expression string, values 
 	return err
 }
 
+// Atualização
 func (s *DynamoStore) UpdateDetails(ctx context.Context, id, name, description string) error {
 	return s.update(ctx, id, "SET nome = :n, descricao = :d", dynamo.Item{":n": dynamo.S(name), ":d": dynamo.S(description)})
 }
 
+// ---------------------------------------------------------------------------
+// Orientador
+// ---------------------------------------------------------------------------
+
+// Vinculação
 func (s *DynamoStore) SetAdvisor(ctx context.Context, id, advisorID string) error {
 	return s.update(ctx, id, "SET orientadorId = :o", dynamo.Item{":o": dynamo.S(advisorID)})
 }
 
+// Desvinculação
 func (s *DynamoStore) ClearAdvisor(ctx context.Context, id string) error {
 	return s.update(ctx, id, "REMOVE orientadorId", nil)
 }
 
-// AddMember appends the RGM and creates its membership atomically. current
-// is the list the caller read: when empty the list is written whole, since
-// old projects may hold no list or NULL and list_append fails on NULL. The
-// condition rejects a repeated RGM and a full group (errStale); the
-// membership rejects a student who already has a project (errMemberTaken).
+// ---------------------------------------------------------------------------
+// Membros
+// ---------------------------------------------------------------------------
+
+// Vinculação
 func (s *DynamoStore) AddMember(ctx context.Context, id, rgm string, current []string) error {
 	added := rgmList([]string{rgm})
 	var update types.TransactWriteItem
@@ -245,9 +271,7 @@ func (s *DynamoStore) AddMember(ctx context.Context, id, rgm string, current []s
 	return err
 }
 
-// RemoveMember conditions on the list it read: otherwise a student joining
-// in between would be dropped, and on a deleted project the update would
-// recreate a bare item.
+// Desvinculação
 func (s *DynamoStore) RemoveMember(ctx context.Context, id, rgm string) error {
 	it, found, err := dynamo.Get[projectItem](ctx, s.table, projectKey(id))
 	if err != nil {
@@ -277,10 +301,11 @@ func (s *DynamoStore) RemoveMember(ctx context.Context, id, rgm string) error {
 	return err
 }
 
-// DeleteProject removes the project, its memberships and everything in its
-// partition (invitations, submissions, references): left behind, students
-// saw invitations to missing groups and submissions stayed in the
-// activity's index.
+// ---------------------------------------------------------------------------
+// Exclusão de projeto
+// ---------------------------------------------------------------------------
+
+// Exclusão
 func (s *DynamoStore) DeleteProject(ctx context.Context, id string) error {
 	it, found, err := dynamo.Get[projectItem](ctx, s.table, projectKey(id), "PK", "integrantes")
 	if err != nil {
@@ -322,6 +347,11 @@ func (s *DynamoStore) DeleteProject(ctx context.Context, id string) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Convites
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) CreateInvitation(ctx context.Context, inv Invitation) error {
 	err := dynamo.PutStruct(ctx, s.table, invitationItem{
 		PK: projectPrefix + inv.ProjectID, SK: invitationPrefix + inv.RGM,
@@ -334,19 +364,23 @@ func (s *DynamoStore) CreateInvitation(ctx context.Context, inv Invitation) erro
 	return err
 }
 
+// Verificação
 func (s *DynamoStore) InvitationExists(ctx context.Context, projectID, rgm string) (bool, error) {
 	_, found, err := dynamo.Get[invitationItem](ctx, s.table, invitationKey(projectID, rgm))
 	return found, err
 }
 
+// Listagem
 func (s *DynamoStore) InvitationsOfProject(ctx context.Context, projectID string) ([]Invitation, error) {
 	return invitations(dynamo.QueryPartition[invitationItem](ctx, s.table, projectPrefix+projectID, invitationPrefix))
 }
 
+// Listagem
 func (s *DynamoStore) InvitationsOfStudent(ctx context.Context, rgm string) ([]Invitation, error) {
 	return invitations(dynamo.QueryIndex[invitationItem](ctx, s.table, invitationPrefix+rgm))
 }
 
+// Listagem
 func invitations(items []invitationItem, err error) ([]Invitation, error) {
 	if err != nil {
 		return nil, err
@@ -358,6 +392,7 @@ func invitations(items []invitationItem, err error) ([]Invitation, error) {
 	return out, nil
 }
 
+// Exclusão
 func (s *DynamoStore) DeleteInvitation(ctx context.Context, projectID, rgm string) error {
 	_, err := s.table.DeleteItem(ctx, invitationKey(projectID, rgm), dynamo.Write{Condition: "attribute_exists(SK)"})
 	if dynamo.ConditionFailed(err) {

@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 )
 
+// Classificação
 func TestClassifySignUp(t *testing.T) {
 	cases := []struct {
 		name string
@@ -20,7 +21,7 @@ func TestClassifySignUp(t *testing.T) {
 		{"pre sign-up rejection", &types.UserLambdaValidationException{Message: aws.String("PreSignUp failed with error RGM não autorizado.")}, errSignUpRejected},
 		{"invalid parameter", &types.InvalidParameterException{}, errInvalidInput},
 		{"throttled", &types.TooManyRequestsException{}, errThrottled},
-		// The SDK wraps the API error; errors.As must still find it.
+
 		{"wrapped", fmt.Errorf("operation error SignUp: %w", &types.UsernameExistsException{}), errEmailTaken},
 	}
 	for _, c := range cases {
@@ -33,6 +34,7 @@ func TestClassifySignUp(t *testing.T) {
 	}
 }
 
+// Classificação
 func TestClassifyConfirmation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -54,6 +56,7 @@ func TestClassifyConfirmation(t *testing.T) {
 	}
 }
 
+// Cadastro
 func TestSignUpAttributesAlwaysStudent(t *testing.T) {
 	values := map[string]string{}
 	for _, a := range signUpAttributes("Fulano de Tal", "123@alunos.umc.br") {
@@ -64,6 +67,7 @@ func TestSignUpAttributesAlwaysStudent(t *testing.T) {
 	}
 }
 
+// Classificação
 func TestClassifyKeepsTheOriginalError(t *testing.T) {
 	err := classify(&types.UserNotConfirmedException{}, errNotConfirmed)
 	var original *types.UserNotConfirmedException

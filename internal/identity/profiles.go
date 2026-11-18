@@ -14,12 +14,15 @@ const (
 	accountSK         = "CONTA"
 )
 
+// Repositório
 type DynamoProfiles struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoProfiles(t *dynamo.Table) *DynamoProfiles { return &DynamoProfiles{table: t} }
 
+// Item
 type profileItem struct {
 	PK   string     `dynamodbav:"PK"`
 	SK   string     `dynamodbav:"SK"`
@@ -27,14 +30,17 @@ type profileItem struct {
 	Role actor.Role `dynamodbav:"perfil,omitempty"`
 }
 
+// Gravação
 func (p *DynamoProfiles) SaveStudent(ctx context.Context, rgm, name string) error {
 	return dynamo.PutStruct(ctx, p.table, profileItem{PK: studentNamePrefix + rgm, SK: accountSK, Name: name}, dynamo.Write{})
 }
 
+// Gravação
 func (p *DynamoProfiles) SaveStaff(ctx context.Context, sub, name string, role actor.Role) error {
 	return dynamo.PutStruct(ctx, p.table, profileItem{PK: staffNamePrefix + sub, SK: accountSK, Name: name, Role: role}, dynamo.Write{})
 }
 
+// Consulta
 func (p *DynamoProfiles) StudentNames(ctx context.Context, rgms []string) (map[string]string, error) {
 
 	seen := make(map[string]bool, len(rgms))
@@ -56,6 +62,7 @@ func (p *DynamoProfiles) StudentNames(ctx context.Context, rgms []string) (map[s
 	return names, nil
 }
 
+// Consulta
 func (p *DynamoProfiles) Staff(ctx context.Context, sub string) (StaffProfile, bool, error) {
 	it, found, err := dynamo.Get[profileItem](ctx, p.table, dynamo.Key(staffNamePrefix+sub, accountSK))
 	return StaffProfile{Name: it.Name, Role: it.Role}, found, err

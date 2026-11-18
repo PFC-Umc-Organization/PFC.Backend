@@ -2,7 +2,7 @@ package actor
 
 import "strings"
 
-// Role values are stored in the Cognito attribute custom:perfil.
+// Enumeração
 type Role string
 
 const (
@@ -11,6 +11,7 @@ const (
 	RoleStudent Role = "ALUNO"
 )
 
+// Ator
 type Actor struct {
 	Sub   string
 	Name  string
@@ -18,6 +19,7 @@ type Actor struct {
 	Role  Role
 }
 
+// Verificação
 func (a Actor) HasRole(roles ...Role) bool {
 	for _, r := range roles {
 		if a.Role == r {
@@ -27,10 +29,10 @@ func (a Actor) HasRole(roles ...Role) bool {
 	return false
 }
 
-// RGM is only meaningful for students, whose e-mail is always
-// <rgm>@alunos.umc.br (enforced by the Pre Sign-up Lambda).
+// Extração
 func (a Actor) RGM() string { return RGMFromEmail(a.Email) }
 
+// Extração
 func RGMFromEmail(email string) string {
 	local, _, ok := strings.Cut(email, "@")
 	if !ok {
@@ -39,8 +41,7 @@ func RGMFromEmail(email string) string {
 	return local
 }
 
-// DisplayName falls back to the e-mail: accounts created in the Cognito
-// console may have no name.
+// Exibição
 func DisplayName(name, email string) string {
 	if n := strings.TrimSpace(name); n != "" {
 		return n

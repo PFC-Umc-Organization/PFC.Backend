@@ -10,13 +10,14 @@ import (
 	"testing"
 )
 
+// Resposta
 type ticket struct {
 	URL    string            `json:"url"`
 	Campos map[string]string `json:"campos"`
 	Chave  string            `json:"chave"`
 }
 
-// enviar faz o que o navegador faz: o formulário assinado direto para o S3.
+// Envio
 func enviar(t *testing.T, tk ticket, conteudo string) int {
 	t.Helper()
 	var body bytes.Buffer
@@ -35,6 +36,7 @@ func enviar(t *testing.T, tk ticket, conteudo string) int {
 	return resp.StatusCode
 }
 
+// Solicitação
 func pedirEnvio(t *testing.T, projeto, atividade, campo, nome string) ticket {
 	t.Helper()
 	var tk ticket
@@ -46,6 +48,7 @@ func pedirEnvio(t *testing.T, projeto, atividade, campo, nome string) ticket {
 	return tk
 }
 
+// Upload
 func TestArquivos(t *testing.T) {
 	resetar(t)
 	criarCursos(t, "Engenharia de Software")
@@ -62,7 +65,7 @@ func TestArquivos(t *testing.T) {
 	esperar(t, aluno("222"), "POST", rota+"/arquivos", `{"campoId":"`+campo+`","nome":"a.pdf","tamanho":8}`, 403)
 
 	tk := pedirEnvio(t, p1, a1, campo, "Monografia Final.pdf")
-	// Sem o upload, a chave ainda não vale como resposta.
+
 	esperar(t, aluno("111"), "PUT", rota, `{"respostas":{"`+campo+`":"`+tk.Chave+`"}}`, 400)
 	esperar(t, aluno("111"), "PUT", rota, `{"respostas":{"`+campo+`":"monografia.pdf"}}`, 400)
 
@@ -94,7 +97,6 @@ func TestArquivos(t *testing.T) {
 	}
 	esperar(t, aluno("222"), "GET", rota+"/arquivos/"+campo, "", 403)
 
-	// Trocar o arquivo apaga o anterior; devolver a entrega apaga o atual.
 	novo := pedirEnvio(t, p1, a1, campo, "v2.docx")
 	enviar(t, novo, "versao 2")
 	esperar(t, aluno("111"), "PUT", rota, `{"respostas":{"`+campo+`":"`+novo.Chave+`"}}`, 200)
@@ -107,14 +109,12 @@ func TestArquivos(t *testing.T) {
 	}
 	esperar(t, admin, "GET", rota+"/arquivos/"+campo, "", 404)
 
-	// Prazo vencido sem entrega: nem arquivo nem envio.
 	vencida := esperar(t, admin, "POST", "/atividades", `{"titulo":"Banca","prazo":"2020-01-01T23:59"}`, 201)
 	rotaVencida := "/projetos/" + p1 + "/entregas/" + id(t, vencida)
 	campoVencido := jsonField(t, vencida, "campos", 0, "id")
 	esperar(t, aluno("111"), "POST", rotaVencida+"/arquivos", `{"campoId":"`+campoVencido+`","nome":"a.pdf","tamanho":8}`, 409)
 	esperar(t, aluno("111"), "PUT", rotaVencida, `{"respostas":{"`+campoVencido+`":"a.pdf"}}`, 409)
 
-	// Material em arquivo, só para a turma: o aluno de outra turma não vê.
 	var mt ticket
 	json.Unmarshal([]byte(esperar(t, admin, "POST", "/materiais/arquivos", `{"nome":"Modelo PFC.docx","tamanho":5}`, 201)), &mt)
 	esperar(t, admin, "POST", "/materiais", `{"titulo":"Modelo","tipo":"MODELO","arquivo":"`+mt.Chave+`"}`, 400)
@@ -134,8 +134,6 @@ func TestArquivos(t *testing.T) {
 		t.Fatal("o arquivo do material removido devia ter sido apagado")
 	}
 
-	// Apagar a atividade ou o projeto leva os arquivos, inclusive os enviados
-	// e nunca entregues.
 	entregar := func(atividade, campo string) (entregue, abandonado string) {
 		tk := pedirEnvio(t, p1, atividade, campo, "relatorio.pdf")
 		enviar(t, tk, "entregue")

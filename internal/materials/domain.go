@@ -1,5 +1,3 @@
-// Package materials owns the support materials the academic team publishes:
-// links or uploaded files, for one cohort or for everyone.
 package materials
 
 import (
@@ -9,6 +7,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 )
 
+// ---------------------------------------------------------------------------
+// Material
+// ---------------------------------------------------------------------------
+
+// Enumeração
 type Kind string
 
 const (
@@ -25,8 +28,7 @@ const (
 	filesPrefix       = "materiais/"
 )
 
-// A material has a URL or a file; File is the file name shown to people,
-// the key stays in the store. CohortID nil means every cohort.
+// Modelo
 type Material struct {
 	ID          string  `json:"id"`
 	Title       string  `json:"titulo"`
@@ -42,7 +44,7 @@ type Material struct {
 	fileKey string
 }
 
-// MaterialInput.File is the key returned by POST /materiais/arquivos.
+// Entrada
 type MaterialInput struct {
 	Title       string  `json:"titulo"`
 	Description string  `json:"descricao"`
@@ -52,6 +54,7 @@ type MaterialInput struct {
 	CohortID    *string `json:"cursoId"`
 }
 
+// Normalização
 func (in MaterialInput) normalized() MaterialInput {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
@@ -67,6 +70,7 @@ func (in MaterialInput) normalized() MaterialInput {
 	return in
 }
 
+// Validação
 func (in MaterialInput) validate() string {
 	switch {
 	case in.Title == "":
@@ -94,13 +98,17 @@ func (in MaterialInput) validate() string {
 	return ""
 }
 
+// ---------------------------------------------------------------------------
+// Arquivos
+// ---------------------------------------------------------------------------
+
+// Entrada
 type UploadRequest struct {
 	Name string `json:"nome"`
 	Size int64  `json:"tamanho"`
 }
 
-// UploadTicket is sent as a multipart form to URL: Fields first, the file
-// last, under "file". Key goes in MaterialInput.File.
+// Resposta
 type UploadTicket struct {
 	URL       string            `json:"url"`
 	Fields    map[string]string `json:"campos"`
@@ -109,20 +117,25 @@ type UploadTicket struct {
 	MaxBytes  int64             `json:"tamanhoMaximo"`
 }
 
+// Resposta
 type Download struct {
 	URL  string `json:"url"`
 	Name string `json:"nome"`
 }
 
+// ---------------------------------------------------------------------------
+// Permissões
+// ---------------------------------------------------------------------------
+
+// Verificação
 func isStaff(a actor.Actor) bool { return a.HasRole(actor.RoleAdmin, actor.RoleAdvisor) }
 
-// visibleTo: the team sees everything; a student sees the general materials
-// and their cohort's.
+// Verificação
 func (m Material) visibleTo(a actor.Actor, cohort string) bool {
 	return isStaff(a) || m.CohortID == nil || (cohort != "" && *m.CohortID == cohort)
 }
 
-// canRemove: the coordination removes any material, an advisor their own.
+// Permissão
 func (m Material) canRemove(a actor.Actor) bool {
 	return a.HasRole(actor.RoleAdmin) || (a.HasRole(actor.RoleAdvisor) && a.Sub != "" && m.AuthorID == a.Sub)
 }
