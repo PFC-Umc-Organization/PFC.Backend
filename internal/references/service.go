@@ -15,6 +15,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
 )
 
+// ---------------------------------------------------------------------------
+// Serviço
+// ---------------------------------------------------------------------------
+
+// Serviço
 type Service struct {
 	store    Store
 	works    Works
@@ -22,10 +27,16 @@ type Service struct {
 	now      func() time.Time
 }
 
+// Construção
 func NewService(store Store, works Works, projects Projects) *Service {
 	return &Service{store: store, works: works, projects: projects, now: time.Now}
 }
 
+// ---------------------------------------------------------------------------
+// Busca
+// ---------------------------------------------------------------------------
+
+// Busca
 func (s *Service) Search(ctx context.Context, term, page string) (SearchResult, error) {
 	term = strings.TrimSpace(term)
 	if n := utf8.RuneCountInString(term); n < minSearchLen || n > maxSearchLen {
@@ -50,6 +61,7 @@ func (s *Service) Search(ctx context.Context, term, page string) (SearchResult, 
 	return result, nil
 }
 
+// Consulta
 func (s *Service) workByDOI(ctx context.Context, doi string) (Work, error) {
 	w, err := s.works.WorkByDOI(ctx, doi)
 	if errors.Is(err, errWorkNotFound) {
@@ -61,6 +73,7 @@ func (s *Service) workByDOI(ctx context.Context, doi string) (Work, error) {
 	return w, nil
 }
 
+// Consulta
 func (s *Service) LookupDOI(ctx context.Context, raw string) (FormattedWork, error) {
 	doi, ok := normalizeDOI(raw)
 	if !ok {
@@ -74,6 +87,11 @@ func (s *Service) LookupDOI(ctx context.Context, raw string) (FormattedWork, err
 	return FormattedWork{FoundWork: found(w), ABNT: text, ABNTHTML: html}, nil
 }
 
+// ---------------------------------------------------------------------------
+// Referências
+// ---------------------------------------------------------------------------
+
+// Projeto
 func (s *Service) project(ctx context.Context, id string) (groups.Project, error) {
 	p, ok, err := s.projects.Project(ctx, id)
 	if err != nil {
@@ -85,6 +103,7 @@ func (s *Service) project(ctx context.Context, id string) (groups.Project, error
 	return p, nil
 }
 
+// Listagem
 // ReferencesOf sorts alphabetically, the order of a reference list under
 // NBR 6023 (author-date system).
 func (s *Service) ReferencesOf(ctx context.Context, viewer actor.Actor, projectID string) ([]Reference, error) {
@@ -105,6 +124,7 @@ func (s *Service) ReferencesOf(ctx context.Context, viewer actor.Actor, projectI
 	return refs, nil
 }
 
+// Permissão
 // requireMember: the list belongs to the group, so only members change it.
 func (s *Service) requireMember(ctx context.Context, member actor.Actor, p groups.Project, action string) error {
 	if groups.IsMember(member, p) {
@@ -115,6 +135,7 @@ func (s *Service) requireMember(ctx context.Context, member actor.Actor, p group
 	return apperr.Forbidden(msgMembersOnly)
 }
 
+// Montagem
 // build checks the member and fetches the DOI again from Crossref, so only
 // real works enter the list, whether added or edited.
 func (s *Service) build(ctx context.Context, member actor.Actor, projectID, action string, in ReferenceInput) (Reference, error) {
@@ -151,6 +172,7 @@ func (s *Service) build(ctx context.Context, member actor.Actor, projectID, acti
 	}, nil
 }
 
+// Criação
 func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string, in ReferenceInput) (Reference, error) {
 	ref, err := s.build(ctx, member, projectID, "referencia.adicionada", in)
 	if err != nil {
@@ -168,6 +190,7 @@ func (s *Service) Add(ctx context.Context, member actor.Actor, projectID string,
 	return ref, nil
 }
 
+// Substituição
 // Replace corrects a reference by its DOI: the work is fetched again and
 // the ABNT text rebuilt, so the edit keeps the rule that only real works
 // are listed. The editor becomes the one who added it.
@@ -191,6 +214,7 @@ func (s *Service) Replace(ctx context.Context, member actor.Actor, projectID, id
 	return ref, nil
 }
 
+// Remoção
 func (s *Service) Remove(ctx context.Context, member actor.Actor, projectID, id string) error {
 	p, err := s.project(ctx, projectID)
 	if err != nil {

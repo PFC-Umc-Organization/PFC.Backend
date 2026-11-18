@@ -22,6 +22,10 @@ const (
 	noVenue     = "[S. t.]"
 )
 
+// ---------------------------------------------------------------------------
+// Montagem
+// ---------------------------------------------------------------------------
+
 // Trecho
 type segment struct {
 	text      string
@@ -58,6 +62,10 @@ func (b builder) html() string {
 	}
 	return sb.String()
 }
+
+// ---------------------------------------------------------------------------
+// Formatação
+// ---------------------------------------------------------------------------
 
 // Formatação
 func formatABNT(w Work, accessed time.Time) (text, htmlText string) {
@@ -136,6 +144,10 @@ func abntAuthorship(authors []Author) string {
 	}
 	return strings.Join(names, "; ")
 }
+
+// ---------------------------------------------------------------------------
+// Auxiliares
+// ---------------------------------------------------------------------------
 
 // Composição
 func fullTitle(w Work) string {

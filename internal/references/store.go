@@ -9,6 +9,11 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
+// ---------------------------------------------------------------------------
+// Modelo
+// ---------------------------------------------------------------------------
+
+// Itens
 // Items (single table), in the project's partition:
 //
 //	reference  PK=PROJECT#<projectId>  SK=REF#<id derived from the DOI>
@@ -17,12 +22,15 @@ const (
 	referencePrefix = "REF#"
 )
 
+// Repositório
 type DynamoStore struct {
 	table *dynamo.Table
 }
 
+// Construção
 func NewDynamoStore(t *dynamo.Table) *DynamoStore { return &DynamoStore{table: t} }
 
+// Item
 type referenceItem struct {
 	PK        string `dynamodbav:"PK"`
 	SK        string `dynamodbav:"SK"`
@@ -36,6 +44,7 @@ type referenceItem struct {
 	AddedAt   string `dynamodbav:"adicionadaEm"`
 }
 
+// Conversão
 func (it referenceItem) reference() Reference {
 	return Reference{
 		ID:        strings.TrimPrefix(it.SK, referencePrefix),
@@ -50,6 +59,7 @@ func (it referenceItem) reference() Reference {
 	}
 }
 
+// Conversão
 func itemOf(r Reference, addedByID string) referenceItem {
 	return referenceItem{
 		PK: projectPrefix + r.ProjectID, SK: referencePrefix + r.ID,
@@ -58,6 +68,11 @@ func itemOf(r Reference, addedByID string) referenceItem {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Persistência
+// ---------------------------------------------------------------------------
+
+// Criação
 func (s *DynamoStore) PutReference(ctx context.Context, r Reference, addedByID string) error {
 	err := dynamo.PutStruct(ctx, s.table, itemOf(r, addedByID), dynamo.Write{Condition: "attribute_not_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
@@ -66,6 +81,7 @@ func (s *DynamoStore) PutReference(ctx context.Context, r Reference, addedByID s
 	return err
 }
 
+// Substituição
 // ReplaceReference keeps the item key derived from the DOI: the same DOI
 // overwrites the item in place; another DOI deletes the old item and puts
 // the new one in one transaction, so a failure never loses the reference.
@@ -94,6 +110,7 @@ func (s *DynamoStore) ReplaceReference(ctx context.Context, oldID string, r Refe
 	return err
 }
 
+// Listagem
 func (s *DynamoStore) ReferencesOf(ctx context.Context, projectID string) ([]Reference, error) {
 	items, err := dynamo.QueryPartition[referenceItem](ctx, s.table, projectPrefix+projectID, referencePrefix)
 	if err != nil {
@@ -106,6 +123,7 @@ func (s *DynamoStore) ReferencesOf(ctx context.Context, projectID string) ([]Ref
 	return refs, nil
 }
 
+// Remoção
 func (s *DynamoStore) DeleteReference(ctx context.Context, projectID, id string) error {
 	_, err := s.table.DeleteItem(ctx, dynamo.Key(projectPrefix+projectID, referencePrefix+id), dynamo.Write{Condition: "attribute_exists(SK)"})
 	if dynamo.ConditionFailed(err) {
