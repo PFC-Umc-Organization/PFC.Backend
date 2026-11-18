@@ -42,6 +42,7 @@ func retryUnprocessed(ctx context.Context, send func() (pending int, err error))
 // Consulta
 func (t *Table) BatchGet(ctx context.Context, keys []Item, projection ...string) ([]Item, error) {
 	var items []Item
+	keys = uniqueKeys(keys)
 	for start := 0; start < len(keys); start += BatchGetSize {
 		req := types.KeysAndAttributes{Keys: keys[start:min(start+BatchGetSize, len(keys))]}
 		if len(projection) > 0 {

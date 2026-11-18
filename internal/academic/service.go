@@ -11,6 +11,7 @@ import (
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 )
 
 // ---------------------------------------------------------------------------
@@ -370,6 +371,9 @@ func (s *Service) ListEnrollments(ctx context.Context, cohortID string) ([]Enrol
 	cohortID = strings.TrimSpace(cohortID)
 	if cohortID == "" {
 		return nil, apperr.Invalid(msgEnrollCohortRequired)
+	}
+	if dynamo.EmptyScope(cohortID) {
+		return []Enrollment{}, nil
 	}
 	enrollments, err := s.store.ListEnrollments(ctx, cohortID)
 	if err != nil {

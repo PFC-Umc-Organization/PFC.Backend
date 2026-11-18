@@ -14,6 +14,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 )
 
@@ -117,6 +118,9 @@ func (s *Service) CreateProject(ctx context.Context, programID string, in Projec
 
 // Listagem
 func (s *Service) ProjectsOfProgram(ctx context.Context, viewer actor.Actor, programID string) ([]Project, error) {
+	if dynamo.EmptyScope(programID) {
+		return []Project{}, nil
+	}
 	projects, err := s.store.ProjectsOfProgram(ctx, programID)
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar os projetos. Tente novamente em instantes.", err)

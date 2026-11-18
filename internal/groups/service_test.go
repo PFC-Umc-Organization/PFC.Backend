@@ -664,3 +664,14 @@ func TestMembersAdvisedBy(t *testing.T) {
 		t.Errorf("no sub: %v", got)
 	}
 }
+
+// Escopo
+func TestProjectsOfProgramSentinel(t *testing.T) {
+	svc, _ := newWorld().service(t)
+	for _, id := range []string{"", " ", "all", "todas"} {
+		list, err := svc.ProjectsOfProgram(context.Background(), actor.Actor{Role: actor.RoleAdmin}, id)
+		if err != nil || list == nil || len(list) != 0 {
+			t.Errorf("%q: list = %v, err = %v", id, list, err)
+		}
+	}
+}

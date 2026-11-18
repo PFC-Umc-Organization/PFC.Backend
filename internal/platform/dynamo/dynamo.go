@@ -79,6 +79,9 @@ func Query[T any](ctx context.Context, t *Table, in *dynamodb.QueryInput) ([]T, 
 
 // Consulta
 func QueryIndex[T any](ctx context.Context, t *Table, gsi1pk string) ([]T, error) {
+	if gsi1pk == "" {
+		return []T{}, nil
+	}
 	return Query[T](ctx, t, &dynamodb.QueryInput{
 		IndexName:                 aws.String(t.Index),
 		KeyConditionExpression:    aws.String("GSI1PK = :pk"),
@@ -88,6 +91,9 @@ func QueryIndex[T any](ctx context.Context, t *Table, gsi1pk string) ([]T, error
 
 // Consulta
 func QueryPartition[T any](ctx context.Context, t *Table, pk, skPrefix string) ([]T, error) {
+	if pk == "" {
+		return []T{}, nil
+	}
 	return Query[T](ctx, t, &dynamodb.QueryInput{
 		KeyConditionExpression:    aws.String("PK = :pk AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: Item{":pk": S(pk), ":sk": S(skPrefix)},

@@ -15,6 +15,7 @@ import (
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/apperr"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/audit"
+	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/dynamo"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/parallel"
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/storage"
 )
@@ -236,6 +237,9 @@ func (s *Service) RemoveField(ctx context.Context, activityID, fieldID string) e
 
 // Listagem
 func (s *Service) SubmissionsOfActivity(ctx context.Context, activityID string) ([]Submission, error) {
+	if dynamo.EmptyScope(activityID) {
+		return []Submission{}, nil
+	}
 	submissions, err := s.store.SubmissionsOfActivity(ctx, activityID)
 	if err != nil {
 		return nil, apperr.Internal("Não foi possível carregar as entregas. Tente novamente em instantes.", err)
