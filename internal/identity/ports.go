@@ -52,6 +52,8 @@ type Directory interface {
 	SetName(ctx context.Context, username, name string) error
 	SetRole(ctx context.Context, username string, role actor.Role) error
 
+	SetUserMFA(ctx context.Context, username string, enabled bool) error
+
 	Disable(ctx context.Context, username string) error
 	Enable(ctx context.Context, username string) error
 

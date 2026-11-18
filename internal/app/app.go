@@ -103,7 +103,7 @@ func (a academicForGroups) ProgramIDs(ctx context.Context) ([]string, error) {
 // Consulta
 func (a academicForGroups) Cohort(ctx context.Context, id string) (groups.Cohort, bool, error) {
 	c, found, err := a.Service.Cohort(ctx, id)
-	return groups.Cohort{ID: c.ID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
+	return groups.Cohort{ID: c.ID, CourseID: c.CourseID, Course: c.Course, Shift: c.Shift, Term: c.Term}, found, err
 }
 
 // ---------------------------------------------------------------------------

@@ -125,7 +125,8 @@ ver [Migração](#migração).
 | POST   | `/auth/esqueci-senha`                    | Manda o código de redefinição (`{ email }`); responde igual exista ou não a conta | pública |
 | POST   | `/auth/redefinir-senha`                  | Define a senha nova com o código (`{ email, codigo, senha }`)       | pública |
 | GET    | `/me`                                    | O usuário logado, com a turma lida agora (o front relê ao abrir)    | qualquer autenticado |
-| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, e-mail, perfil, status, `confirmado`, `rgm` (aluno) e a turma (um `BatchGetItem` para todos) | ADMIN, ORIENTADOR |
+| GET    | `/usuarios`                              | Contas do Cognito (`ListUsers`, paginado): nome, e-mail, perfil, status, `confirmado`, `mfaAtivo` (só aparece quando verdadeiro), `rgm` (aluno) e a turma (um `BatchGetItem` para todos) | ADMIN, ORIENTADOR |
+| PUT    | `/usuarios/:usuarioId/mfa`               | Ativa ou desativa o MFA TOTP da conta (`{ ativo }`, `AdminSetUserMFAPreference`); responde `{ mfaAtivo }`; 400 ao ativar se a pessoa ainda não vinculou um autenticador; auditado como `usuario.mfa_alterado` | ADMIN |
 | GET    | `/cursos`                                | Lista os cursos cadastrados                                         | qualquer autenticado |
 | POST   | `/cursos`                                | Cadastra curso (`{ nome }`); 409 se o nome já existe                | ADMIN |
 | PUT    | `/cursos/:cursoId`                       | Renomeia; as turmas mostram o nome novo                             | ADMIN |

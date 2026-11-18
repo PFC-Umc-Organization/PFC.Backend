@@ -66,4 +66,5 @@ type Store interface {
 // Dependência
 type Projects interface {
 	ProgramHasProjects(ctx context.Context, programID string) (bool, error)
+	ProgramOfMember(ctx context.Context, rgm string) (string, bool, error)
 }

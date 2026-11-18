@@ -320,7 +320,14 @@ func (s *Service) Submit(ctx context.Context, member actor.Actor, projectID, act
 	}
 	closed := a.closed(s.now())
 	if closed && !found {
-		return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
+		reopened, err := s.reopened(ctx, p, a.ID)
+		if err != nil {
+			return Submission{}, err
+		}
+		if !reopened {
+			return Submission{}, s.deadlinePassed(ctx, p.ID, a.ID)
+		}
+		closed = false
 	}
 	if !found {
 		if err := s.checkOrder(ctx, p, a); err != nil {
@@ -505,7 +512,13 @@ func (s *Service) RequestUpload(ctx context.Context, member actor.Actor, project
 	}
 	if !submitted {
 		if a.closed(s.now()) {
-			return UploadTicket{}, apperr.Conflict(msgDeadlinePassed)
+			reopened, err := s.reopened(ctx, p, a.ID)
+			if err != nil {
+				return UploadTicket{}, err
+			}
+			if !reopened {
+				return UploadTicket{}, apperr.Conflict(msgDeadlinePassed)
+			}
 		}
 		if err := s.checkOrder(ctx, p, a); err != nil {
 			return UploadTicket{}, err
@@ -677,6 +690,19 @@ func (s *Service) failed(ctx context.Context, p groups.Project, activityID strin
 	audit.Record(ctx, audit.Event{Action: "entrega.enviada", Result: audit.Failure, Reason: msgGroupFailed,
 		Resource: activityResource(activityID), Details: map[string]any{"projetoId": p.ID}})
 	return apperr.Conflict(msgGroupFailed)
+}
+
+// Reabertura
+func (s *Service) reopened(ctx context.Context, p groups.Project, activityID string) (bool, error) {
+	penalties, err := s.groupPenalties(ctx, p)
+	if err != nil {
+		return false, apperr.Internal("Não foi possível carregar as penalidades. Tente novamente em instantes.", err)
+	}
+	if penalties.Active >= MaxPenalties {
+		return false, nil
+	}
+	id := deadlinePenaltyPrefix + activityID
+	return slices.ContainsFunc(penalties.Items, func(it Penalty) bool { return it.ID == id && it.Waiver != nil }), nil
 }
 
 // Listagem

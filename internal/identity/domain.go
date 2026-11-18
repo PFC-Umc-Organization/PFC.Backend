@@ -30,7 +30,16 @@ type User struct {
 	FirstAccessPending bool       `json:"aguardandoPrimeiroAcesso,omitempty"`
 	CohortIDs          []string   `json:"cursoIds"`
 	RGM                string     `json:"rgm,omitempty"`
+	MFAEnabled         bool       `json:"mfaAtivo,omitempty"`
 	Username           string     `json:"-"`
+}
+
+// Consulta
+func (u User) usernameOrID() string {
+	if u.Username != "" {
+		return u.Username
+	}
+	return u.ID
 }
 
 // Modelo
@@ -115,6 +124,11 @@ type ResendInput struct {
 // ---------------------------------------------------------------------------
 // Contas
 // ---------------------------------------------------------------------------
+
+// Entrada
+type MFAInput struct {
+	Enabled *bool `json:"ativo"`
+}
 
 // Entrada
 type NameInput struct {
@@ -250,6 +264,8 @@ const (
 	msgOwnRole             = "Você não pode alterar o próprio perfil. Peça a outra pessoa da coordenação."
 	msgOwnDisable          = "Você não pode desativar a própria conta. Peça a outra pessoa da coordenação."
 	msgLastAdmin           = "Esta é a única conta ativa da coordenação. Promova outra conta à coordenação antes de alterá-la."
+	msgMFAEnabledRequired  = "Informe se a verificação em duas etapas deve ficar ativa."
+	msgMFANotLinked        = "Este usuário ainda não vinculou um aplicativo autenticador."
 	msgAlreadyDisabled     = "A conta já está desativada."
 	msgAlreadyEnabled      = "A conta já está ativa."
 	msgNoPendingInvitation = "Esta conta já fez o primeiro acesso. Para recuperar a senha, a pessoa pode usar \"Esqueci minha senha\" na tela de entrada."

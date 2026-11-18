@@ -200,6 +200,7 @@ const (
 	msgCohortNotFound       = "Turma não encontrada."
 	msgCohortHasProgram     = "Não é possível excluir uma turma com programa de PFC. Exclua o programa primeiro."
 	msgCohortHasEnrollments = "Não é possível excluir uma turma com RGMs pré-autorizados. Remova as pré-autorizações da turma em Usuários antes de excluí-la."
+	msgEnrollInProject      = "Alunos com projeto só podem ser transferidos para turma do mesmo curso e período do projeto. Remova o aluno do projeto antes de transferi-lo para outro curso ou período."
 	msgNotEnrolled          = "Este RGM não está pré-autorizado em nenhuma turma."
 	msgCohortIDRequired     = "Selecione a turma."
 	msgCourseNotFound       = "Curso não encontrado."

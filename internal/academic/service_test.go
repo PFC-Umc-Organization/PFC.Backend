@@ -144,6 +144,11 @@ type fakeProjects bool
 // Verificação
 func (f fakeProjects) ProgramHasProjects(context.Context, string) (bool, error) { return bool(f), nil }
 
+// Simulação
+func (f fakeProjects) ProgramOfMember(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+
 // ---------------------------------------------------------------------------
 // Auxiliares
 // ---------------------------------------------------------------------------

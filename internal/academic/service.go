@@ -396,12 +396,53 @@ func (s *Service) Enroll(ctx context.Context, in EnrollmentRequest) (EnrollmentR
 		return EnrollmentResult{}, apperr.Invalid(msgRGMRequired)
 	}
 	valid, failures := splitByFormat(received)
+	if err := s.checkTransfers(ctx, valid, cohortID); err != nil {
+		return EnrollmentResult{}, err
+	}
 	writeFailures := inBatches(valid, func(batch []string) error { return s.store.PutEnrollments(ctx, batch, cohortID) })
 	result := EnrollmentResult{Processed: len(valid) - len(writeFailures), Failures: append(failures, writeFailures...)}
 
 	s.recordBatch(ctx, "matricula.provisionado", len(received), result,
 		map[string]any{"rgms": received, "turmaId": cohortID, "processados": result.Processed})
 	return result, nil
+}
+
+// Transferência
+func (s *Service) checkTransfers(ctx context.Context, rgms []string, cohortID string) error {
+	target, found, err := s.store.GetCohort(ctx, cohortID)
+	if err != nil {
+		return apperr.Internal("Não foi possível validar a turma. Tente novamente em instantes.", fmt.Errorf("target cohort %s: %w", cohortID, err))
+	}
+	if !found {
+		return apperr.NotFound(msgCohortNotFound)
+	}
+	for _, rgm := range rgms {
+		programID, inProject, err := s.projects.ProgramOfMember(ctx, rgm)
+		if err != nil {
+			return apperr.Internal("Não foi possível validar os projetos dos alunos. Tente novamente em instantes.", fmt.Errorf("project of %s: %w", rgm, err))
+		}
+		if !inProject {
+			continue
+		}
+		current, found, err := s.CohortOfProgram(ctx, programID)
+		if err != nil {
+			return apperr.Internal("Não foi possível validar os projetos dos alunos. Tente novamente em instantes.", fmt.Errorf("cohort of program %s: %w", programID, err))
+		}
+		if !found {
+			continue
+		}
+		if current == cohortID {
+			continue
+		}
+		origin, found, err := s.store.GetCohort(ctx, current)
+		if err != nil {
+			return apperr.Internal("Não foi possível validar os projetos dos alunos. Tente novamente em instantes.", fmt.Errorf("cohort %s: %w", current, err))
+		}
+		if !found || origin.CourseID == "" || origin.CourseID != target.CourseID || origin.Term != target.Term {
+			return apperr.Conflict(msgEnrollInProject)
+		}
+	}
+	return nil
 }
 
 // Desmatrícula

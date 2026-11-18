@@ -204,6 +204,40 @@ func (s *Service) detail(ctx context.Context, p Project) Detail {
 	return d
 }
 
+// Equivalência
+func (s *Service) sameClass(ctx context.Context, a, b string) (bool, error) {
+	if a == "" || b == "" {
+		return false, nil
+	}
+	if a == b {
+		return true, nil
+	}
+	ca, err := s.cohort(ctx, a)
+	if err != nil || ca == nil {
+		return false, err
+	}
+	cb, err := s.cohort(ctx, b)
+	if err != nil || cb == nil {
+		return false, err
+	}
+	return ca.CourseID != "" && ca.CourseID == cb.CourseID && ca.Term == cb.Term, nil
+}
+
+// Elegibilidade
+func (s *Service) eligible(ctx context.Context, cohort string, hasProgram bool, programID, projectProgramID string) (bool, error) {
+	if cohort == "" || !hasProgram {
+		return false, nil
+	}
+	if programID == projectProgramID {
+		return true, nil
+	}
+	groupCohort, found, err := s.academic.CohortOfProgram(ctx, projectProgramID)
+	if err != nil || !found {
+		return false, err
+	}
+	return s.sameClass(ctx, cohort, groupCohort)
+}
+
 // Consulta
 func (s *Service) cohortOfProgram(ctx context.Context, programID string) (*Cohort, error) {
 	cohortID, found, err := s.academic.CohortOfProgram(ctx, programID)
@@ -438,7 +472,9 @@ func (s *Service) CreateOwnProject(ctx context.Context, student actor.Actor, in 
 		return Project{}, apperr.Internal("Não foi possível validar os integrantes. Tente novamente em instantes.", err)
 	}
 	for _, r := range members {
-		if cohorts[r] != cohort {
+		if same, err := s.sameClass(ctx, cohorts[r], cohort); err != nil {
+			return Project{}, apperr.Internal("Não foi possível validar os integrantes. Tente novamente em instantes.", err)
+		} else if !same {
 			fail("integrante fora da turma")
 			return Project{}, apperr.Invalid(msgNotInCohort(r))
 		}
@@ -540,7 +576,11 @@ func (s *Service) AcceptInvitation(ctx context.Context, rgm, projectID string) (
 	if err != nil {
 		return Project{}, apperr.Internal("Não foi possível validar a sua turma. Tente novamente em instantes.", err)
 	}
-	if cohort == "" || !hasProgram || programID != p.ProgramID {
+	eligible, err := s.eligible(ctx, cohort, hasProgram, programID, p.ProgramID)
+	if err != nil {
+		return Project{}, apperr.Internal("Não foi possível validar a sua turma. Tente novamente em instantes.", err)
+	}
+	if !eligible {
 		fail("aluno fora da turma do grupo")
 		return Project{}, apperr.Conflict(msgOutsideGroupCohort)
 	}
@@ -640,7 +680,11 @@ func (s *Service) Invite(ctx context.Context, member actor.Actor, projectID stri
 	if err != nil {
 		return Invitation{}, apperr.Internal("Não foi possível validar o convidado. Tente novamente em instantes.", err)
 	}
-	if cohort == "" || !hasProgram || programID != p.ProgramID {
+	eligible, err := s.eligible(ctx, cohort, hasProgram, programID, p.ProgramID)
+	if err != nil {
+		return Invitation{}, apperr.Internal("Não foi possível validar o convidado. Tente novamente em instantes.", err)
+	}
+	if !eligible {
 		fail("convidado fora da turma do grupo")
 		return Invitation{}, apperr.Invalid(msgNotInGroupCohort(classmate))
 	}

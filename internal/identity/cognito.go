@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -364,7 +367,58 @@ func (c *Cognito) listUsers(ctx context.Context, filter string, limit int32) ([]
 
 // Listagem
 func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
-	return c.listUsers(ctx, "", pageSize)
+	users, err := c.listUsers(ctx, "", pageSize)
+	if err != nil {
+		return nil, err
+	}
+	c.fillMFA(ctx, users)
+	return users, nil
+}
+
+// ---------------------------------------------------------------------------
+// MFA
+// ---------------------------------------------------------------------------
+
+const (
+	softwareTokenMFA = "SOFTWARE_TOKEN_MFA"
+	mfaLookups       = 8
+)
+
+// Leitura
+func (c *Cognito) fillMFA(ctx context.Context, users []User) {
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, mfaLookups)
+	for i := range users {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			out, err := c.client.AdminGetUser(ctx, &cip.AdminGetUserInput{
+				UserPoolId: aws.String(c.userPoolID), Username: aws.String(users[i].usernameOrID()),
+			})
+			if err != nil {
+				slog.WarnContext(ctx, "mfa lookup failed", "user", users[i].ID, "error", fmt.Errorf("get user: %w", err))
+				return
+			}
+			users[i].MFAEnabled = slices.Contains(out.UserMFASettingList, softwareTokenMFA) ||
+				aws.ToString(out.PreferredMfaSetting) == softwareTokenMFA
+		}()
+	}
+	wg.Wait()
+}
+
+// Preferência
+func (c *Cognito) SetUserMFA(ctx context.Context, username string, enabled bool) error {
+	_, err := c.client.AdminSetUserMFAPreference(ctx, &cip.AdminSetUserMFAPreferenceInput{
+		UserPoolId: aws.String(c.userPoolID),
+		Username:   aws.String(username),
+		SoftwareTokenMfaSettings: &types.SoftwareTokenMfaSettingsType{
+			Enabled:      enabled,
+			PreferredMfa: enabled,
+		},
+	})
+	return classifyAdmin(err)
 }
 
 // Busca
