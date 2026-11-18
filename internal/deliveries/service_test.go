@@ -568,7 +568,7 @@ func TestFiles(t *testing.T) {
 	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": ticket.Key}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": ticket.Key, "f2": "https://x.y"}}); err != nil || len(files.deleted) != 0 {
+	if _, err := svc.Submit(ctx, member, "p1", "a1", SubmissionInput{Answers: map[string]string{"f1": ticket.Key, "f2": "https://exemplo.com.br"}}); err != nil || len(files.deleted) != 0 {
 		t.Fatalf("resubmitting the same file: %v, deleted %v", err, files.deleted)
 	}
 
