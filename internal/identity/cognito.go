@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -381,31 +382,50 @@ func (c *Cognito) ListUsers(ctx context.Context) ([]User, error) {
 
 const (
 	softwareTokenMFA = "SOFTWARE_TOKEN_MFA"
-	mfaLookups       = 8
+	mfaLookups       = 5
 )
 
 // Leitura
 func (c *Cognito) fillMFA(ctx context.Context, users []User) {
-	var wg sync.WaitGroup
+	var (
+		wg        sync.WaitGroup
+		throttled atomic.Bool
+	)
 	slots := make(chan struct{}, mfaLookups)
 	for i := range users {
-		wg.Add(1)
 		slots <- struct{}{}
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer func() { <-slots }()
-			out, err := c.client.AdminGetUser(ctx, &cip.AdminGetUserInput{
-				UserPoolId: aws.String(c.userPoolID), Username: aws.String(users[i].usernameOrID()),
-			})
-			if err != nil {
-				slog.WarnContext(ctx, "mfa lookup failed", "user", users[i].ID, "error", fmt.Errorf("get user: %w", err))
+			if throttled.Load() || ctx.Err() != nil {
 				return
 			}
-			users[i].MFAEnabled = slices.Contains(out.UserMFASettingList, softwareTokenMFA) ||
-				aws.ToString(out.PreferredMfaSetting) == softwareTokenMFA
+			enabled, err := c.mfaOf(ctx, users[i].usernameOrID())
+			if err != nil {
+				var limited *types.TooManyRequestsException
+				if errors.As(err, &limited) {
+					throttled.Store(true)
+				}
+				slog.WarnContext(ctx, "mfa lookup failed", "user", users[i].ID, "throttled", throttled.Load(), "error", err)
+				return
+			}
+			users[i].MFAEnabled = enabled
 		}()
 	}
 	wg.Wait()
+}
+
+// Consulta
+func (c *Cognito) mfaOf(ctx context.Context, username string) (bool, error) {
+	out, err := c.client.AdminGetUser(ctx, &cip.AdminGetUserInput{
+		UserPoolId: aws.String(c.userPoolID), Username: aws.String(username),
+	})
+	if err != nil {
+		return false, fmt.Errorf("get user: %w", err)
+	}
+	return slices.Contains(out.UserMFASettingList, softwareTokenMFA) ||
+		aws.ToString(out.PreferredMfaSetting) == softwareTokenMFA, nil
 }
 
 // Preferência
