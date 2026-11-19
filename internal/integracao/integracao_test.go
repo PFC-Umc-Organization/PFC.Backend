@@ -286,7 +286,7 @@ func TestUmProjetoPorAlunoComConcorrencia(t *testing.T) {
 
 	var projetos []string
 	for i := 0; i < 5; i++ {
-		projetos = append(projetos, id(t, esperar(t, admin, "POST", "/programas/"+prog+"/projetos", fmt.Sprintf(`{"nome":"G%d"}`, i), 201)))
+		projetos = append(projetos, id(t, esperar(t, admin, "POST", "/programas/"+prog+"/projetos", fmt.Sprintf(`{"nome":"Grupo %d"}`, i), 201)))
 	}
 
 	var (
