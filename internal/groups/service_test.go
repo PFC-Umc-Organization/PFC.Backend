@@ -307,13 +307,16 @@ func TestCreateOwnProjectRefusals(t *testing.T) {
 		message string
 	}{
 		{"blank name", "444", ProjectInput{Name: "  "}, nil, apperr.KindInvalid, msgNameRequired},
-		{"no cohort", "999", ProjectInput{Name: "A"}, nil, apperr.KindForbidden, msgNoCohort},
-		{"cohort without program", "333", ProjectInput{Name: "A"}, func(w *world) { delete(w.programs, "turma-b") }, apperr.KindConflict, msgCohortWithoutProgram},
-		{"creator taken", "111", ProjectInput{Name: "A"}, nil, apperr.KindConflict, msgAlreadyInProject},
-		{"classmate from another cohort", "444", ProjectInput{Name: "A", Members: []string{"333"}}, nil, apperr.KindInvalid, msgNotInCohort("333")},
-		{"classmate not enrolled", "444", ProjectInput{Name: "A", Members: []string{"888"}}, nil, apperr.KindInvalid, msgNotInCohort("888")},
-		{"classmate taken", "444", ProjectInput{Name: "A", Members: []string{"111"}}, nil, apperr.KindConflict, msgInOtherProject("111")},
-		{"group too large", "444", ProjectInput{Name: "A", Members: strings.Split("a b c d e f g h i j", " ")}, nil, apperr.KindInvalid, msgGroupTooLarge},
+		{"name with no letter or digit", "444", ProjectInput{Name: "?"}, nil, apperr.KindInvalid, msgNameInvalid},
+		{"name of symbols only", "444", ProjectInput{Name: " -- "}, nil, apperr.KindInvalid, msgNameInvalid},
+		{"name too short", "444", ProjectInput{Name: "AB"}, nil, apperr.KindInvalid, msgNameInvalid},
+		{"no cohort", "999", ProjectInput{Name: "Athena"}, nil, apperr.KindForbidden, msgNoCohort},
+		{"cohort without program", "333", ProjectInput{Name: "Athena"}, func(w *world) { delete(w.programs, "turma-b") }, apperr.KindConflict, msgCohortWithoutProgram},
+		{"creator taken", "111", ProjectInput{Name: "Athena"}, nil, apperr.KindConflict, msgAlreadyInProject},
+		{"classmate from another cohort", "444", ProjectInput{Name: "Athena", Members: []string{"333"}}, nil, apperr.KindInvalid, msgNotInCohort("333")},
+		{"classmate not enrolled", "444", ProjectInput{Name: "Athena", Members: []string{"888"}}, nil, apperr.KindInvalid, msgNotInCohort("888")},
+		{"classmate taken", "444", ProjectInput{Name: "Athena", Members: []string{"111"}}, nil, apperr.KindConflict, msgInOtherProject("111")},
+		{"group too large", "444", ProjectInput{Name: "Athena", Members: strings.Split("a b c d e f g h i j", " ")}, nil, apperr.KindInvalid, msgGroupTooLarge},
 	}
 	for _, c := range cases {
 		w := newWorld()

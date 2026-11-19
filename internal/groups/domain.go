@@ -3,6 +3,7 @@ package groups
 import (
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PFC-Umc-Organization/PFC.Backend/internal/platform/actor"
@@ -13,6 +14,7 @@ import (
 // ---------------------------------------------------------------------------
 
 const (
+	minNameLen        = 3
 	maxNameLen        = 150
 	maxDescriptionLen = 1000
 	MaxMembers        = 10
@@ -42,11 +44,21 @@ func (in ProjectInput) normalized() ProjectInput {
 	return in
 }
 
+// readableName refuses names like "?" or "--": at least minNameLen
+// characters, with some letter or digit, the same rule as the screen.
+func readableName(name string) bool {
+	return utf8.RuneCountInString(name) >= minNameLen && strings.IndexFunc(name, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r)
+	}) >= 0
+}
+
 // Validação
 func (in ProjectInput) validate() string {
 	switch {
 	case in.Name == "":
 		return msgNameRequired
+	case !readableName(in.Name):
+		return msgNameInvalid
 	case utf8.RuneCountInString(in.Name) > maxNameLen:
 		return msgNameTooLong
 	case utf8.RuneCountInString(in.Description) > maxDescriptionLen:
@@ -180,6 +192,7 @@ const (
 	msgMembersOnlyInvite    = "Apenas integrantes do projeto podem enviar convites."
 	msgMembersOnlyCancel    = "Apenas integrantes do projeto podem cancelar convites."
 	msgNameRequired         = "Informe o nome do projeto."
+	msgNameInvalid          = "O nome do projeto precisa ter ao menos 3 caracteres, com letras ou números."
 	msgNameTooLong          = "O nome excede o tamanho máximo permitido."
 	msgDescriptionTooLong   = "A descrição excede o tamanho máximo permitido."
 	msgGroupTooLarge        = "O grupo excede o limite de integrantes."
